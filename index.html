@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rizz Assistant</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Contact list screen -->
+  <section id="screen-contacts" class="screen active">
+    <header class="topbar">
+      <h1>Your Folders</h1>
+      <button id="btn-add-contact" class="btn-icon" title="Add person">+</button>
+    </header>
+    <p class="hint">Each folder is a person you talk to. Add notes yourself — nothing here is scraped or auto-collected.</p>
+    <div id="contact-list" class="contact-list"></div>
+    <div id="empty-state" class="empty-state">
+      <p>No folders yet.</p>
+      <button id="btn-add-contact-2" class="btn-primary">Add your first person</button>
+    </div>
+  </section>
+
+  <!-- Contact detail screen -->
+  <section id="screen-contact" class="screen">
+    <header class="topbar">
+      <button id="btn-back" class="btn-icon">←</button>
+      <h1 id="contact-name-header">Person</h1>
+      <button id="btn-delete-contact" class="btn-icon danger" title="Delete folder">🗑</button>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="notes">Notes</button>
+      <button class="tab-btn" data-tab="assistant">Reply Assistant</button>
+    </div>
+
+    <div id="tab-notes" class="tab-panel active">
+      <label>Name</label>
+      <input type="text" id="field-name" placeholder="Their name">
+
+      <label>How you know them</label>
+      <input type="text" id="field-context" placeholder="e.g. met at a friend's party, matched on an app">
+
+      <label>Interests / things they've mentioned</label>
+      <textarea id="field-interests" rows="3" placeholder="e.g. loves hiking, works in design, has a dog named Milo"></textarea>
+
+      <label>Vibe with them</label>
+      <select id="field-vibe">
+        <option value="playful">Playful</option>
+        <option value="sincere">Sincere</option>
+        <option value="funny">Funny</option>
+        <option value="low_key">Low-key / Casual</option>
+      </select>
+
+      <label>Free notes</label>
+      <textarea id="field-notes" rows="4" placeholder="Anything else you want to remember — inside jokes, upcoming plans, things to avoid, etc."></textarea>
+
+      <button id="btn-save-contact" class="btn-primary">Save</button>
+    </div>
+
+    <div id="tab-assistant" class="tab-panel">
+      <label>Paste the message they sent you</label>
+      <textarea id="field-their-message" rows="3" placeholder="Paste their message here"></textarea>
+
+      <div class="row">
+        <button id="btn-suggest" class="btn-primary">Get suggestions</button>
+        <button id="btn-ai-suggest" class="btn-secondary">✨ Sharpen with AI</button>
+      </div>
+
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+  </section>
+
+  <!-- Settings screen -->
+  <section id="screen-settings" class="screen">
+    <header class="topbar">
+      <button id="btn-settings-back" class="btn-icon">←</button>
+      <h1>Settings</h1>
+    </header>
+    <label>Anthropic API key (optional)</label>
+    <p class="hint">Only needed for "Sharpen with AI". Stored only in this browser (localStorage), sent only directly to Anthropic's API when you click that button. Get one at console.anthropic.com.</p>
+    <input type="password" id="field-api-key" placeholder="sk-ant-...">
+    <button id="btn-save-key" class="btn-primary">Save key</button>
+    <p id="key-status" class="hint"></p>
+  </section>
+
+  <button id="btn-open-settings" class="btn-icon fab" title="Settings">⚙</button>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
