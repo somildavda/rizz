@@ -84,12 +84,33 @@
     <input type="password" id="field-api-key" placeholder="sk-ant-...">
     <button id="btn-save-key" class="btn-primary">Save key</button>
     <p id="key-status" class="hint"></p>
+
+    <hr style="border-color: var(--border); margin: 24px 0;">
+
+    <label>Sync across devices (optional)</label>
+    <p class="hint">Uses your own free Supabase project as storage, so the same folders show up on desktop and phone. Requires creating a free project at supabase.com, then a "contacts" table (see README). Not fully private — anyone with these three values could read/write this data, so keep them to yourself.</p>
+
+    <label>Supabase URL</label>
+    <input type="text" id="field-supabase-url" placeholder="https://xxxx.supabase.co">
+
+    <label>Supabase anon public key</label>
+    <input type="password" id="field-supabase-key" placeholder="eyJhbGciOi...">
+
+    <label>Sync code (make up your own, like a password)</label>
+    <input type="text" id="field-sync-code" placeholder="e.g. a random word only you know">
+
+    <div class="row">
+      <button id="btn-save-sync" class="btn-primary">Save & sync</button>
+      <button id="btn-sync-now" class="btn-secondary">Sync now</button>
+    </div>
+    <p id="sync-status" class="hint"></p>
   </section>
 
   <button id="btn-open-settings" class="btn-icon fab" title="Settings">⚙</button>
 </div>
 
 <script src="js/data.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

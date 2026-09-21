@@ -38,6 +38,12 @@ document.getElementById("btn-open-settings").onclick = () => {
   const key = localStorage.getItem(API_KEY_STORAGE) || "";
   document.getElementById("field-api-key").value = key;
   document.getElementById("key-status").textContent = key ? "A key is saved in this browser." : "";
+
+  document.getElementById("field-supabase-url").value = localStorage.getItem(SUPA_URL_KEY) || "";
+  document.getElementById("field-supabase-key").value = localStorage.getItem(SUPA_ANON_KEY) || "";
+  document.getElementById("field-sync-code").value = localStorage.getItem(SYNC_CODE_KEY) || "";
+  document.getElementById("sync-status").textContent = isSyncConfigured() ? "Sync is on." : "Sync is off — fill in all three fields to enable.";
+
   showScreen("screen-settings");
 };
 document.getElementById("btn-settings-back").onclick = () => showScreen("screen-contacts");
@@ -52,6 +58,58 @@ document.getElementById("btn-save-key").onclick = () => {
     document.getElementById("key-status").textContent = "Cleared.";
   }
 };
+
+document.getElementById("btn-save-sync").onclick = async () => {
+  const url = document.getElementById("field-supabase-url").value.trim();
+  const key = document.getElementById("field-supabase-key").value.trim();
+  const code = document.getElementById("field-sync-code").value.trim();
+  const statusEl = document.getElementById("sync-status");
+
+  if (url) localStorage.setItem(SUPA_URL_KEY, url); else localStorage.removeItem(SUPA_URL_KEY);
+  if (key) localStorage.setItem(SUPA_ANON_KEY, key); else localStorage.removeItem(SUPA_ANON_KEY);
+  if (code) localStorage.setItem(SYNC_CODE_KEY, code); else localStorage.removeItem(SYNC_CODE_KEY);
+
+  if (!isSyncConfigured()) {
+    statusEl.textContent = "Sync is off — fill in all three fields to enable.";
+    return;
+  }
+
+  statusEl.textContent = "Saved. Syncing...";
+  try {
+    await syncNow();
+    statusEl.textContent = "Sync is on and up to date.";
+  } catch (e) {
+    statusEl.textContent = "Saved, but sync failed: " + e.message;
+  }
+};
+
+document.getElementById("btn-sync-now").onclick = async () => {
+  const statusEl = document.getElementById("sync-status");
+  if (!isSyncConfigured()) {
+    statusEl.textContent = "Fill in and save sync settings first.";
+    return;
+  }
+  statusEl.textContent = "Syncing...";
+  try {
+    await syncNow();
+    statusEl.textContent = "Sync is on and up to date.";
+  } catch (e) {
+    statusEl.textContent = "Sync failed: " + e.message;
+  }
+};
+
+async function syncNow() {
+  const remote = await pullRemoteContacts();
+  state.contacts = mergeContacts(state.contacts, remote);
+  saveContacts();
+  renderContactList();
+  // Push any local contacts the remote didn't have yet (e.g. made offline).
+  const remoteIds = new Set(remote.map(r => r.id));
+  const toPush = state.contacts.filter(c => !remoteIds.has(c.id));
+  for (const c of toPush) {
+    await pushRemoteContact(c);
+  }
+}
 
 document.getElementById("btn-back").onclick = () => {
   renderContactList();
@@ -132,27 +190,40 @@ document.getElementById("btn-save-contact").onclick = () => {
     alert("Give them a name so you can find the folder later.");
     return;
   }
+  data.updated_at = new Date().toISOString();
+  let savedContact;
   if (state.activeContactId) {
     const c = state.contacts.find(x => x.id === state.activeContactId);
     Object.assign(c, data);
+    savedContact = c;
   } else {
     const c = { id: uid(), ...data };
     state.contacts.push(c);
     state.activeContactId = c.id;
+    savedContact = c;
   }
   saveContacts();
   document.getElementById("contact-name-header").textContent = data.name;
   renderContactList();
   showScreen("screen-contacts");
+
+  if (isSyncConfigured()) {
+    pushRemoteContact(savedContact).catch(e => console.warn("Sync push failed:", e.message));
+  }
 };
 
 document.getElementById("btn-delete-contact").onclick = () => {
   if (!state.activeContactId) { showScreen("screen-contacts"); return; }
-  if (!confirm("Delete this folder? This only removes it from your browser.")) return;
-  state.contacts = state.contacts.filter(c => c.id !== state.activeContactId);
+  if (!confirm("Delete this folder? This removes it from your browser" + (isSyncConfigured() ? " and your synced cloud storage." : "."))) return;
+  const deletedId = state.activeContactId;
+  state.contacts = state.contacts.filter(c => c.id !== deletedId);
   saveContacts();
   renderContactList();
   showScreen("screen-contacts");
+
+  if (isSyncConfigured()) {
+    deleteRemoteContact(deletedId).catch(e => console.warn("Sync delete failed:", e.message));
+  }
 };
 
 // ---------- Suggestions (local library) ----------
@@ -270,3 +341,6 @@ function escapeHtml(str) {
 }
 
 renderContactList();
+if (isSyncConfigured()) {
+  syncNow().catch(e => console.warn("Startup sync failed:", e.message));
+}
