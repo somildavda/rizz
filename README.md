@@ -30,3 +30,29 @@ To use on your phone: host it for free on GitHub Pages, Netlify, or Vercel, then
 ## Getting an Anthropic API key (optional)
 
 Only needed for "Sharpen with AI". Create one at https://console.anthropic.com — note this has a small per-use cost on Anthropic's side; the base app (local suggestions) is fully free.
+
+## Syncing across devices (optional)
+
+By default, contacts live only in the current browser's `localStorage` and don't appear on other devices. To see the same folders on both desktop and phone:
+
+1. Create a free project at https://supabase.com (free tier is enough for personal use).
+2. In your Supabase project, go to the **SQL Editor** and run:
+   ```sql
+   create table contacts (
+     id text primary key,
+     sync_code text not null,
+     name text,
+     context text,
+     interests text,
+     vibe text,
+     notes text,
+     updated_at timestamptz
+   );
+   alter table contacts enable row level security;
+   create policy "allow all" on contacts for all using (true) with check (true);
+   ```
+   The permissive policy above means anyone who has your project's URL + anon key + sync code can read/write this table — that's fine for a personal single-user app, but don't reuse a sensitive Supabase project for this, and don't share those three values.
+3. In your Supabase project settings, find **Project URL** and the **anon public API key**.
+4. In the app's Settings (gear icon), paste both into "Supabase URL" and "Supabase anon public key", and make up your own **sync code** (any string only you know — think of it like a password).
+5. Use the *same* URL, key, and sync code on every device (desktop and phone) — that's what links them together.
+6. Click "Save & sync". Contacts now push/pull automatically on every save, delete, and app open.
