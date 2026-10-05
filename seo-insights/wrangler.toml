@@ -1,0 +1,12 @@
+name = "seo-insights"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+CLAUDE_MODEL = "claude-opus-5-5"
+# GSC_SITE_URL = "sc-domain:example.com"
+
+# Secrets (set with `wrangler secret put <NAME>`):
+#   ANTHROPIC_API_KEY   - required for the written client summary
+#   GSC_SERVICE_ACCOUNT - optional, full JSON key of a Google service account
+#   ACCESS_TOKEN        - optional, simple password protecting the tool
