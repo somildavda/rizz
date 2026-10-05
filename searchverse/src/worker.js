@@ -780,8 +780,8 @@ async function handleApi(req, env, url) {
     requireRun(project);
     const b = await body(req);
     const key = user.gemini_key_enc ? await decrypt(env, user.gemini_key_enc) : env.GEMINI_API_KEY;
-    if (!key) throw new HttpError(400, 'No Gemini API key. Add your free key in Settings (aistudio.google.com/apikey).');
-    const ai = await askGemini(env, key, project, b.input);
+    if (!key && !env.AI) throw new HttpError(400, 'No Gemini API key. Add your free key in Settings (aistudio.google.com/apikey).');
+    const ai = await askAI(env, key, project, b.input);
     ai.generated_at = now();
     await DB.prepare('UPDATE runs SET ai_json = ? WHERE id = ?').bind(JSON.stringify(ai), run.id).run();
     return json({ ai });
@@ -1025,8 +1025,7 @@ async function fetchPage(project, raw) {
 
 // ---------- Gemini ----------
 
-async function askGemini(env, key, project, input) {
-  const model = env.GEMINI_MODEL || 'gemini-3.8-flash';
+function seoPrompt(project, input, maxChars) {
   const prompt = `You are a senior technical SEO and content strategist at an SEO agency. Analyse the data for the website "${project.name}" (${project.site_url}).
 The data comes from Google Search Console, GA4 (organic sessions) and an on-page crawl of the top pages, with rule-based scores already computed.
 Give specific, data-backed, prioritised recommendations. Reference actual queries, URLs and numbers. Avoid generic advice.
@@ -1046,8 +1045,28 @@ Return ONLY JSON in this exact shape:
 Limit: 6-8 priorities, up to 10 page_recommendations (worst/most valuable pages first), up to 10 quick_wins, 5 content_ideas.
 
 DATA:
-${JSON.stringify(input).slice(0, 120000)}`;
+${JSON.stringify(input).slice(0, maxChars)}`;
+  return prompt;
+}
 
+function parseAiJson(text) {
+  const t = String(text || '').replace(/^```(?:json)?\s*|```\s*$/g, '').trim();
+  try {
+    return JSON.parse(t);
+  } catch {
+    const a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a >= 0 && b > a) {
+      try {
+        return JSON.parse(t.slice(a, b + 1));
+      } catch {}
+    }
+    return null;
+  }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function geminiOnce(key, model, prompt) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
@@ -1057,11 +1076,54 @@ ${JSON.stringify(input).slice(0, 120000)}`;
     }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new HttpError(res.status === 429 ? 429 : 502, `Gemini: ${data.error?.message || res.statusText}`);
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  try {
-    return JSON.parse(text.replace(/^```json\s*|```\s*$/g, ''));
-  } catch {
-    return { summary: text, priorities: [] };
+  if (!res.ok) {
+    const e = new Error(`${model}: ${data.error?.message || res.statusText}`);
+    e.retry = res.status === 429 || res.status === 503 || res.status === 500;
+    throw e;
   }
+  const out = parseAiJson((data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(''));
+  if (!out) throw new Error(`${model}: returned no valid JSON`);
+  return out;
+}
+
+// Free AI with fallbacks: Gemini (primary model with retries, then backup Gemini models),
+// then Cloudflare Workers AI (free daily allowance, no key needed).
+async function askAI(env, key, project, input) {
+  const errors = [];
+  if (key) {
+    const models = [env.GEMINI_MODEL || 'gemini-3.8-flash',
+      ...(env.GEMINI_FALLBACK_MODELS || 'gemini-flash-latest,gemini-flash-lite-latest').split(',').map((x) => x.trim())]
+      .filter((v, i, arr) => v && arr.indexOf(v) === i);
+    const prompt = seoPrompt(project, input, 120000);
+    for (const [i, model] of models.entries()) {
+      for (let attempt = 0; attempt < (i === 0 ? 3 : 1); attempt++) {
+        try {
+          return { ...(await geminiOnce(key, model, prompt)), provider: `Gemini (${model})` };
+        } catch (e) {
+          errors.push(e.message);
+          if (!e.retry) break;
+          if (attempt < 2 && i === 0) await sleep(2000 * (attempt + 1));
+        }
+      }
+    }
+  }
+  if (env.AI) {
+    const model = env.WORKERS_AI_MODEL || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+    try {
+      const r = await env.AI.run(model, {
+        messages: [
+          { role: 'system', content: 'You are a senior SEO consultant. Reply with valid JSON only.' },
+          { role: 'user', content: seoPrompt(project, input, 45000) },
+        ],
+        max_tokens: 4096,
+        temperature: 0.4,
+      });
+      const out = typeof r.response === 'object' ? r.response : parseAiJson(r.response);
+      if (out) return { ...out, provider: `Cloudflare Workers AI (${model.split('/').pop()})` };
+      errors.push('Workers AI: returned no valid JSON');
+    } catch (e) {
+      errors.push('Workers AI: ' + e.message);
+    }
+  }
+  throw new HttpError(503, 'AI is busy right now, please retry in a minute. ' + errors.slice(-2).join(' | '));
 }

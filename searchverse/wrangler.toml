@@ -6,6 +6,9 @@ compatibility_date = "2025-09-01"
 directory = "./public"
 binding = "ASSETS"
 
+[ai]
+binding = "AI"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "searchverse"
@@ -19,6 +22,10 @@ ADMIN_EMAILS = ""
 # until an admin gives access). Leave empty so that only users an admin adds can sign in.
 ALLOWED_EMAILS = ""
 GEMINI_MODEL = "gemini-3.8-flash"
+# Tried in order if the main model is busy (free tier)
+GEMINI_FALLBACK_MODELS = "gemini-flash-latest,gemini-flash-lite-latest"
+# Last backup: Cloudflare's free built-in AI (no key needed)
+WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
 # Secrets (set with `npx wrangler secret put NAME`):
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_SECRET, GEMINI_API_KEY (optional; users can add their own)

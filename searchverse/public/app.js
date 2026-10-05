@@ -776,7 +776,7 @@ function viewInsights(project, run, pages) {
   const list = (arr, fn) => (arr || []).map(fn).join('') || '<p class="muted">None</p>';
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Executive summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>${(ai.risks || []).length ? `<h3>Risks</h3><ul>${ai.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
-      <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by Gemini</span>${btn('Regenerate', 'sm')}</div></div>
+      <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
     <div class="card section"><h2>Priority actions</h2>${list(ai.priorities, (p) => `<div class="reco"><div class="row spread"><h3>${esc(p.title)}</h3><span class="row" style="gap:6px">${impactPill(p.impact)}<span class="pill">${esc(p.effort || '')} effort</span></span></div>
       <p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${(p.urls || []).filter(Boolean).length ? `<p class="small">${p.urls.filter(Boolean).map((u) => pageLink(u, pages)).join(' · ')}</p>` : ''}</div>`)}</div>
     <div class="grid g2 section">
