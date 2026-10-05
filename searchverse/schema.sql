@@ -147,3 +147,9 @@ CREATE TABLE IF NOT EXISTS lob_ga (
   updated_at INTEGER,
   PRIMARY KEY (project_id, group_id, period)
 );
+
+-- App-wide settings (e.g. data retention)
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);

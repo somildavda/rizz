@@ -265,10 +265,18 @@ async function renderSettings(err, p) {
     </div>`;
   if (isAdmin()) {
     app.insertAdjacentHTML('beforeend', `<div class="card section" id="storage-card"><h2>💾 Storage</h2><p class="muted small">Loading…</p></div>`);
-    api('/api/usage').then((u) => {
+    Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => {
+      u.retentionDays = r.days;
       document.getElementById('storage-card').innerHTML = `<h2>💾 Storage</h2>${storageBar(u)}
         <p class="small muted">Average crawled page ≈ ${mb(u.avgPageBytes)} · full export ≈ ${u.exportBytesPerRow} bytes per row (compressed). Free D1 databases hold ${mb(u.limitBytes)}. To free space, open a project → History → Delete old runs.</p>
+        <div class="card" style="margin:14px 0;padding:14px"><b>🗄️ Data retention</b>
+          <p class="small muted" style="margin:4px 0 10px">Recent runs keep everything. Older runs keep scores, KPIs, the AI report and the History trend, but their crawled pages, exports and raw data are removed. Runs automatically after every analysis.</p>
+          <div class="row"><select id="ret-days" style="width:auto">${[[0, 'Keep everything (no cleanup)'], [30, 'Keep full detail for 30 days'], [60, 'Keep full detail for 60 days'], [90, 'Keep full detail for 90 days'], [180, 'Keep full detail for 180 days'], [365, 'Keep full detail for 1 year']].map(([d, l]) => `<option value="${d}" ${u.retentionDays === d ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <button class="btn primary" id="ret-save">Save</button><button class="btn" id="ret-clean">Clean up now</button></div></div>
         ${table([{ key: 'name', label: 'Project', render: (p) => `<a href="#/p/${p.id}">${esc(p.name)}</a>` }, { key: 'runs', label: 'Runs', num: 1 }, { key: 'pagesCount', label: 'Pages stored', num: 1, render: (p) => fmt(p.pagesCount) }, { key: 'pages', label: 'Page data', num: 1, render: (p) => mb(p.pages) }, { key: 'exports', label: 'Exports', num: 1, render: (p) => mb(p.exports) }, { key: 'bytes', label: 'Total', num: 1, render: (p) => `<b>${mb(p.bytes)}</b>` }], u.projects, { filter: false })}`;
+      const after = (r) => { toast(r.archived ? `Archived ${r.archived} older run(s)` : 'Nothing to clean up'); route(); };
+      document.getElementById('ret-save').onclick = async () => after(await api('/api/retention', { method: 'PUT', body: { days: +document.getElementById('ret-days').value } }));
+      document.getElementById('ret-clean').onclick = async () => after(await api('/api/retention/cleanup', { method: 'POST' }));
     }).catch(() => {});
   }
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
@@ -519,9 +527,9 @@ async function renderRunner(pid) {
     const maxPages = Math.max(0, Math.min(1000, Math.floor((left - usage.avgRunBytes - rowsEst * 2 * usage.exportBytesPerRow) / usage.avgPageBytes)));
     $('r-storage').innerHTML = storageBar(usage, est) + `
       <div class="small" style="margin-top:6px">This run: <b>≈ ${mb(est)}</b> (${fmt(pages)} pages × ~${mb(usage.avgPageBytes)}${rows ? ` + ~${mb(rowsEst * 2 * usage.exportBytesPerRow)} export` : ''}).
-      ${est > left ? '<b class="down">Not enough space — delete old runs (History tab) or pick fewer pages / a smaller export.</b>' : `You can do <b>~${fmt(runsLeft)}</b> more runs like this. With the space left you can crawl up to <b>${fmt(maxPages)}</b> pages per run (limit 1,000).`}</div>`;
+      ${est > left ? '<b class="down">Not enough space — delete old runs (History tab) or pick fewer pages / a smaller export.</b>' : `You can do <b>~${fmt(runsLeft)}</b> more runs like this${usage.retention ? ` (older runs are slimmed after ${usage.retention} days, so space is reused)` : ' — turn on Data retention in Settings to reuse space automatically'}. With the space left you can crawl up to <b>${fmt(maxPages)}</b> pages per run (limit 1,000).`}</div>`;
   };
-  api('/api/usage').then((u) => { usage = u; storageNote(); }).catch(() => ($('r-storage').textContent = 'Storage info unavailable'));
+  Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => { usage = { ...u, retention: r.days }; storageNote(); }).catch(() => ($('r-storage').textContent = 'Storage info unavailable'));
   ['r-pstart', 'r-pend'].forEach((id) => ($(id).onchange = cmpText));
   cmpText();
   $('r-go').onclick = () => runAnalysis(project, {
@@ -1327,6 +1335,7 @@ async function renderProject(pid, runId) {
 }
 
 function renderRun(project, { run, pages }, runs, head) {
+  if (!run.gsc) return renderArchivedRun(project, run, runs, head);
   const s = run.summary, k = s.kpis, gsc = run.gsc, ga = run.ga;
   CMP.cur = periodLabel(run.start_date, run.end_date); CMP.prev = periodLabel(run.prev_start, run.prev_end);
   pages.sort((a, b) => (b.gsc?.c || 0) - (a.gsc?.c || 0) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
@@ -1381,6 +1390,30 @@ function renderRun(project, { run, pages }, runs, head) {
     try { await exportExcel(project, run, pages); } catch (err) { toast(err.message); }
     e.target.disabled = false; e.target.textContent = '⬇ Excel report';
   };
+  show('Insights');
+}
+
+// Older runs past the retention window keep only scores, KPIs and the AI report
+function renderArchivedRun(project, run, runs, head) {
+  const s = run.summary, k = s.kpis || {};
+  CMP.cur = periodLabel(run.start_date, run.end_date); CMP.prev = periodLabel(run.prev_start, run.prev_end);
+  const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || ''}</div>`;
+  app.innerHTML = head + `<div class="banner section">🗄️ <b>Archived run</b> (${run.start_date} → ${run.end_date}). Older runs keep their scores, KPIs and AI report; crawled pages and exports were removed to save space (see Settings → Data retention).</div>
+    <div class="card section"><div class="scores">
+      <div class="score">${ring(s.scores?.overall, true)}<div><b>Overall SEO score</b></div></div>
+      <div class="score">${ring(s.scores?.onpage)}<div><b>On-page</b></div></div>
+      <div class="score">${ring(s.scores?.content)}<div><b>Content</b></div></div>
+      <div class="score">${ring(s.scores?.technical)}<div><b>Technical</b></div></div>
+      ${s.geo ? `<div class="score">${ring(s.geo.score)}<div><b>AI search</b></div></div>` : ''}
+    </div></div>
+    <div class="grid kpis section">
+      ${kpi('Clicks', fmt(k.clicks), delta(k.clicks, k.prev?.clicks))}${kpi('Impressions', fmt(k.impressions), delta(k.impressions, k.prev?.impressions))}
+      ${kpi('CTR', pct(k.ctr, 2), delta(k.ctr, k.prev?.ctr, { isPct: true }))}${kpi('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }))}
+      ${k.sessions != null ? kpi('Organic sessions', fmt(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
+    </div>
+    <div class="tabs"><button class="tab active" data-t="Insights">Insights</button><button class="tab" data-t="History">History</button></div><div id="tab"></div>`;
+  const show = (t) => { app.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.t === t)); document.getElementById('tab').innerHTML = t === 'History' ? viewHistory(runs, project) : viewInsights(project, run, []); };
+  app.querySelectorAll('.tab').forEach((b) => (b.onclick = () => show(b.dataset.t)));
   show('Insights');
 }
 

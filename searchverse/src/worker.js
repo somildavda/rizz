@@ -398,6 +398,22 @@ async function handleApi(req, env, url) {
   const user = await requireUser(req, env);
   const DB = env.DB;
 
+  // data retention: older runs keep summary + scores + AI report, bulky detail is removed
+  if (path === '/api/retention' && method === 'GET') {
+    return json({ days: await retentionDays(env) });
+  }
+  if (path === '/api/retention' && method === 'PUT') {
+    requireAdmin(user);
+    const b = await body(req);
+    const days = Math.max(0, Math.min(3650, Number(b.days) || 0));
+    await DB.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('retention_days', ?)").bind(String(days)).run();
+    return json({ days, ...(await archiveOldRuns(env)) });
+  }
+  if (path === '/api/retention/cleanup' && method === 'POST') {
+    requireAdmin(user);
+    return json(await archiveOldRuns(env));
+  }
+
   // storage usage (free D1 database = 500 MB)
   if (path === '/api/usage' && method === 'GET') {
     const limitMb = Number(env.DB_LIMIT_MB) || 500;
@@ -944,6 +960,7 @@ async function handleApi(req, env, url) {
     await DB.prepare('UPDATE runs SET status = ?, score = ?, summary_json = ?, error = ? WHERE id = ?')
       .bind(b.error ? 'error' : 'done', Math.round(b.score) || 0, JSON.stringify(b.summary || {}), b.error || null, run.id)
       .run();
+    await archiveOldRuns(env).catch(() => {});
     return json({ ok: true });
   }
 
@@ -1062,6 +1079,30 @@ function gaFilter(organicOnly, patterns) {
   }
   if (!exprs.length) return undefined;
   return exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } };
+}
+
+async function retentionDays(env) {
+  const r = await env.DB.prepare("SELECT value FROM app_settings WHERE key = 'retention_days'").first().catch(() => null);
+  return r ? Number(r.value) : 0; // 0 = keep everything
+}
+
+// Slim runs older than the retention window: drop crawled pages, exports and raw GSC/GA data,
+// keep the run row with its summary (scores, KPIs, opportunities), AI report and history.
+async function archiveOldRuns(env) {
+  const days = await retentionDays(env);
+  if (!days) return { archived: 0 };
+  const cutoff = now() - days * DAY;
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM runs WHERE created_at < ? AND status = 'done' AND (gsc_json IS NOT NULL OR ga_json IS NOT NULL OR id IN (SELECT run_id FROM pages) OR id IN (SELECT run_id FROM run_blobs)) LIMIT 50"
+  ).bind(cutoff).all();
+  for (const r of results) {
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(r.id),
+      env.DB.prepare('DELETE FROM run_blobs WHERE run_id = ?').bind(r.id),
+      env.DB.prepare("UPDATE runs SET gsc_json = NULL, ga_json = NULL, error = 'archived' WHERE id = ?").bind(r.id),
+    ]);
+  }
+  return { archived: results.length };
 }
 
 async function getMeta(env, projectId) {
