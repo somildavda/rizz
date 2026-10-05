@@ -70,3 +70,12 @@ export async function fetchSheet(env, sheetId, range = 'A:Z') {
   const [head, ...rest] = json.values || [];
   return rest.map((v) => Object.fromEntries(head.map((h, i) => [h, v[i]])));
 }
+
+// Properties the service account can see (to fill the property dropdown).
+export async function listSites(env) {
+  const token = await accessToken(env.GSC_SERVICE_ACCOUNT, 'https://www.googleapis.com/auth/webmasters.readonly');
+  const res = await fetch('https://www.googleapis.com/webmasters/v3/sites', { headers: { authorization: `Bearer ${token}` } });
+  const json = await res.json();
+  if (json.error) throw new Error('GSC: ' + json.error.message);
+  return (json.siteEntry || []).map((s) => s.siteUrl).sort();
+}

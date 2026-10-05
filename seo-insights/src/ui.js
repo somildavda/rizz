@@ -22,11 +22,31 @@ button.ghost{background:none;color:var(--acc);border:1px solid var(--line)}
 @media print{.wrap{display:block}aside,#form,.noprint{display:none!important}.card{border:0}}
 </style></head><body><div class="wrap">
 <aside>
+ <div class="card"><h3>Settings</h3>
+  <div id="keyStatus" style="font-size:13px;margin-bottom:6px"></div>
+  <button class="ghost" id="openSettings">Connect Gemini &amp; Search Console</button></div>
  <div class="card"><h3>Clients</h3><div class="list" id="clients"></div>
   <div class="row"><button class="ghost" id="newClient">+ New client</button></div></div>
  <div class="card"><h3>Past reports</h3><div class="list" id="history"><small>None yet</small></div></div>
 </aside>
 <main>
+<div class="card hide" id="settings"><h1>Settings</h1>
+ <p style="color:var(--mute);font-size:13px;margin:0">Saved only in this browser and sent with each request over HTTPS. Nothing is stored on the server.</p>
+ <label>1. Gemini API key (free). Get it at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> → Create API key</label>
+ <input id="kGemini" type="password" placeholder="AIza…" autocomplete="off">
+ <label>2. Search Console key file (.json), optional</label>
+ <input type="file" id="kGscFile" accept=".json,application/json">
+ <div id="gscInfo" style="font-size:13px;margin-top:6px"></div>
+ <details style="font-size:13px;margin-top:8px"><summary>How to get the Search Console key file (one time, about 5 minutes)</summary><ol>
+  <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank">Google Cloud → New project</a> and create a project (e.g. "seo-insights").</li>
+  <li>Enable the <a href="https://console.cloud.google.com/apis/library/searchconsole.googleapis.com" target="_blank">Search Console API</a> and, for private sheets, the <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com" target="_blank">Google Sheets API</a>.</li>
+  <li>Go to <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank">IAM → Service accounts</a> → Create service account → any name → Done.</li>
+  <li>Open it → Keys → Add key → Create new key → JSON. A .json file downloads; upload it above.</li>
+  <li>Copy the service account email shown here. In <a href="https://search.google.com/search-console" target="_blank">Search Console</a> → Settings → Users and permissions → Add user → paste the email → Restricted. Do this for each client property. For private sheets, share the sheet with the same email.</li>
+ </ol></details>
+ <div class="row"><button id="saveKeys">Save &amp; test</button><button class="ghost" id="clearKeys">Remove keys</button><button class="ghost" id="closeSettings">Close</button></div>
+ <div id="testOut" style="font-size:13px;margin-top:8px"></div>
+</div>
 <div class="card" id="form"><h1>SEO Insights</h1>
 <label>Client name</label><input id="client" placeholder="e.g. Acme Dental">
 <label>Data source</label>
@@ -36,7 +56,7 @@ button.ghost{background:none;color:var(--acc);border:1px solid var(--line)}
 <label>…or paste CSV. Columns: Page, Clicks, Impressions, CTR, Position. Optional: Query, Prev Clicks, Prev Position, Conversions</label><textarea id="csv"></textarea></div>
 <div data-s="sheet" class="hide"><label>Published CSV link (File → Share → Publish to web → CSV)</label><input id="csvUrl">
 <label>…or private Sheet ID (shared with the service account)</label><input id="sheetId"><label>Range</label><input id="range" value="A:Z"></div>
-<div data-s="gsc" class="hide"><label>Property (e.g. sc-domain:example.com)</label><input id="site"></div>
+<div data-s="gsc" class="hide"><label>Property (pick from list or type, e.g. sc-domain:example.com)</label><input id="site" list="sites"><datalist id="sites"></datalist></div>
 <label>Week</label><select id="week"></select>
 <small style="color:var(--mute)">Compared with the week before. For a sheet, add a Date or Week column so it can pick the week; without one, the whole sheet is used.</small>
 <label>Context for the write-up (launches, migrations, seasonality…)</label><input id="notes">
@@ -62,6 +82,29 @@ const FIELDS=['client','source','csvUrl','sheetId','range','site','notes'];
  const f=x=>x.toLocaleDateString(undefined,{day:'numeric',month:'short',timeZone:'UTC'});o.push('<option value="'+s.toISOString().slice(0,10)+'"'+(i===0?' selected':'')+'>'+f(s)+' – '+f(e)+(i===0?' (last week)':'')+'</option>')}
  $('week').innerHTML=o.join('')})();
 let current=null,last=null;
+const keys=()=>store.get('keys',{});
+function renderKeyStatus(){const k=keys();$('keyStatus').innerHTML=(k.gemini?'✅':'⚪')+' Gemini AI<br>'+(k.gsc?'✅':'⚪')+' Search Console'}
+async function loadSites(){
+  const k=keys();if(!k.gsc)return null;
+  const r=await fetch('/api/sites',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:k})});const d=await r.json();
+  if(d.sites)$('sites').innerHTML=d.sites.map(x=>'<option value="'+esc(x)+'">').join('');return d;
+}
+function fillSettings(){const k=keys();$('kGemini').value=k.gemini||'';
+  $('gscInfo').innerHTML=k.gsc?'Loaded key for <b>'+esc(JSON.parse(k.gsc).client_email)+'</b>':'';}
+$('openSettings').onclick=()=>{fillSettings();$('settings').classList.remove('hide');$('settings').scrollIntoView()};
+$('closeSettings').onclick=()=>$('settings').classList.add('hide');
+let pendingGsc=null;
+$('kGscFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();
+  try{const j=JSON.parse(t);if(!j.client_email||!j.private_key)throw 0;pendingGsc=t;$('gscInfo').innerHTML='Service account: <b>'+esc(j.client_email)+'</b>. Add this email as a user in Search Console.'}
+  catch{pendingGsc=null;$('gscInfo').textContent='That is not a service account key file.'}};
+$('saveKeys').onclick=async()=>{
+  const k=keys();k.gemini=$('kGemini').value.trim();if(pendingGsc)k.gsc=pendingGsc;store.set('keys',k);renderKeyStatus();
+  const out=$('testOut');out.textContent='Testing…';const lines=[];
+  if(k.gemini){const r=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:k,question:'Reply with just: OK',findings:{}})});const d=await r.json();lines.push(d.error?'❌ Gemini: '+esc(d.error):'✅ Gemini works')}
+  if(k.gsc){const d=await loadSites();lines.push(d.error?'❌ Search Console: '+esc(d.error):d.sites.length?'✅ Search Console: '+d.sites.length+' properties ('+d.sites.map(esc).join(', ')+')':'⚠️ Connected, but no properties yet. Add '+esc(d.email)+' as a user in Search Console.')}
+  out.innerHTML=lines.join('<br>')||'Nothing to test.';
+};
+$('clearKeys').onclick=()=>{if(confirm('Remove saved keys from this browser?')){store.set('keys',{});pendingGsc=null;$('kGscFile').value='';fillSettings();renderKeyStatus();$('testOut').textContent='Removed.'}};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function showSource(){document.querySelectorAll('[data-s]').forEach(d=>d.classList.toggle('hide',d.dataset.s!==$('source').value))}
 $('source').onchange=showSource;
@@ -77,7 +120,7 @@ $('clients').onclick=e=>{
   FIELDS.forEach(f=>$(f).value=c[f]??'');current=c.client;showSource();$('ask').onclick=async()=>{
   const q=$('q').value.trim();if(!q||!last)return;const box=$('answers');
   const el=document.createElement('div');el.className='card';el.innerHTML='<b>'+esc(q)+'</b><p>Thinking…</p>';box.prepend(el);$('q').value='';
-  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q,client:last.client,findings:last.findings,summary:last.summary})});
+  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:keys(),question:q,client:last.client,findings:last.findings,summary:last.summary})});
   const d=await res.json();el.innerHTML='<b>'+esc(q)+'</b>'+(d.error?'<p>'+esc(d.error)+'</p>':marked.parse(d.answer));
 };
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;$('ask').click()});
@@ -90,7 +133,7 @@ $('save').onclick=()=>{
   store.set('clients',cs);current=c.client;$('ask').onclick=async()=>{
   const q=$('q').value.trim();if(!q||!last)return;const box=$('answers');
   const el=document.createElement('div');el.className='card';el.innerHTML='<b>'+esc(q)+'</b><p>Thinking…</p>';box.prepend(el);$('q').value='';
-  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q,client:last.client,findings:last.findings,summary:last.summary})});
+  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:keys(),question:q,client:last.client,findings:last.findings,summary:last.summary})});
   const d=await res.json();el.innerHTML='<b>'+esc(q)+'</b>'+(d.error?'<p>'+esc(d.error)+'</p>':marked.parse(d.answer));
 };
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;$('ask').click()});
@@ -111,12 +154,12 @@ const tbl=(rows,cols)=>'<div class="tw"><table><tr>'+cols.map(c=>'<th>'+c+'</th>
 function show(r){
   last=r;const f=r.findings;$('out').classList.remove('hide');
   $('report').innerHTML='<h1>'+esc(r.client||'SEO report')+' <small style="font-size:13px;color:var(--mute)">'+(r.period?esc(r.period):new Date(r.id).toLocaleDateString())+'</small></h1>'+
-   (r.summary?marked.parse(r.summary):'<p><i>'+esc(r.aiError||'Add GEMINI_API_KEY (free) to get AI insights and recommendations.')+'</i></p>')+'<h2>Data tables</h2>'+
+   (r.summary?marked.parse(r.summary):'<p><i>'+esc(r.aiError||'Add your free Gemini key in Settings to get AI insights and recommendations.')+'</i></p>')+'<h2>Data tables</h2>'+
    TABLES.filter(([, k])=>f[k]&&f[k].length).map(([t,k,c])=>'<h3>'+t+'</h3>'+tbl(f[k],c)).join('');
 }
 $('go').onclick=async()=>{
   const out=$('out');out.classList.remove('hide');$('report').textContent='Analysing…';
-  const body=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));body.csv=$('csv').value;body.week=$('week').value;
+  const body=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));body.csv=$('csv').value;body.week=$('week').value;body.keys=keys();
   const res=await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const d=await res.json();if(d.error){$('report').textContent=d.error;return}
   const r={id:Date.now(),client:body.client,period:d.period,findings:d.findings,summary:d.summary,aiError:d.aiError};
@@ -135,11 +178,11 @@ $('dl').onclick=()=>{
 $('ask').onclick=async()=>{
   const q=$('q').value.trim();if(!q||!last)return;const box=$('answers');
   const el=document.createElement('div');el.className='card';el.innerHTML='<b>'+esc(q)+'</b><p>Thinking…</p>';box.prepend(el);$('q').value='';
-  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q,client:last.client,findings:last.findings,summary:last.summary})});
+  const res=await fetch('/api/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keys:keys(),question:q,client:last.client,findings:last.findings,summary:last.summary})});
   const d=await res.json();el.innerHTML='<b>'+esc(q)+'</b>'+(d.error?'<p>'+esc(d.error)+'</p>':marked.parse(d.answer));
 };
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;$('ask').click()});
-renderClients();renderHistory();
+renderClients();renderHistory();renderKeyStatus();loadSites().catch(()=>{});if(!keys().gemini){fillSettings();$('settings').classList.remove('hide')}
 </script></body></html>`;
 
 export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8">

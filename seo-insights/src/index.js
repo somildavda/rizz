@@ -1,6 +1,6 @@
 import { normalizeRows, analyze, analyzeQueries } from './analyze.js';
 import { parseCsv } from './csv.js';
-import { fetchGsc, fetchSheet } from './gsc.js';
+import { fetchGsc, fetchSheet, listSites } from './gsc.js';
 import { SYSTEM_PROMPT, ANALYST_PROMPT, userPrompt } from './prompt.js';
 import { HTML, LOGIN } from './ui.js';
 
@@ -27,7 +27,7 @@ function weekRange(week) {
 async function loadRows(body, env) {
   const range = body.week ? weekRange(body.week) : null;
   if (body.source === 'gsc') {
-    if (!env.GSC_SERVICE_ACCOUNT) throw new Error('GSC_SERVICE_ACCOUNT secret is not set.');
+    if (!env.GSC_SERVICE_ACCOUNT) throw new Error('Connect Search Console in Settings first.');
     if (!range) throw new Error('Pick a week.');
     return fetchGsc(env, body.site || env.GSC_SITE_URL, range);
   }
@@ -101,7 +101,7 @@ function splitQueryRows(raw) {
 async function callAI(env, system, content, max_tokens = 4000) {
   if (env.GEMINI_API_KEY) return callGemini(env, system, content, max_tokens);
   if (env.ANTHROPIC_API_KEY) return callClaude(env, system, content, max_tokens);
-  throw new Error('Add GEMINI_API_KEY (free at aistudio.google.com) to get AI recommendations.');
+  throw new Error('Add your free Gemini API key in Settings to get AI recommendations.');
 }
 
 async function callGemini(env, system, content, maxOutputTokens) {
@@ -156,11 +156,30 @@ export default {
       } });
     }
     if (!authed) return url.pathname.startsWith('/api/') ? json({ error: 'Unauthorized' }, 401) : html(LOGIN);
+
+    // Keys saved on the Settings page arrive with each request and override Worker secrets.
+    let body = {};
+    if (request.method === 'POST' && url.pathname.startsWith('/api/')) {
+      body = await request.json().catch(() => ({}));
+      env = { ...env };
+      if (body.keys?.gemini) env.GEMINI_API_KEY = body.keys.gemini;
+      if (body.keys?.gsc) env.GSC_SERVICE_ACCOUNT = body.keys.gsc;
+      delete body.keys;
+    }
+
+    if (url.pathname === '/api/sites' && request.method === 'POST') {
+      if (!env.GSC_SERVICE_ACCOUNT) return json({ error: 'Upload the Search Console key file in Settings first.' }, 400);
+      try {
+        return json({ sites: await listSites(env), email: JSON.parse(env.GSC_SERVICE_ACCOUNT).client_email });
+      } catch (e) {
+        return json({ error: e.message }, 400);
+      }
+    }
     if (url.pathname === '/') return new Response(HTML, { headers: { 'content-type': 'text/html;charset=utf-8' } });
 
     if (url.pathname === '/api/ask' && request.method === 'POST') {
             try {
-        const b = await request.json();
+        const b = body;
         const answer = await callAI(env, ANALYST_PROMPT,
           `Client: ${b.client || 'n/a'}\n\nFindings JSON:\n${JSON.stringify(b.findings)}\n\nClient summary already written:\n${b.summary || 'none'}\n\nQuestion: ${b.question}`, 3000);
         return json({ answer });
@@ -171,7 +190,6 @@ export default {
 
     if (url.pathname === '/api/analyze' && request.method === 'POST') {
       try {
-        const body = await request.json();
         const loaded = await loadRows(body, env);
         const rows = normalizeRows(Array.isArray(loaded) ? loaded : loaded.rows);
         if (!rows.length) return json({ error: 'No rows found.' }, 400);
