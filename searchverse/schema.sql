@@ -88,3 +88,28 @@ CREATE TABLE IF NOT EXISTS pages (
   data_json TEXT,
   PRIMARY KEY (run_id, url)
 );
+
+-- LOB (line of business) URL groups and their stored monthly GSC numbers
+CREATE TABLE IF NOT EXISTS lob_groups (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT,
+  patterns TEXT NOT NULL,
+  sort INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_lob_project ON lob_groups (project_id, sort);
+
+-- group_id '__site__' holds whole-property totals
+CREATE TABLE IF NOT EXISTS lob_monthly (
+  project_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  month TEXT NOT NULL,          -- YYYY-MM
+  clicks REAL,
+  impressions REAL,
+  ctr REAL,
+  position REAL,
+  days INTEGER,
+  updated_at INTEGER,
+  PRIMARY KEY (project_id, group_id, month)
+);

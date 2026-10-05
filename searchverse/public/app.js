@@ -163,6 +163,7 @@ async function route() {
     if (path === '/new') return await renderProjectForm(null);
     if ((m = path.match(/^\/p\/(\w+)\/edit$/))) return await renderProjectForm(m[1]);
     if ((m = path.match(/^\/p\/(\w+)\/run$/))) return await renderRunner(m[1]);
+    if ((m = path.match(/^\/p\/(\w+)\/lob$/))) return await renderLob(m[1], p);
     if ((m = path.match(/^\/p\/(\w+)$/))) return await renderProject(m[1], p.run);
     app.innerHTML = '<div class="center">Not found</div>';
   } catch (e) {
@@ -521,6 +522,166 @@ async function requestAi(runId, ctx) {
   return (await api(`/api/runs/${runId}/ai`, { method: 'POST', body: { input: aiInput(ctx) } })).ai;
 }
 
+// ---------- LOB report ----------
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const compact = (n) => (n == null ? '' : n >= 1e6 ? fmt(n / 1e6, 2) + 'M' : n >= 1e3 ? fmt(n / 1e3, n >= 1e5 ? 1 : 2) + 'K' : fmt(n));
+const METRICS = {
+  clicks: { label: 'Clicks', get: (r) => r.clicks, fmt: compact, sum: true },
+  impressions: { label: 'Impressions', get: (r) => r.impressions, fmt: compact, sum: true },
+  ctr: { label: 'CTR', get: (r) => r.ctr, fmt: (v) => pct(v, 2), sum: false },
+  position: { label: 'Avg position', get: (r) => r.position, fmt: (v) => fmt(v, 1), sum: false, invert: true },
+};
+// Google-Sheets style red → yellow → green scale
+function heat(t) {
+  const lerp = (a, b, x) => Math.round(a + (b - a) * x);
+  const [r, y, g] = [[230, 124, 115], [255, 214, 102], [87, 187, 138]];
+  const [a, b, x] = t < 0.5 ? [r, y, t * 2] : [y, g, (t - 0.5) * 2];
+  return `rgb(${lerp(a[0], b[0], x)},${lerp(a[1], b[1], x)},${lerp(a[2], b[2], x)})`;
+}
+function combine(list) {
+  const c = list.reduce((s, r) => s + (r.clicks || 0), 0), i = list.reduce((s, r) => s + (r.impressions || 0), 0);
+  return { clicks: c, impressions: i, ctr: i ? c / i : 0, position: i ? list.reduce((s, r) => s + (r.position || 0) * (r.impressions || 0), 0) / i : 0 };
+}
+
+async function renderLob(pid, params) {
+  const year = Number(params.year) || new Date().getFullYear();
+  const metric = METRICS[params.metric] ? params.metric : 'clicks';
+  const [{ project }, data] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/lobs?year=${year}`)]);
+  const M = METRICS[metric];
+  const cats = [...new Set(data.groups.map((g) => g.category).filter(Boolean))];
+  const cat = cats.includes(params.cat) ? params.cat : '';
+  const groups = data.groups.filter((g) => !cat || g.category === cat);
+  const byKey = {};
+  for (const r of data.rows) byKey[r.group_id + '|' + r.month] = r;
+  const months = MONTHS.map((_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+  const daysIn = (mo) => new Date(+mo.slice(0, 4), +mo.slice(5), 0).getDate();
+  const partial = (mo) => { const r = data.rows.find((x) => x.month === mo); return r && r.days < daysIn(mo); };
+  const setQ = (k, v) => { const q = { ...params, [k]: v }; if (!v) delete q[k]; delete q.error; location.hash = `#/p/${pid}/lob?` + new URLSearchParams(q); };
+  const lastUpdated = Math.max(0, ...data.rows.map((r) => r.updated_at || 0));
+
+  const rowCells = (vals, { colored = true } = {}) => {
+    const nums = vals.filter((v) => v != null);
+    const min = Math.min(...nums), max = Math.max(...nums);
+    return vals.map((v) => {
+      if (v == null) return '<td class="num lob-cell"></td>';
+      let t = max > min ? (v - min) / (max - min) : 0.5;
+      if (M.invert) t = 1 - t;
+      return `<td class="num lob-cell" ${colored ? `style="background:${heat(t)};color:#1a1a1a"` : ''}>${M.fmt(v)}</td>`;
+    }).join('');
+  };
+  const total = (list) => (M.sum ? list.reduce((s, r) => s + M.get(r), 0) : M.get(combine(list)));
+  const lines = groups.map((g) => {
+    const recs = months.map((mo) => byKey[g.id + '|' + mo]);
+    const vals = recs.map((r) => (r ? M.get(r) : null));
+    const have = recs.filter(Boolean);
+    return { g, vals, tot: have.length ? total(have) : null };
+  });
+  const totVals = months.map((mo) => { const recs = groups.map((g) => byKey[g.id + '|' + mo]).filter(Boolean); return recs.length ? M.get(combine(recs)) : null; });
+  const siteVals = months.map((mo) => (byKey['__site__|' + mo] ? M.get(byKey['__site__|' + mo]) : null));
+  const allTot = (() => { const recs = groups.flatMap((g) => months.map((mo) => byKey[g.id + '|' + mo]).filter(Boolean)); return recs.length ? M.get(combine(recs)) : null; })();
+  const siteRecs = months.map((mo) => byKey['__site__|' + mo]).filter(Boolean);
+  const pathText = (p) => esc(p).replace(/\n/g, '<br>');
+
+  app.innerHTML = `<div class="row spread"><div><div class="small"><a href="#/p/${pid}">← ${esc(project.name)}</a></div><h1>LOB report</h1>
+      <div class="muted small">${esc(project.gsc_property)} · Search Console, web search${lastUpdated ? ' · data updated ' + date(lastUpdated) : ''}</div></div>
+      <div class="row">
+        <select id="lob-year" style="width:auto">${[0, 1, 2].map((d) => new Date().getFullYear() - d).map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>
+        <select id="lob-metric" style="width:auto">${Object.entries(METRICS).map(([k, v]) => `<option value="${k}" ${k === metric ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+        <button class="btn" id="lob-csv">⬇ CSV</button>
+        ${data.isAdmin ? '<button class="btn" id="lob-edit">✏️ Edit groups</button>' : ''}
+        ${data.canRun && data.groups.length ? '<button class="btn primary" id="lob-refresh">⟳ Refresh from GSC</button>' : ''}
+      </div></div>
+    ${cats.length ? `<div class="tabs">${['', ...cats].map((c) => `<button class="tab ${c === cat ? 'active' : ''}" data-cat="${esc(c)}">${c ? esc(c) : 'Overall'}</button>`).join('')}</div>` : '<div style="height:16px"></div>'}
+    <div id="lob-progress" class="hidden card" style="margin-bottom:12px"><b id="lob-pstep">Refreshing…</b><div class="progress"><div id="lob-pbar" style="width:3%"></div></div></div>
+    ${!data.groups.length ? `<div class="card center"><h2>No URL groups yet</h2><p class="muted">Add your LOBs (e.g. Broadband Blog → <code>/blog/broadband/</code>) to get a monthly report like your Sheet.</p>
+        ${data.isAdmin ? '<button class="btn primary" id="lob-edit2">+ Add URL groups</button>' : '<p class="muted small">Ask your admin to set up the groups.</p>'}</div>`
+    : `<div class="card" style="padding:0"><div class="table-wrap"><table class="lob">
+      <thead><tr><th>URLs grouped</th><th>Page path</th>${months.map((mo, i) => `<th class="num">${MONTHS[i]} ${year}${partial(mo) ? ' <span title="Month not complete yet">*</span>' : ''}</th>`).join('')}<th class="num">${M.sum ? 'Total' : 'Year'}</th></tr></thead>
+      <tbody>${lines.map((l) => `<tr><td><b>${esc(l.g.name)}</b>${!cat && l.g.category ? `<div class="small muted">${esc(l.g.category)}</div>` : ''}</td><td class="small muted lob-path">${pathText(l.g.patterns)}</td>${rowCells(l.vals)}<td class="num"><b>${l.tot == null ? '' : M.fmt(l.tot)}</b></td></tr>`).join('')}
+        <tr class="lob-total"><td colspan="2">Total (${cat || 'all groups'})</td>${totVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${allTot == null ? '' : M.fmt(allTot)}</td></tr>
+        ${!cat ? `<tr class="lob-site"><td colspan="2">Whole site (all URLs in GSC)</td>${siteVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${siteRecs.length ? M.fmt(M.sum ? siteRecs.reduce((s, r) => s + M.get(r), 0) : M.get(combine(siteRecs))) : ''}</td></tr>` : ''}
+      </tbody></table></div></div>
+      <p class="hint">Colours compare months within each row (red = lowest, green = highest${M.invert ? '; for position lower is better' : ''}). * = month not complete yet. Totals add up the groups, so if one URL is in two groups it's counted twice — compare with the "Whole site" row.
+      ${data.rows.length ? '' : '<br><b>No data yet — click “Refresh from GSC”.</b>'} Search Console only keeps 16 months; every refresh is saved here, so older months stay available.</p>`}`;
+
+  document.getElementById('lob-year').onchange = (e) => setQ('year', e.target.value);
+  document.getElementById('lob-metric').onchange = (e) => setQ('metric', e.target.value === 'clicks' ? '' : e.target.value);
+  app.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => setQ('cat', b.dataset.cat)));
+  const edit = () => lobEditor(pid, data.groups);
+  document.getElementById('lob-edit')?.addEventListener('click', edit);
+  document.getElementById('lob-edit2')?.addEventListener('click', edit);
+  document.getElementById('lob-csv').onclick = () => {
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [['Group', 'Category', 'Page path', ...MONTHS.map((mm) => `${mm} ${year}`), 'Total'].map(q).join(','),
+      ...lines.map((l) => [l.g.name, l.g.category, l.g.patterns, ...l.vals.map((v) => v ?? ''), l.tot ?? ''].map(q).join(',')),
+      ['Total', cat, '', ...totVals.map((v) => v ?? ''), allTot ?? ''].map(q).join(',')].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `${project.name}-LOB-${metric}-${year}${cat ? '-' + cat : ''}.csv`;
+    a.click();
+  };
+  document.getElementById('lob-refresh')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    document.getElementById('lob-progress').classList.remove('hidden');
+    const ids = data.groups.map((g) => g.id);
+    try {
+      for (let i = 0; i < ids.length; i += 8) {
+        document.getElementById('lob-pstep').textContent = `Fetching groups ${i + 1}–${Math.min(ids.length, i + 8)} of ${ids.length} from Search Console…`;
+        document.getElementById('lob-pbar').style.width = ((i + 1) / ids.length) * 100 + '%';
+        await api(`/api/projects/${pid}/lobs/refresh`, { method: 'POST', body: { year, groupIds: ids.slice(i, i + 8), includeSite: i === 0 } });
+      }
+      toast('Updated');
+      route();
+    } catch (err) {
+      toast(err.message, 7000);
+      e.target.disabled = false;
+      document.getElementById('lob-progress').classList.add('hidden');
+    }
+  });
+}
+
+function lobEditor(pid, groups) {
+  let list = groups.map((g) => ({ ...g }));
+  const draw = () => {
+    openDrawer(`<h2>URL groups (LOBs)</h2>
+      <p class="muted small">One group per LOB. <b>Page path</b>: one rule per line —
+        <code>/blog/broadband/</code> = URL contains it · <code>https://site.com/page</code> = exact URL ·
+        <code>regex:...</code> = regex · start a line with <code>!</code> to exclude (e.g. <code>!/hindi/</code>). <b>Category</b> makes the tabs (BB, Postpaid, Prepaid…).</p>
+      <details class="card" style="margin:12px 0"><summary><b>📋 Paste from Google Sheets</b></summary>
+        <p class="small muted">Copy two or three columns from your sheet (Name, Page path, optional Category) and paste them here. Each row becomes a group.</p>
+        <textarea id="bulk" rows="6" placeholder="Broadband Blog&#9;/blog/broadband/&#9;BB"></textarea>
+        <div class="row" style="margin-top:8px"><input id="bulk-cat" placeholder="Category for rows without one (optional)" style="flex:1"><button class="btn" id="bulk-add">Add rows</button></div>
+      </details>
+      <div id="glist">${list.map((g, i) => `<div class="card" style="margin-bottom:10px;padding:12px">
+        <div class="row" style="flex-wrap:nowrap"><input data-f="name" data-i="${i}" value="${esc(g.name)}" placeholder="Group name" style="flex:2">
+          <input data-f="category" data-i="${i}" value="${esc(g.category || '')}" placeholder="Category" style="flex:1">
+          <button class="btn sm" data-up="${i}" title="Move up">↑</button><button class="btn sm danger" data-rm="${i}" title="Remove">✕</button></div>
+        <textarea data-f="patterns" data-i="${i}" rows="2" placeholder="/blog/broadband/" style="margin-top:8px">${esc(g.patterns)}</textarea></div>`).join('')}</div>
+      <div class="row"><button class="btn" id="g-add">+ Add group</button><span style="flex:1"></span><button class="btn primary" id="g-save">Save groups</button></div>`);
+    const panel = document.getElementById('drawer-panel');
+    panel.querySelectorAll('[data-f]').forEach((el) => (el.oninput = () => (list[el.dataset.i][el.dataset.f] = el.value)));
+    panel.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { list.splice(+b.dataset.rm, 1); draw(); }));
+    panel.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => { const i = +b.dataset.up; if (i) [list[i - 1], list[i]] = [list[i], list[i - 1]]; draw(); }));
+    document.getElementById('g-add').onclick = () => { list.push({ name: '', category: '', patterns: '' }); draw(); };
+    document.getElementById('bulk-add').onclick = () => {
+      const dc = document.getElementById('bulk-cat').value.trim();
+      for (const line of document.getElementById('bulk').value.split('\n')) {
+        const [name, patterns, category] = line.split('\t').map((x) => (x || '').trim());
+        if (name && patterns) list.push({ name, patterns: patterns.replace(/\s*,\s*/g, '\n'), category: category || dc });
+      }
+      draw();
+    };
+    document.getElementById('g-save').onclick = async () => {
+      try {
+        await api(`/api/projects/${pid}/lobs`, { method: 'PUT', body: { groups: list } });
+        toast('Groups saved — click “Refresh from GSC” to load the numbers');
+        route();
+      } catch (e) { toast(e.message, 6000); }
+    };
+  };
+  draw();
+}
+
 // ---------- project dashboard ----------
 async function renderProject(pid, runId) {
   const [{ project }, { runs }] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/runs`)]);
@@ -528,7 +689,7 @@ async function renderProject(pid, runId) {
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
       <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${date(r.created_at)} · score ${r.score}</option>`).join('')}</select>` : ''}
-      ${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
+      <a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
     app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">${canRun(project) ? 'Run your first analysis to see scores, opportunities and AI recommendations.' : 'No analysis has been run yet. Ask someone with "Can run analysis" access to run one.'}</p>${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div>`;
     return;

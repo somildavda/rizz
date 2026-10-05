@@ -555,6 +555,109 @@ async function handleApi(req, env, url) {
     }
   }
 
+  // LOB report: URL groups + monthly GSC numbers
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/lobs$/))) {
+    const project = await getProject(env, m[1], user.email);
+    if (method === 'GET') {
+      const year = String(url.searchParams.get('year') || new Date().getUTCFullYear());
+      const { results: groups } = await DB.prepare('SELECT id, name, category, patterns, sort FROM lob_groups WHERE project_id = ? ORDER BY sort')
+        .bind(project.id)
+        .all();
+      const { results: rows } = await DB.prepare(
+        'SELECT group_id, month, clicks, impressions, ctr, position, days, updated_at FROM lob_monthly WHERE project_id = ? AND month LIKE ?'
+      )
+        .bind(project.id, year + '-%')
+        .all();
+      return json({ groups, rows, canRun: canRun(project), isAdmin: user.role === 'admin' });
+    }
+    if (method === 'PUT') {
+      requireAdmin(user);
+      const b = await body(req);
+      const groups = (b.groups || []).slice(0, 40).map((g, i) => ({
+        id: /^\w{8,40}$/.test(g.id || '') ? g.id : id(),
+        name: String(g.name || '').trim().slice(0, 120),
+        category: String(g.category || '').trim().slice(0, 60),
+        patterns: String(g.patterns || '').trim().slice(0, 4000),
+        sort: i,
+      }));
+      for (const g of groups) {
+        if (!g.name || !g.patterns) throw new HttpError(400, 'Every group needs a name and at least one page path');
+        lobRegex(g.patterns);
+      }
+      const keep = groups.map((g) => g.id);
+      const stmts = [DB.prepare('DELETE FROM lob_groups WHERE project_id = ?').bind(project.id)];
+      for (const g of groups) {
+        stmts.push(
+          DB.prepare('INSERT INTO lob_groups (id, project_id, name, category, patterns, sort) VALUES (?, ?, ?, ?, ?, ?)').bind(
+            g.id, project.id, g.name, g.category, g.patterns, g.sort
+          )
+        );
+      }
+      // drop stored numbers of removed groups
+      stmts.push(
+        DB.prepare(
+          `DELETE FROM lob_monthly WHERE project_id = ? AND group_id != '__site__' AND group_id NOT IN (${keep.map(() => '?').join(',') || "''"})`
+        ).bind(project.id, ...keep)
+      );
+      await DB.batch(stmts);
+      return json({ ok: true });
+    }
+  }
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/lobs\/refresh$/)) && method === 'POST') {
+    const project = await getProject(env, m[1], user.email);
+    requireRun(project);
+    const b = await body(req);
+    const year = Number(b.year) || new Date().getUTCFullYear();
+    const { results: allGroups } = await DB.prepare('SELECT id, patterns FROM lob_groups WHERE project_id = ? ORDER BY sort').bind(project.id).all();
+    // the browser refreshes groups in small batches to stay inside Worker request limits
+    const ids = Array.isArray(b.groupIds) ? b.groupIds : null;
+    const groups = ids ? allGroups.filter((g) => ids.includes(g.id)) : allGroups;
+    const start = `${year}-01-01`;
+    const lastAvail = ymd(new Date(now() - 3 * DAY));
+    const end = `${year}-12-31` < lastAvail ? `${year}-12-31` : lastAvail;
+    if (start > end) throw new HttpError(400, 'No Search Console data for that year yet');
+    const token = await accessToken(env, project.connection_id);
+    const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`;
+    const fetchGroup = async (g) => {
+      const filters = g ? lobFilters(g.patterns) : [];
+      const res = await gfetch(token, endpoint, {
+        startDate: start,
+        endDate: end,
+        dimensions: ['date'],
+        type: 'web',
+        rowLimit: 400,
+        ...(filters.length ? { dimensionFilterGroups: [{ groupType: 'and', filters }] } : {}),
+      });
+      const months = {};
+      for (const r of res.rows || []) {
+        const mo = r.keys[0].slice(0, 7);
+        const t = (months[mo] ||= { c: 0, i: 0, pw: 0, d: 0 });
+        t.c += r.clicks;
+        t.i += r.impressions;
+        t.pw += r.position * r.impressions;
+        t.d++;
+      }
+      return { id: g ? g.id : '__site__', months };
+    };
+    const targets = [...groups, ...(b.includeSite !== false ? [null] : [])];
+    const results = await Promise.all(targets.map(fetchGroup));
+    const stmts = [];
+    for (const r of results) {
+      for (const [mo, t] of Object.entries(r.months)) {
+        stmts.push(
+          DB.prepare(
+            `INSERT INTO lob_monthly (project_id, group_id, month, clicks, impressions, ctr, position, days, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(project_id, group_id, month) DO UPDATE SET clicks = excluded.clicks, impressions = excluded.impressions,
+               ctr = excluded.ctr, position = excluded.position, days = excluded.days, updated_at = excluded.updated_at`
+          ).bind(project.id, r.id, mo, t.c, t.i, t.i ? t.c / t.i : 0, t.i ? t.pw / t.i : 0, t.d, now())
+        );
+      }
+    }
+    if (stmts.length) await DB.batch(stmts);
+    return json({ ok: true, updated: results.length, range: [start, end] });
+  }
+
   // runs
   if ((m = path.match(/^\/api\/projects\/(\w+)\/runs$/))) {
     const project = await getProject(env, m[1], user.email);
@@ -685,6 +788,43 @@ async function handleApi(req, env, url) {
   }
 
   throw new HttpError(404, 'Not found');
+}
+
+// LOB page-path rules, one per line (or comma separated):
+//   /blog/broadband/         URL contains this text (default)
+//   https://site.com/page    exact URL
+//   regex:^.*/plans/.*$      raw RE2 regex
+//   !something               exclude URLs containing this (can combine with any of the above)
+function lobRules(patterns) {
+  const inc = [];
+  const exc = [];
+  for (let raw of String(patterns).split(/[\n,]+/)) {
+    raw = raw.trim();
+    if (!raw) continue;
+    const neg = raw.startsWith('!');
+    if (neg) raw = raw.slice(1).trim();
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = raw.startsWith('regex:') ? raw.slice(6).trim() : /^https?:\/\//i.test(raw) ? '^' + esc(raw) + '$' : esc(raw);
+    (neg ? exc : inc).push(re);
+  }
+  return { inc, exc };
+}
+function lobRegex(patterns) {
+  const { inc } = lobRules(patterns);
+  if (!inc.length) throw new HttpError(400, 'Each group needs at least one page path to include');
+  for (const r of inc) {
+    try {
+      new RegExp(r);
+    } catch {
+      throw new HttpError(400, `Invalid regex: ${r}`);
+    }
+  }
+}
+function lobFilters(patterns) {
+  const { inc, exc } = lobRules(patterns);
+  const f = [{ dimension: 'page', operator: 'includingRegex', expression: inc.map((r) => `(${r})`).join('|') }];
+  if (exc.length) f.push({ dimension: 'page', operator: 'excludingRegex', expression: exc.map((r) => `(${r})`).join('|') });
+  return f;
 }
 
 async function ensureUser(env, email, invitedBy) {
