@@ -146,3 +146,8 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .seg button { border: none; background: var(--surface); color: var(--muted); padding: 8px 14px; font: inherit; font-weight: 500; cursor: pointer; }
 .seg button.on { background: var(--primary); color: #fff; }
+
+.rv { margin-top: 16px; } .rv-item { padding: 10px 0; border-bottom: 1px dashed var(--border); } .rv-item:last-child { border-bottom: none; } .rv-item p { margin: 3px 0; }
+.ap-h { margin: 22px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 15px; }
+.value.up { color: var(--good); } .value.down { color: var(--bad); }
+.check > .pill { align-self: flex-start; }

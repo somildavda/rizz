@@ -347,7 +347,7 @@ function ymd(d) {
   return d.toISOString().slice(0, 10);
 }
 // Custom range: compare with the previous period of equal length, or the same dates one year earlier.
-function customPeriods(start, end, compare) {
+function customPeriods(start, end, compare, pstart, pendIn) {
   const re = /^\d{4}-\d{2}-\d{2}$/;
   if (!re.test(start) || !re.test(end) || start > end) throw new HttpError(400, 'Pick a valid start and end date');
   const s = new Date(start + 'T00:00:00Z'), e = new Date(end + 'T00:00:00Z');
@@ -356,6 +356,11 @@ function customPeriods(start, end, compare) {
   if (e > new Date(now() - DAY)) throw new HttpError(400, 'End date must be before today');
   const len = Math.round((e - s) / DAY) + 1;
   if (len > 366) throw new HttpError(400, 'Pick a range of at most 12 months');
+  if (compare === 'custom') {
+    if (!re.test(pstart || '') || !re.test(pendIn || '') || pstart > pendIn) throw new HttpError(400, 'Pick valid compare dates');
+    if (new Date(pstart + 'T00:00:00Z') < oldest) throw new HttpError(400, 'Compare dates are older than Search Console keeps (~16 months)');
+    return { start, end, pstart, pend: pendIn, compare: 'custom' };
+  }
   if (compare === 'year') {
     const back = (d) => { const x = new Date(d); x.setUTCFullYear(x.getUTCFullYear() - 1); return ymd(x); };
     return { start, end, pstart: back(s), pend: back(e), compare: 'year' };
@@ -745,7 +750,7 @@ async function handleApi(req, env, url) {
       if (!project.connection_id) throw new HttpError(400, 'This project has no Google account connected');
       const b = await body(req).catch(() => ({}));
       const pr = b.start && b.end
-        ? customPeriods(String(b.start), String(b.end), b.compare)
+        ? customPeriods(String(b.start), String(b.end), b.compare, b.pstart && String(b.pstart), b.pend && String(b.pend))
         : periods([7, 28, 90].includes(Number(b.days)) ? Number(b.days) : 28);
       const rid = id();
       await DB.prepare(
@@ -1100,6 +1105,9 @@ async function validateProject(env, user, b) {
 
 // ---------- data pulls ----------
 
+const minD = (a, b) => (a < b ? a : b);
+const maxD = (a, b) => (a > b ? a : b);
+
 async function pullGsc(token, project, run) {
   const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`;
   const q = (startDate, endDate, dimensions, rowLimit) =>
@@ -1107,7 +1115,7 @@ async function pullGsc(token, project, run) {
   const cur = [run.start_date, run.end_date];
   const prev = [run.prev_start, run.prev_end];
   const [daily, queries, prevQueries, pages, prevPages, pageQueries, devices, countries] = await Promise.all([
-    q(run.prev_start, run.end_date, ['date'], 1000),
+    q(minD(run.prev_start, run.start_date), maxD(run.prev_end, run.end_date), ['date'], 1000),
     q(...cur, ['query'], 1000),
     q(...prev, ['query'], 1000),
     q(...cur, ['page'], 1000),
@@ -1122,8 +1130,8 @@ async function pullGsc(token, project, run) {
     return { clicks: t.c, impressions: t.i, ctr: t.i ? t.c / t.i : 0, position: t.i ? t.pw / t.i : 0 };
   };
   return {
-    totals: sum(daily.filter((r) => r.keys[0] >= run.start_date)),
-    prevTotals: sum(daily.filter((r) => r.keys[0] <= run.prev_end)),
+    totals: sum(daily.filter((r) => r.keys[0] >= run.start_date && r.keys[0] <= run.end_date)),
+    prevTotals: sum(daily.filter((r) => r.keys[0] >= run.prev_start && r.keys[0] <= run.prev_end)),
     daily: daily.map((r) => ({ d: r.keys[0], ...row(r) })),
     queries: queries.map((r) => ({ q: r.keys[0], ...row(r) })),
     prevQueries: prevQueries.map((r) => ({ q: r.keys[0], ...row(r) })),
@@ -1141,15 +1149,17 @@ async function pullGa(token, project, run) {
   const cur = { startDate: run.start_date, endDate: run.end_date };
   const prev = { startDate: run.prev_start, endDate: run.prev_end };
   const num = (v) => Number(v?.value || 0);
-  const [landing, channels, daily] = await Promise.all([
-    gfetch(token, endpoint, {
-      dateRanges: [cur],
-      dimensions: [{ name: 'landingPage' }],
-      metrics: ['sessions', 'totalUsers', 'engagementRate', 'averageSessionDuration', 'keyEvents', 'bounceRate'].map((name) => ({ name })),
-      dimensionFilter: organic,
-      orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-      limit: 500,
-    }),
+  const landingReq = (range) => ({
+    dateRanges: [range],
+    dimensions: [{ name: 'landingPage' }],
+    metrics: ['sessions', 'totalUsers', 'engagementRate', 'averageSessionDuration', 'keyEvents', 'bounceRate', 'newUsers', 'screenPageViews'].map((name) => ({ name })),
+    dimensionFilter: organic,
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    limit: 1000,
+  });
+  const [landing, prevLanding, channels, daily] = await Promise.all([
+    gfetch(token, endpoint, landingReq(cur)),
+    gfetch(token, endpoint, landingReq(prev)),
     gfetch(token, endpoint, {
       dateRanges: [cur, prev],
       dimensions: [{ name: 'sessionDefaultChannelGroup' }],
@@ -1157,13 +1167,24 @@ async function pullGa(token, project, run) {
       limit: 30,
     }),
     gfetch(token, endpoint, {
-      dateRanges: [{ startDate: run.prev_start, endDate: run.end_date }],
+      dateRanges: [{ startDate: minD(run.prev_start, run.start_date), endDate: maxD(run.prev_end, run.end_date) }],
       dimensions: [{ name: 'date' }],
       metrics: [{ name: 'sessions' }],
       dimensionFilter: organic,
       limit: 1000,
     }),
   ]);
+  const landingRow = (r) => ({
+    path: r.dimensionValues[0].value,
+    sessions: num(r.metricValues[0]),
+    users: num(r.metricValues[1]),
+    engagementRate: +num(r.metricValues[2]).toFixed(3),
+    avgDuration: Math.round(num(r.metricValues[3])),
+    keyEvents: num(r.metricValues[4]),
+    bounceRate: +num(r.metricValues[5]).toFixed(3),
+    newUsers: num(r.metricValues[6]),
+    views: num(r.metricValues[7]),
+  });
   const channelRows = {};
   for (const r of channels.rows || []) {
     const name = r.dimensionValues[0].value;
@@ -1177,15 +1198,8 @@ async function pullGa(token, project, run) {
     };
   }
   return {
-    landing: (landing.rows || []).map((r) => ({
-      path: r.dimensionValues[0].value,
-      sessions: num(r.metricValues[0]),
-      users: num(r.metricValues[1]),
-      engagementRate: +num(r.metricValues[2]).toFixed(3),
-      avgDuration: Math.round(num(r.metricValues[3])),
-      keyEvents: num(r.metricValues[4]),
-      bounceRate: +num(r.metricValues[5]).toFixed(3),
-    })),
+    landing: (landing.rows || []).map(landingRow),
+    prevLanding: (prevLanding.rows || []).map(landingRow),
     channels: Object.values(channelRows).sort((a, b) => (b.cur?.sessions || 0) - (a.cur?.sessions || 0)),
     daily: (daily.rows || [])
       .map((r) => {
@@ -1248,33 +1262,42 @@ async function fetchPage(project, raw) {
 // ---------- Gemini ----------
 
 function seoPrompt(project, input, maxChars) {
-  return `You are a senior SEO + CRO consultant writing for an in-house team at "${project.name}" (${project.site_url}).
-Data below: Google Search Console (clicks, impressions, CTR, position, queries split into BRANDED vs NON-BRANDED), GA4 organic landing-page data
-(sessions, new/returning users, bounce rate, page views, key events/leads), and an on-page crawl with rule-based scores. "money": true marks business-critical pages.
-If "scope" is set, the analysis covers only those line-of-business (LOB) URL groups — keep every recommendation inside that scope.
+  return `You are a senior SEO + CRO lead writing the monthly performance review for "${project.name}" (${project.site_url}).
+Data below: Google Search Console (current vs comparison period, branded vs non-branded queries, biggest winning/losing queries and pages),
+GA4 organic landing pages (sessions, users, bounce, key events, current vs comparison), and an on-page crawl (scores, failed checks, schema,
+JS-rendering risk, navigation/footer link texts, external link counts). "money": true marks business-critical pages. If "scope" is set,
+only those line-of-business (LOB) URLs are in scope.
 
-STRICT RULES — recommendations that break these are useless:
-1. Every item must name the exact URL(s) and quote the numbers that justify it (e.g. "/plans/broadband: 120k impressions, pos 7.4, CTR 1.2%").
-2. Give the concrete change, not a category: write the actual new title / meta / H1 / section heading / FAQ question / CTA text / internal-link anchor + target URL.
-3. Banned phrases unless followed by the specific change: "optimize", "improve", "enhance", "consider", "leverage", "ensure", "focus on", "high-quality content".
-4. Prioritise NON-BRANDED growth for SEO; use branded data only to judge demand and CTR health.
-5. CRO items must use GA numbers (bounce rate, engagement, key events per session, leads) and state the hypothesis + exact test (what to change, where on the page, success metric).
-6. Content clusters must be built from the actual non-branded queries in the data: name the pillar URL (existing or new), list the supporting pages (existing URLs or new slugs) and the exact queries each one targets.
-7. Money pages first. Never invent data; if something isn't in the data, say what to check instead.
+WRITE LIKE THIS EXAMPLE (same style: counts, numbers, named pages/queries):
+- What went well: "20 non-branded queries grew +38% clicks (12.4k → 17.1k), concentrated on 6 /blog/broadband/ pages."
+- How we achieved it: "Those 6 pages average 84 on-page score with FAQ schema and the query in title + H1; supporting blogs X and Y link to them."
+- What didn't work: "14 /plans/ pages lost 9.2k clicks (-31%); positions fell 4.1 → 7.8 across most of them at once — consistent with a ranking/core update rather than a page issue."
+- How to improve: "11 pages are missing their top query in title/H1 (list); 5 high-impression pages have no schema."
+- Action plan: workstreams YOU choose from what the data shows (any SEO area), each with concrete tasks, URLs, evidence and owner.
+
+STRICT RULES:
+1. Every point must name exact URLs/queries and quote numbers from the data (counts, clicks, % change, positions, scores).
+2. Give the exact change: new title/meta/H1 text, schema type to add, exact blog titles + slugs + target query, exact nav/footer anchor text and target URL.
+3. Never write vague advice ("optimize", "improve", "enhance", "consider", "leverage", "focus on", "high-quality content") without the concrete change.
+4. Explain causes only from the data: say "likely ranking volatility / core update" only when many pages dropped in position together; otherwise point to page-level causes.
+5. No competitor or backlink data is available: for external links/backlinks, state exactly what to audit (which pages, which tool/report) instead of inventing competitor numbers.
+6. Technical items must say who owns them (dev / seo / content) and what evidence triggered them (e.g. "JS-rendering risk on /x: 80 words in raw HTML, 45 scripts").
+7. Prioritise money pages and non-branded growth. Never invent data.
 
 Return ONLY JSON in this exact shape:
 {
-  "summary": "4-6 sentences: what moved, why (with numbers), and the 3 biggest levers",
+  "summary": "3-4 sentence overview with the headline numbers",
   "health": "good" | "needs_work" | "poor",
-  "priorities": [{"title": "", "why": "numbers-backed reason", "how": "step-by-step concrete change", "impact": "high|medium|low", "effort": "high|medium|low", "type": "seo|cro|content|technical", "urls": [""], "expected_result": "measurable target, e.g. CTR 1.2% → 3% on query X"}],
-  "seo": [{"url": "", "issue": "", "evidence": "numbers", "title_suggestion": "", "meta_suggestion": "", "h1_suggestion": "", "sections_to_add": ["exact H2s/FAQ questions"], "internal_links": [{"from": "url", "anchor": "", "to": "url"}]}],
-  "cro": [{"url": "", "evidence": "GA/GSC numbers", "hypothesis": "", "change": "exact change and where on the page", "metric": "success metric", "impact": "high|medium|low"}],
-  "content_clusters": [{"cluster": "", "pillar": "url or new slug", "target_queries": ["non-branded queries from the data"], "supporting_pages": [{"url": "existing url or new slug", "status": "existing|new|update", "target_queries": [""], "brief": "what the page must cover"}]}],
-  "quick_wins": [{"query": "", "url": "", "position": 0, "impressions": 0, "action": "exact change"}],
-  "technical": [{"issue": "", "fix": "", "urls": [""]}],
-  "risks": ["specific declines / cannibalisation with numbers"]
+  "what_went_well": [{"point": "", "evidence": "numbers", "queries": [""], "pages": [""]}],
+  "how_we_achieved_it": [{"point": "", "evidence": "on-page scores / schema / content facts from the crawl", "pages": [""]}],
+  "what_didnt_work": [{"point": "", "evidence": "numbers", "likely_cause": "", "pages": [""]}],
+  "how_to_improve": [{"point": "", "evidence": "", "pages": [""]}],
+  "action_plan": [{"area": "workstream name you choose, e.g. On-page & titles, Schema, Topical authority / new blogs, Internal linking, Rendering (SSR/CSR), Indexation, CTR & snippets, Cannibalisation, Page experience, E-E-A-T, Backlinks — only areas the data justifies, most impactful first",
+    "items": [{"task": "the exact change (exact text, exact blog title + slug + target query, exact anchor → URL, exact schema type...)", "urls": [""], "evidence": "numbers that justify it", "owner": "dev|seo|content", "priority": "high|medium|low"}]}],
+  "cro": [{"url": "", "evidence": "GA numbers", "hypothesis": "", "change": "exact change + location", "metric": ""}],
+  "quick_wins": [{"query": "", "url": "", "position": 0, "impressions": 0, "action": "exact change"}]
 }
-Limits: 6-8 priorities, up to 10 seo items, 5-8 cro items, 3-5 content clusters, up to 10 quick wins.
+Limits: 3-5 items in each of the first four sections, 4-7 action_plan areas with 2-6 items each (use the internalLinkOpportunities, renderModes/csrPages and navigationFooter data where relevant), 3-6 cro, up to 8 quick wins.
 
 DATA:
 ${JSON.stringify(input).slice(0, maxChars)}`;
@@ -1346,7 +1369,7 @@ async function askAI(env, key, project, input) {
           { role: 'system', content: 'You are a senior SEO consultant. Reply with valid JSON only.' },
           { role: 'user', content: seoPrompt(project, input, 45000) },
         ],
-        max_tokens: 6000,
+        max_tokens: 7000,
         temperature: 0.4,
       });
       const out = typeof r.response === 'object' ? r.response : parseAiJson(r.response);

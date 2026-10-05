@@ -120,6 +120,17 @@ function extract(html, pageUrl) {
   const ctas = [...new Set($$('button, input[type=submit], a[class*="btn" i], a[class*="cta" i], a[class*="button" i]')
     .map((el) => (el.textContent || el.value || '').replace(/\s+/g, ' ').trim()).filter((t) => t && t.length < 40))].slice(0, 10);
   const forms = $$('form').length;
+  // navigation / footer anchor texts (to check main keywords are linked site-wide)
+  const anchorTexts = (sel) => [...new Set($$(sel).map((a) => a.textContent.replace(/\s+/g, ' ').trim()).filter((t) => t && t.length < 60))];
+  const navLinks = anchorTexts('nav a, header a, [role=navigation] a').slice(0, 80);
+  const footerLinks = anchorTexts('footer a, [role=contentinfo] a').slice(0, 120);
+  // JS-rendering risk: lots of script, little server-rendered text, or an empty app root
+  const scripts = $$('script').length;
+  const appRoot = $('#root, #__next, #app, [data-reactroot], app-root');
+  const emptyRoot = !!appRoot && (appRoot.textContent || '').trim().length < 50;
+  const framework = /__NEXT_DATA__|\/_next\//.test(html) ? 'Next.js' : /__NUXT__|\/_nuxt\//.test(html) ? 'Nuxt' : $('[ng-version]') ? 'Angular'
+    : /___gatsby/.test(html) ? 'Gatsby' : $('[data-reactroot], #root') ? 'React' : /data-v-[0-9a-f]{6,}|id="app"/.test(html) ? 'Vue' : '';
+  const internalPaths = [...new Set(internal.map((l) => l.pathname.replace(/\/$/, '') || '/'))].slice(0, 400);
   const telLinks = $$('a[href^="tel:"]').length;
 
   const bodyEl = dom.body || dom.documentElement;
@@ -152,6 +163,12 @@ function extract(html, pageUrl) {
     ctas,
     forms,
     telLinks,
+    navLinks,
+    footerLinks,
+    scripts,
+    emptyRoot,
+    framework,
+    internalPaths,
     wordCount: bodyTokens.length,
     bodyTokens,
     first100: bodyTokens.slice(0, 100).join(' '),
@@ -208,6 +225,10 @@ export function analyzePage(fetched, pageQueries = [], ga = null) {
   add('alt', 'Structure', 'Images have alt text', 5, !d.images ? 1 : d.imagesNoAlt / d.images <= 0.1 ? 1 : d.imagesNoAlt / d.images <= 0.4 ? 0.5 : 0,
     d.images ? `${d.imagesNoAlt}/${d.images} missing alt` : 'No images');
 
+  const jsRisk = d.emptyRoot || (d.wordCount < 150 && d.scripts > 15);
+  d.renderMode = jsRisk ? 'CSR' : d.framework ? 'SSR (framework)' : 'SSR / static';
+  add('js', 'Technical', 'Main content visible without JavaScript', 5, jsRisk ? 0 : 1,
+    jsRisk ? `Only ${d.wordCount} words in raw HTML with ${d.scripts} scripts${d.emptyRoot ? ' and an empty app root' : ''} — bots may not see the content` : `${d.wordCount} words server-rendered`);
   add('words', 'Content', 'Sufficient content (≥ 300 words)', 6, d.wordCount >= 600 ? 1 : d.wordCount >= 300 ? 0.75 : d.wordCount >= 150 ? 0.4 : 0,
     `${d.wordCount} words`);
 
@@ -232,6 +253,7 @@ export function analyzePage(fetched, pageQueries = [], ga = null) {
 
   const { bodyTokens, first100, subheads, ...meta } = d;
   return {
+    _text: ' ' + bodyTokens.slice(0, 6000).join(' ') + ' ',
     url: fetched.url,
     finalUrl: fetched.finalUrl,
     status: fetched.status,
@@ -428,4 +450,34 @@ export function brandSplit(queries, isBranded) {
     t.c += q.c; t.i += q.i; t.n++;
   }
   return out;
+}
+
+// ---------- internal linking ----------
+// For each important crawled page, find other crawled pages that mention its main non-branded query
+// in their copy but don't link to it yet. Also counts inbound links within the crawled set.
+export function internalLinkPlan(pages, isBranded) {
+  const pathOf = (u) => { try { return new URL(u).pathname.replace(/\/$/, '') || '/'; } catch { return u; } };
+  const ok = pages.filter((p) => p.meta && p._text);
+  const inbound = {};
+  for (const p of ok) for (const l of p.meta.internalPaths || []) inbound[l] = (inbound[l] || 0) + 1;
+  const suggestions = [];
+  for (const t of ok) {
+    const tp = pathOf(t.url);
+    const targets = (t.queries || []).filter((q) => !isBranded(q.query) && q.query.split(' ').length >= 2).slice(0, 3);
+    for (const q of targets) {
+      const phrase = ' ' + norm(q.query) + ' ';
+      for (const src of ok) {
+        if (src === t || (src.meta.internalPaths || []).includes(tp)) continue;
+        if (!src._text.includes(phrase)) continue;
+        suggestions.push({ from: src.url, to: t.url, anchor: q.query, impressions: q.impressions, position: q.position, toMoney: !!t.money });
+      }
+    }
+  }
+  // most valuable first: money targets, striking-distance positions, high impressions; max 3 suggestions per target
+  suggestions.sort((a, b) => (b.toMoney - a.toMoney) || ((a.position >= 4 && a.position <= 20 ? 0 : 1) - (b.position >= 4 && b.position <= 20 ? 0 : 1)) || b.impressions - a.impressions);
+  const perTarget = {};
+  const picked = suggestions.filter((x) => (perTarget[x.to] = (perTarget[x.to] || 0) + 1) <= 3).slice(0, 60);
+  const weak = ok.map((p) => ({ url: p.url, inbound: inbound[pathOf(p.url)] || 0, impressions: p.gsc?.i || 0, money: !!p.money }))
+    .filter((p) => p.inbound <= 2 && (p.impressions > 0 || p.money)).sort((a, b) => b.money - a.money || b.impressions - a.impressions).slice(0, 30);
+  return { suggestions: picked, weakInbound: weak };
 }

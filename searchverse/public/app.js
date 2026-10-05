@@ -1,4 +1,4 @@
-import { analyzePage, opportunities, siteChecks, overallScores, missingSpots, lobMatcher, brandTester, brandSplit } from './analyzer.js';
+import { analyzePage, opportunities, siteChecks, overallScores, missingSpots, lobMatcher, brandTester, brandSplit, internalLinkPlan } from './analyzer.js';
 
 const app = document.getElementById('app');
 const state = { me: null };
@@ -426,7 +426,9 @@ async function renderRunner(pid) {
           <option value="custom">Custom…</option></select></div>
         <div><label class="small" style="margin-top:0">From</label><input type="date" id="r-start" value="${isoDay(s0)}" style="width:auto"></div>
         <div><label class="small" style="margin-top:0">To</label><input type="date" id="r-end" value="${isoDay(e0)}" style="width:auto"></div>
-        <div><label class="small" style="margin-top:0">Compare with</label><select id="r-compare" style="width:auto"><option value="previous">Previous period</option><option value="year">Same period last year</option></select></div>
+        <div><label class="small" style="margin-top:0">Compare with</label><select id="r-compare" style="width:auto"><option value="previous">Previous period</option><option value="year">Same period last year</option><option value="custom">Custom dates…</option></select></div>
+        <div class="r-cust hidden"><label class="small" style="margin-top:0">Compare from</label><input type="date" id="r-pstart" style="width:auto"></div>
+        <div class="r-cust hidden"><label class="small" style="margin-top:0">Compare to</label><input type="date" id="r-pend" style="width:auto"></div>
       </div>
       <div class="hint" id="r-cmp-text"></div>
 
@@ -461,7 +463,11 @@ async function renderRunner(pid) {
     if (isNaN(s) || isNaN(e) || s > e) { $('r-cmp-text').textContent = 'Pick a valid range'; return; }
     const len = Math.round((e - s) / 86400000) + 1;
     let ps, pe;
-    if ($('r-compare').value === 'year') { ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1); pe = new Date(e); pe.setUTCFullYear(pe.getUTCFullYear() - 1); }
+    document.querySelectorAll('.r-cust').forEach((el) => el.classList.toggle('hidden', $('r-compare').value !== 'custom'));
+    if ($('r-compare').value === 'custom') {
+      if (!$('r-pstart').value) { const pe0 = new Date(s.getTime() - 86400000); $('r-pend').value = isoDay(pe0); $('r-pstart').value = isoDay(new Date(pe0.getTime() - (len - 1) * 86400000)); }
+      ps = new Date($('r-pstart').value); pe = new Date($('r-pend').value);
+    } else if ($('r-compare').value === 'year') { ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1); pe = new Date(e); pe.setUTCFullYear(pe.getUTCFullYear() - 1); }
     else { pe = new Date(s.getTime() - 86400000); ps = new Date(pe.getTime() - (len - 1) * 86400000); }
     $('r-cmp-text').textContent = `${len} days: ${isoDay(s)} → ${isoDay(e)}, compared with ${isoDay(ps)} → ${isoDay(pe)}. Search Console keeps ~16 months and lags 2–3 days.`;
   };
@@ -471,9 +477,10 @@ async function renderRunner(pid) {
   };
   ['r-start', 'r-end'].forEach((id) => ($(id).onchange = () => { $('r-preset').value = 'custom'; cmpText(); }));
   $('r-compare').onchange = cmpText;
+  ['r-pstart', 'r-pend'].forEach((id) => ($(id).onchange = cmpText));
   cmpText();
   $('r-go').onclick = () => runAnalysis(project, {
-    start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value,
+    start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value, pstart: $('r-pstart').value, pend: $('r-pend').value, allGroups: lobGroups,
     maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
     scope: $('r-scope').value,
     scopeGroups: $('r-scope').value === 'all' ? lobGroups : $('r-scope').value.startsWith('cat:') ? lobGroups.filter((g) => g.category === $('r-scope').value.slice(4)) : [],
@@ -536,7 +543,7 @@ async function runAnalysis(project, opt) {
   let run;
   try {
     step('Creating run', 2);
-    run = (await api(`/api/projects/${project.id}/runs`, { method: 'POST', body: { start: opt.start, end: opt.end, compare: opt.compare } })).run;
+    run = (await api(`/api/projects/${project.id}/runs`, { method: 'POST', body: { start: opt.start, end: opt.end, compare: opt.compare, pstart: opt.pstart, pend: opt.pend } })).run;
     log(`Period ${run.start} → ${run.end} (compared with ${run.pstart} → ${run.pend})`);
 
     step('Fetching Search Console data', 5);
@@ -586,6 +593,21 @@ async function runAnalysis(project, opt) {
     }
     const isBranded = brandTester(project.brand_terms);
     const brand = brandSplit(gsc.queries, isBranded);
+
+    // comparison-period queries/pages for winners & losers
+    let prevQ = gsc.prevQueries, prevP = gsc.prevPages;
+    try {
+      if (inScope) {
+        step('Fetching comparison-period data for LOB pages', 15);
+        const ppq = (await gscAll(run.id, run.pstart, run.pend, ['page', 'query'], opt.rows || 25000)).filter((r) => inScope(r[0]));
+        prevQ = aggQueries(ppq.map(([u, q, c, i, ctr, p]) => ({ u, q, c, i, p })));
+      } else if (opt.rows) {
+        step('Full export: comparison period', 15);
+        prevQ = (await gscAll(run.id, run.pstart, run.pend, ['query'], opt.rows)).map(([q, c, i, ctr, p]) => ({ q, c, i, ctr, p }));
+        prevP = (await gscAll(run.id, run.pstart, run.pend, ['page'], opt.rows)).map(([u, c, i, ctr, p]) => ({ u, c, i, ctr, p }));
+      }
+    } catch (e) { log('Comparison export skipped: ' + e.message, 'no'); }
+    const prevBrand = brandSplit(prevQ, isBranded);
 
     const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
     step('Checking robots.txt & sitemap', 16);
@@ -638,7 +660,16 @@ async function runAnalysis(project, opt) {
     step('Scoring & finding opportunities', 78);
     const site = siteChecks(pages, robots, sitemap, project.site_url);
     const scores = overallScores(pages, site);
-    const opps = opportunities(gsc, ga, pages);
+    const opps = opportunities({ ...gsc, prevQueries: prevQ, prevPages: prevP }, ga, pages);
+    const movers = computeMovers(gsc.queries, prevQ, gsc.pages, prevP, pages, isBranded);
+    const navTerms = [
+      ...(opt.allGroups || []).map((g) => ({ term: g.name, src: 'LOB', i: 0 })),
+      ...gsc.queries.filter((q) => !isBranded(q.q)).sort((a, b) => b.i - a.i).slice(0, 15).map((q) => ({ term: q.q, src: 'Top non-branded query', i: q.i })),
+    ];
+    const nav = navGaps(pages, project.site_url, navTerms);
+    const links = internalLinkPlan(pages, isBranded);
+    const renderModes = pages.reduce((a, p) => { if (p.meta?.renderMode) a[p.meta.renderMode] = (a[p.meta.renderMode] || 0) + 1; return a; }, {});
+    pages.forEach((p) => delete p._text); // page text is only needed for link matching, not stored
     const organic = inScope && ga
       ? { cur: { sessions: ga.landing.reduce((s, l) => s + l.sessions, 0), keyEvents: ga.landing.reduce((s, l) => s + l.keyEvents, 0), engagementRate: null }, prev: null }
       : ga?.channels.find((c) => c.name === 'Organic Search');
@@ -655,6 +686,9 @@ async function runAnalysis(project, opt) {
       moneyPages: opt.money.length,
       scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : 'LOB: ' + opt.scope.slice(4)) : null,
       brand: project.brand_terms ? { ...brand, terms: project.brand_terms } : null,
+      prevBrand: project.brand_terms ? prevBrand : null,
+      movers, navGaps: nav, links, renderModes,
+      scopeGroups: inScope ? opt.scopeGroups.map((g) => ({ name: g.name, patterns: g.patterns })) : null,
       full: full ? { queries: full.queries.length, pages: full.pages.length, pagequeries: full.pagequeries.length } : null,
     };
 
@@ -688,6 +722,24 @@ function aiInput({ project, gsc, ga, pages, summary }) {
     scores: summary.scores,
     siteChecks: summary.site.checks.filter((c) => c.val < 1).map((c) => `${c.label}: ${c.detail}`),
     scope: summary.scope || 'whole site',
+    comparison: (() => {
+      const m = summary.movers || computeMovers(gsc.queries, gsc.prevQueries, gsc.pages, gsc.prevPages, pages, brandTester(project.brand_terms));
+      const q = (r) => ({ query: r.k, branded: r.b, clicks: r.c, prevClicks: r.pc, pos: r.p, prevPos: r.pp });
+      const pg = (r) => ({ url: r.k, clicks: r.c, prevClicks: r.pc, pos: r.p, prevPos: r.pp, onpage: r.onpage, content: r.content });
+      return {
+        queryStats: m.queryStats, nonBrandedQueryStats: m.nonBrandedStats, pageStats: m.pageStats,
+        winnersAvgOnpage: m.winnersAvgOnpage, losersAvgOnpage: m.losersAvgOnpage, losersWithPositionDrop: m.losersWithPosDrop,
+        topGainingQueries: m.queriesUp.slice(0, 20).map(q), topLosingQueries: m.queriesDown.slice(0, 20).map(q),
+        topGainingPages: m.pagesUp.slice(0, 15).map(pg), topLosingPages: m.pagesDown.slice(0, 15).map(pg),
+        prevBrandSplit: summary.prevBrand ? { brandedClicks: summary.prevBrand.branded.c, nonBrandedClicks: summary.prevBrand.nonBranded.c } : undefined,
+      };
+    })(),
+    renderModes: summary.renderModes,
+    csrPages: pages.filter((p) => p.meta?.renderMode === 'CSR').slice(0, 10).map((p) => ({ url: p.url, framework: p.meta.framework, wordsInHtml: p.meta.wordCount, scripts: p.meta.scripts })),
+    internalLinkOpportunities: (summary.links?.suggestions || []).slice(0, 25),
+    pagesWithFewInternalLinks: (summary.links?.weakInbound || []).slice(0, 15),
+    jsRenderingRisk: pages.filter((p) => p.checks.find((c) => c.id === 'js')?.val === 0).slice(0, 10).map((p) => ({ url: p.url, wordsInHtml: p.meta?.wordCount, scripts: p.meta?.scripts })),
+    navigationFooter: summary.navGaps ? { page: summary.navGaps.page, navLinkTexts: (pages.find((p) => p.url === summary.navGaps.page)?.meta?.navLinks || []).slice(0, 40), missingFromNavAndFooter: summary.navGaps.missing.map((r) => r.term) } : undefined,
     brandSplit: summary.brand ? { brandTerms: summary.brand.terms, brandedClicks: summary.brand.branded.c, brandedImpressions: summary.brand.branded.i, nonBrandedClicks: summary.brand.nonBranded.c, nonBrandedImpressions: summary.brand.nonBranded.i } : 'brand terms not set',
     topNonBrandedQueries: gsc.queries.filter((q) => !brandTester(project.brand_terms)(q.q)).slice(0, 60).map((q) => [q.q, q.c, q.i, q.p]),
     topBrandedQueries: project.brand_terms ? gsc.queries.filter((q) => brandTester(project.brand_terms)(q.q)).slice(0, 10).map((q) => [q.q, q.c, q.i, q.p]) : [],
@@ -706,6 +758,7 @@ function aiInput({ project, gsc, ga, pages, summary }) {
       failed: p.checks.filter((c) => c.val < 1).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).slice(0, 10),
       topQueries: (p.queries || []).slice(0, 8).map((q) => ({ q: q.query, branded: brandTester(project.brand_terms)(q.query), i: q.impressions, clicks: q.clicks, pos: q.position, score: q.score, missingIn: missingSpots(q) })),
       h2s: (p.meta?.subheads || []).slice(0, 10),
+      externalLinks: p.meta?.externalLinks, internalLinks: p.meta?.internalLinks,
       ctas: p.meta?.ctas, forms: p.meta?.forms, phoneLinks: p.meta?.telLinks,
       ga: p.ga ? { sessions: p.ga.sessions, users: p.ga.users, engagementRate: p.ga.engagementRate, bounceRate: p.ga.bounceRate, avgDurationSec: p.ga.avgDuration, keyEvents: p.ga.keyEvents, keyEventsPerSession: p.ga.sessions ? +(p.ga.keyEvents / p.ga.sessions).toFixed(3) : 0 } : undefined,
     })),
@@ -1168,9 +1221,9 @@ function renderRun(project, { run, pages }, runs, head) {
   const s = run.summary, k = s.kpis, gsc = run.gsc, ga = run.ga;
   pages.sort((a, b) => (b.gsc?.c || 0) - (a.gsc?.c || 0) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
-  const tabs = ['Insights', 'Opportunities', 'Pages', 'Queries', 'Technical', 'Traffic', 'History'];
+  const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
-    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
+    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
       <div class="score">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
       <div class="score">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
@@ -1190,11 +1243,13 @@ function renderRun(project, { run, pages }, runs, head) {
     <div id="tab"></div>`;
   const views = {
     Insights: () => viewInsights(project, run, pages),
-    Opportunities: () => viewOpps(s.opps, pages, project, run),
+    'GSC + GA': () => viewGscGa(run, pages),
+    GSC: () => viewGsc(run, pages),
+    GA: () => viewGa(run),
+    'Quick wins': () => viewQuick(s.opps, pages),
+    'Major optimisations': () => viewMajor(run, pages),
     Pages: () => viewPages(pages, project, run),
-    Queries: () => viewQueries(gsc, run),
     Technical: () => viewTechnical(s.site, pages),
-    Traffic: () => viewTraffic(gsc, ga, run),
     History: () => viewHistory(runs, project),
   };
   const show = (t) => {
@@ -1234,53 +1289,227 @@ const pageLink = (u, pages) => (pages.some((p) => p.url === u) ? `<a href="#" da
 function viewInsights(project, run, pages) {
   const ai = run.ai;
   const btn = (label, cls) => (canRun(project) ? `<button class="btn ${cls}" id="ai-retry">${label}</button>` : '');
-  if (!ai) return `<div class="card center"><h2>No AI recommendations yet</h2><p class="muted">Needs a Gemini key (free) in Settings.</p>${btn('Generate AI analysis', 'primary')}</div>`;
-  const list = (arr, fn) => (arr || []).map(fn).join('') || '<p class="muted">None</p>';
-  return `<div class="card"><div class="row spread"><h2 style="margin:0">Executive summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
-      <p>${esc(ai.summary)}</p>${(ai.risks || []).length ? `<h3>Risks</h3><ul>${ai.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
-      <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
-    <div class="card section"><h2>Priority actions</h2>${list(ai.priorities, (p) => `<div class="reco"><div class="row spread"><h3>${esc(p.title)}</h3><span class="row" style="gap:6px">${p.type ? `<span class="pill info">${esc(p.type.toUpperCase())}</span>` : ''}${impactPill(p.impact)}<span class="pill">${esc(p.effort || '')} effort</span></span></div>
-      <p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${p.expected_result ? `<p><b>Target:</b> ${esc(p.expected_result)}</p>` : ''}${(p.urls || []).filter(Boolean).length ? `<p class="small">${p.urls.filter(Boolean).map((u) => pageLink(u, pages)).join(' · ')}</p>` : ''}</div>`)}</div>
-    <div class="grid g2 section">
-      <div class="card"><h2>Quick wins</h2>${list(ai.quick_wins, (q) => `<div class="check"><div><b>${esc(q.query)}</b> <span class="pill">pos ${esc(q.position)}</span><div class="small">${esc(q.action)}</div>${q.url ? `<div class="small">${pageLink(q.url, pages)}</div>` : ''}</div></div>`)}</div>
-      <div class="card ${(ai.content_ideas || []).length ? '' : 'hidden'}"><h2>Content ideas</h2>${list(ai.content_ideas, (c) => `<div class="check"><div><b>${esc(c.topic)}</b> <span class="pill info">${esc(c.type)}</span><div class="small muted">Target: ${esc(c.target_query)}</div><div class="small">${esc(c.rationale)}</div></div></div>`)}</div>
+  if (!ai) return `<div class="card center"><h2>No AI analysis yet</h2><p class="muted">Uses the free Gemini key in Settings, with Cloudflare AI as backup.</p>${btn('Generate AI analysis', 'primary')}</div>`;
+  const has = (a) => Array.isArray(a) && a.length;
+  const urls = (list) => (has(list) ? `<div class="small">${list.filter(Boolean).map((u) => (/^https?:|^\//.test(u) ? pageLink(u.startsWith('/') ? new URL(u, project.site_url).href : u, pages) : esc(u))).join(' · ')}</div>` : '');
+  const chips = (list) => (has(list) ? `<div class="small muted">${list.map(esc).join(' · ')}</div>` : '');
+  const block = (title, icon, color, items, render) => (has(items) ? `<div class="card section rv" style="border-top:4px solid ${color}"><h2>${icon} ${title}</h2>${items.map(render).join('')}</div>` : '');
+  const pt = (x) => `<div class="rv-item"><p><b>${esc(x.point || x.title || '')}</b></p>${x.evidence ? `<p class="small">📊 ${esc(x.evidence)}</p>` : ''}${x.likely_cause ? `<p class="small">🔍 <b>Likely cause:</b> ${esc(x.likely_cause)}</p>` : ''}${chips(x.queries)}${urls(x.pages)}</div>`;
+  const ap = ai.action_plan || {};
+  const owner = (o) => `<span class="pill ${o === 'dev' ? 'bad' : o === 'content' ? 'warn' : 'info'}">${esc(o || 'seo')}</span>`;
+  const structured = has(ai.what_went_well) || has(ai.what_didnt_work) || ai.action_plan;
+  return `<div class="card"><div class="row spread"><h2 style="margin:0">Summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
+      <p>${esc(ai.summary)}</p>
+      <div class="row spread small muted"><span>${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
+    ${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
+    <div class="grid g2">
+      ${block('What went well', '✅', 'var(--good)', ai.what_went_well, pt)}
+      ${block('How we achieved it', '🏗️', 'var(--primary)', ai.how_we_achieved_it, pt)}
+      ${block("What didn't work", '⚠️', 'var(--bad)', ai.what_didnt_work, pt)}
+      ${block('How we can improve', '📈', 'var(--warn)', ai.how_to_improve, pt)}
     </div>
-    ${(ai.seo || []).length ? `<div class="card section"><h2>🔎 SEO — page by page</h2>${list(ai.seo, (p) => `<div class="reco"><h3>${pageLink(p.url, pages)}</h3><p><b>${esc(p.issue)}</b></p>${p.evidence ? `<p class="small muted">${esc(p.evidence)}</p>` : ''}
-      ${p.title_suggestion ? `<p class="small"><b>New title:</b> ${esc(p.title_suggestion)}</p>` : ''}${p.meta_suggestion ? `<p class="small"><b>New meta:</b> ${esc(p.meta_suggestion)}</p>` : ''}${p.h1_suggestion ? `<p class="small"><b>New H1:</b> ${esc(p.h1_suggestion)}</p>` : ''}
-      ${(p.sections_to_add || []).length ? `<p class="small"><b>Add sections:</b></p><ul class="small">${p.sections_to_add.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-      ${(p.internal_links || []).length && Array.isArray(p.internal_links) ? `<p class="small"><b>Internal links:</b></p><ul class="small">${p.internal_links.map((l) => `<li>${esc(l.from)} → <b>“${esc(l.anchor)}”</b> → ${esc(l.to)}</li>`).join('')}</ul>` : ''}</div>`)}</div>` : ''}
-    ${(ai.cro || []).length ? `<div class="card section"><h2>💸 CRO — conversion experiments</h2>${list(ai.cro, (c) => `<div class="reco" style="border-left-color:var(--good)"><div class="row spread"><h3>${pageLink(c.url, pages)}</h3>${impactPill(c.impact)}</div>
-      <p class="small muted">${esc(c.evidence)}</p><p><b>Hypothesis:</b> ${esc(c.hypothesis)}</p><p><b>Change:</b> ${esc(c.change)}</p><p class="small"><b>Measure:</b> ${esc(c.metric)}</p></div>`)}</div>` : ''}
-    ${(ai.content_clusters || []).length ? `<div class="card section"><h2>🧭 Content clusters</h2>${list(ai.content_clusters, (c) => `<div class="reco" style="border-left-color:var(--warn)"><h3>${esc(c.cluster)}</h3>
-      <p class="small"><b>Pillar:</b> ${esc(c.pillar)}</p><p class="small"><b>Target queries:</b> ${(c.target_queries || []).map(esc).join(' · ')}</p>
-      <div class="table-wrap"><table><thead><tr><th>Page</th><th>Status</th><th>Targets</th><th>Brief</th></tr></thead><tbody>${(c.supporting_pages || []).map((sp) => `<tr><td>${esc(sp.url)}</td><td><span class="pill ${sp.status === 'new' ? 'warn' : sp.status === 'update' ? 'info' : ''}">${esc(sp.status)}</span></td><td class="small">${(sp.target_queries || []).map(esc).join(', ')}</td><td class="small">${esc(sp.brief)}</td></tr>`).join('')}</tbody></table></div></div>`)}</div>` : ''}
-    <div class="card section ${(ai.page_recommendations || []).length ? '' : 'hidden'}"><h2>Page-level recommendations</h2>${list(ai.page_recommendations, (p) => `<div class="reco"><h3>${pageLink(p.url, pages)}</h3><p>${esc(p.problem)}</p>
-      ${p.title_suggestion ? `<p class="small"><b>Title:</b> ${esc(p.title_suggestion)}</p>` : ''}${p.meta_suggestion ? `<p class="small"><b>Meta:</b> ${esc(p.meta_suggestion)}</p>` : ''}
-      ${p.h1_suggestion ? `<p class="small"><b>H1:</b> ${esc(p.h1_suggestion)}</p>` : ''}${(p.content_gaps || []).length ? `<p class="small"><b>Cover:</b> ${p.content_gaps.map(esc).join(' · ')}</p>` : ''}
-      ${p.internal_links ? `<p class="small"><b>Internal links:</b> ${esc(p.internal_links)}</p>` : ''}</div>`)}</div>
-    ${(ai.technical || []).length ? `<div class="card section"><h2>Technical fixes</h2>${list(ai.technical, (t) => `<div class="check"><div><b>${esc(t.issue)}</b><div class="small">${esc(t.fix)}</div></div></div>`)}</div>` : ''}`;
+    ${Array.isArray(ai.action_plan) && ai.action_plan.length ? `<div class="card section"><h2>📋 Action plan</h2>${ai.action_plan.map((area, i) => `<h3 class="ap-h">${i + 1}. ${esc(area.area)}</h3>
+      ${(area.items || []).map((t) => `<div class="check"><span class="pill ${t.priority === 'high' ? 'bad' : t.priority === 'medium' ? 'warn' : ''}" style="flex:none">${esc(t.priority || '')}</span><div style="flex:1"><b>${esc(t.task)}</b> ${owner(t.owner)}${t.evidence ? `<div class="small muted">📊 ${esc(t.evidence)}</div>` : ''}${urls(t.urls)}</div></div>`).join('')}`).join('')}</div>` : ''}
+    ${ai.action_plan && !Array.isArray(ai.action_plan) ? `<div class="card section"><h2>📋 Action plan</h2>
+      ${has(ap.onpage_schema) ? `<h3 class="ap-h">1. On-page changes + schema</h3><div class="table-wrap"><table><thead><tr><th>Page</th><th>Changes</th><th>Schema</th></tr></thead><tbody>${ap.onpage_schema.map((x) => `<tr><td>${urls([x.url])}</td><td><ul class="small" style="margin:0;padding-left:18px">${(x.changes || []).map((c) => `<li>${esc(c)}</li>`).join('')}</ul></td><td class="small">${esc(x.schema || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${has(ap.topical_authority) ? `<h3 class="ap-h">2. Topical authority — blogs to publish</h3>${ap.topical_authority.map((t) => `<div class="reco"><h3>${esc(t.topic)}</h3><p class="small">${esc(t.why || '')}${t.pillar_url ? ` · Pillar: <b>${esc(t.pillar_url)}</b>` : ''}</p>
+        <ol class="small">${(t.blogs || []).map((b) => `<li><b>${esc(b.title)}</b> <span class="muted">/${esc(String(b.slug || '').replace(/^\//, ''))}</span> — targets “${esc(b.target_query)}”</li>`).join('')}</ol></div>`).join('')}` : ''}
+      ${has(ap.technical) ? `<h3 class="ap-h">3. Technical (needs tech help)</h3>${ap.technical.map((t) => `<div class="check"><div style="flex:1"><b>${esc(t.issue)}</b> ${owner(t.owner)}<div class="small muted">${esc(t.evidence || '')}</div><div class="small">➡️ ${esc(t.fix)}</div></div></div>`).join('')}` : ''}
+      ${has(ap.navigation_internal_links) ? `<h3 class="ap-h">4. Navigation, footer & internal links</h3>${ap.navigation_internal_links.map((t) => `<div class="check"><div><b>${esc(t.issue)}</b><div class="small">➡️ ${esc(t.fix)}</div></div></div>`).join('')}` : ''}
+      ${has(ap.external_links) ? `<h3 class="ap-h">5. External links</h3>${ap.external_links.map((t) => `<div class="check"><div><b>${esc(t.issue)}</b><div class="small">➡️ ${esc(t.fix)}</div></div></div>`).join('')}` : ''}
+    </div>` : ''}
+    ${has(ai.cro) ? `<div class="card section"><h2>💸 CRO experiments</h2>${ai.cro.map((c) => `<div class="reco" style="border-left-color:var(--good)"><h3>${urls([c.url])}</h3><p class="small muted">${esc(c.evidence || '')}</p><p><b>Hypothesis:</b> ${esc(c.hypothesis)}</p><p><b>Change:</b> ${esc(c.change)}</p><p class="small"><b>Measure:</b> ${esc(c.metric || '')}</p></div>`).join('')}</div>` : ''}
+    ${has(ai.quick_wins) ? `<div class="card section"><h2>⚡ Quick wins</h2>${ai.quick_wins.map((q) => `<div class="check"><div><b>${esc(q.query)}</b> <span class="pill">pos ${esc(q.position)}</span>${q.impressions ? ` <span class="pill">${fmt(q.impressions)} impr</span>` : ''}<div class="small">${esc(q.action)}</div>${q.url ? urls([q.url]) : ''}</div></div>`).join('')}</div>` : ''}
+    ${has(ai.priorities) ? `<div class="card section"><h2>Priority actions</h2>${ai.priorities.map((p) => `<div class="reco"><h3>${esc(p.title)}</h3><p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${urls(p.urls)}</div>`).join('')}</div>` : ''}
+    ${has(ai.content_clusters) ? `<div class="card section"><h2>🧭 Content clusters</h2>${ai.content_clusters.map((c) => `<div class="reco"><h3>${esc(c.cluster)}</h3><p class="small">Pillar: ${esc(c.pillar)}</p><ul class="small">${(c.supporting_pages || []).map((sp) => `<li>${esc(sp.url)} (${esc(sp.status)}) — ${esc((sp.target_queries || []).join(', '))}</li>`).join('')}</ul></div>`).join('')}</div>` : ''}
+    ${has(ai.page_recommendations) ? `<div class="card section"><h2>Page recommendations</h2>${ai.page_recommendations.map((p) => `<div class="reco"><h3>${urls([p.url])}</h3><p>${esc(p.problem)}</p>${p.title_suggestion ? `<p class="small"><b>Title:</b> ${esc(p.title_suggestion)}</p>` : ''}</div>`).join('')}</div>` : ''}`;
 }
 
-function viewOpps(o, pages) {
+// ---------- comparison helpers (current vs comparison period) ----------
+function aggQueries(pq) {
+  const a = {};
+  for (const r of pq) { const t = (a[r.q] ||= { q: r.q, c: 0, i: 0, pw: 0 }); t.c += r.c; t.i += r.i; t.pw += r.p * r.i; }
+  return Object.values(a).map((t) => ({ q: t.q, c: t.c, i: t.i, ctr: t.i ? t.c / t.i : 0, p: t.i ? +(t.pw / t.i).toFixed(1) : 0 }));
+}
+function computeMovers(curQ, prevQ, curP, prevP, crawled, isBranded) {
+  const pick = (cur, prev, key) => {
+    const pm = Object.fromEntries(prev.map((r) => [r[key], r]));
+    const seen = new Set();
+    const rows = cur.map((r) => { seen.add(r[key]); const o = pm[r[key]]; return { k: r[key], c: r.c, pc: o?.c || 0, i: r.i, pi: o?.i || 0, p: r.p, pp: o?.p ?? null }; });
+    for (const o of prev) if (!seen.has(o[key])) rows.push({ k: o[key], c: 0, pc: o.c, i: 0, pi: o.i, p: null, pp: o.p });
+    rows.forEach((r) => (r.d = r.c - r.pc));
+    return rows;
+  };
+  const q = pick(curQ, prevQ, 'q').map((r) => ({ ...r, b: isBranded(r.k) }));
+  const byUrl = Object.fromEntries(crawled.map((p) => [p.url, p]));
+  const p = pick(curP, prevP, 'u').map((r) => ({ ...r, onpage: byUrl[r.k]?.onpage_score ?? null, content: byUrl[r.k]?.content_score ?? null }));
+  const top = (list, dir) => [...list].sort((a, b) => dir * (b.d - a.d)).filter((r) => dir * r.d > 0).slice(0, 25);
+  const stat = (list) => ({ up: list.filter((r) => r.d > 0).length, down: list.filter((r) => r.d < 0).length, gained: list.filter((r) => r.d > 0).reduce((s, r) => s + r.d, 0), lost: list.filter((r) => r.d < 0).reduce((s, r) => s + r.d, 0) });
+  const avg = (list, k) => { const v = list.map((r) => r[k]).filter((x) => x != null); return v.length ? Math.round(v.reduce((s, x) => s + x, 0) / v.length) : null; };
+  const pu = top(p, 1), pd = top(p, -1);
+  return {
+    queriesUp: top(q, 1), queriesDown: top(q, -1), pagesUp: pu, pagesDown: pd,
+    queryStats: stat(q), pageStats: stat(p), nonBrandedStats: stat(q.filter((r) => !r.b)),
+    winnersAvgOnpage: avg(pu, 'onpage'), losersAvgOnpage: avg(pd, 'onpage'),
+    losersWithPosDrop: pd.filter((r) => r.pp != null && r.p != null && r.p - r.pp >= 1).length,
+  };
+}
+function navGaps(pages, siteUrl, terms) {
+  const home = pages.find((p) => p.url === siteUrl && p.meta) || pages.find((p) => p.meta?.navLinks?.length);
+  if (!home?.meta) return null;
+  const norm = (t) => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const navText = norm((home.meta.navLinks || []).join(' | '));
+  const footText = norm((home.meta.footerLinks || []).join(' | '));
+  const stop = new Set('a an and the for of in on to with best vs near me online'.split(' '));
+  const has = (text, term) => norm(term).split(' ').filter((w) => w && !stop.has(w)).every((w) => text.includes(w.replace(/s$/, '')));
+  const rows = terms.map((t) => ({ ...t, inNav: has(navText, t.term), inFooter: has(footText, t.term) }));
+  return { page: home.url, navCount: home.meta.navLinks?.length || 0, footerCount: home.meta.footerLinks?.length || 0, missing: rows.filter((r) => !r.inNav && !r.inFooter), rows };
+}
+const scopeOf = (s) => (s?.scopeGroups?.length ? lobMatcher(s.scopeGroups) : null);
+function moversFor(run, pages) {
+  const s = run.summary;
+  if (s.movers) return s.movers;
+  const g = run.gsc;
+  return computeMovers(g.queries, g.prevQueries, g.pages, g.prevPages, pages, brandTester(s.brand?.terms));
+}
+const dcell = (v, pv, f = fmt, opt) => `${v == null ? '–' : f(v)}<div class="small">${delta(v, pv, opt)}</div>`;
+
+function viewGscGa(run, pages) {
+  const s = run.summary, g = run.gsc, ga = run.ga, match = scopeOf(s);
+  const origin = new URL(run.gsc.pages[0]?.u || 'https://x.invalid').origin;
+  const rows = {};
+  const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+  const get = (u) => (rows[pathOf(u)] ||= { path: pathOf(u), url: u, c: 0, pc: 0, i: 0, pi: 0, pw: 0, ppw: 0, s: 0, ps: 0, ke: 0, pke: 0, bs: 0, pbs: 0, nu: 0 });
+  for (const [list, pre] of [[g.pages, ''], [g.prevPages, 'p']]) for (const r of list) { if (match && !match(r.u)) continue; const x = get(r.u); x[pre + 'c'] += r.c; x[pre + 'i'] += r.i; x[pre + 'pw'] += r.p * r.i; }
+  for (const [list, pre] of [[ga?.landing || [], ''], [ga?.prevLanding || [], 'p']]) for (const l of list) {
+    const u = origin + l.path.split('?')[0]; if (match && !match(u)) continue;
+    const x = get(u); x[pre + 's'] += l.sessions; x[pre + 'ke'] += l.keyEvents; x[pre + 'bs'] += (l.bounceRate || 0) * l.sessions; if (!pre) x.nu += l.newUsers || 0;
+  }
+  const crawled = Object.fromEntries(pages.map((p) => [pathOf(p.url), p]));
+  const list = Object.values(rows).map((x) => ({ ...x, p: x.i ? x.pw / x.i : null, pp: x.pi ? x.ppw / x.pi : null, br: x.s ? x.bs / x.s : null, pbr: x.ps ? x.pbs / x.ps : null, onpage: crawled[x.path]?.onpage_score ?? null, money: crawled[x.path]?.money }))
+    .sort((a, b) => b.c - a.c || b.s - a.s);
+  const hasPrevGa = !!ga?.prevLanding;
+  return `<div class="card"><h2>Search Console + GA4 by page</h2><p class="muted small">${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.scope ? ' · ' + esc(s.scope) : ''}. Pages are matched to GA4 organic landing pages by path.${ga && !hasPrevGa ? ' Run a new analysis to get GA4 comparison numbers.' : ''}</p>
+    ${table([
+      { key: 'path', label: 'Page', render: (x) => `${x.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(x.path)}</span>`, text: (x) => x.path + (x.money ? ' money' : '') },
+      { key: 'c', label: 'Clicks', num: 1, render: (x) => dcell(x.c, x.pc) },
+      { key: 'i', label: 'Impr.', num: 1, render: (x) => dcell(x.i, x.pi) },
+      { key: 'p', label: 'Pos', num: 1, render: (x) => dcell(x.p, x.pp, (v) => fmt(v, 1), { invert: true }), sort: (x) => x.p ?? 999 },
+      ...(ga ? [
+        { key: 's', label: 'Sessions', num: 1, render: (x) => dcell(x.s, hasPrevGa ? x.ps : null) },
+        { key: 'nu', label: 'New users', num: 1, render: (x) => fmt(x.nu) },
+        { key: 'br', label: 'Bounce', num: 1, render: (x) => (x.br == null ? '–' : dcell(x.br, x.pbr, (v) => pct(v), { invert: true, isPct: true })), sort: (x) => x.br ?? -1 },
+        { key: 'ke', label: 'Key events', num: 1, render: (x) => dcell(x.ke, hasPrevGa ? x.pke : null) },
+      ] : []),
+      { key: 'onpage', label: 'On-page', num: 1, render: (x) => (x.onpage == null ? '<span class="muted">–</span>' : `<span class="pill ${pillFor(x.onpage)}">${x.onpage}</span>`), sort: (x) => x.onpage ?? -1 },
+    ], list, { limit: 1000 })}</div>`;
+}
+
+function moversTables(m, pages) {
+  const qt = (rows) => table([
+    { key: 'k', label: 'Query', render: (r) => `${esc(r.k)} ${r.b ? '<span class="pill info">Branded</span>' : ''}` },
+    { key: 'd', label: 'Δ Clicks', num: 1, render: (r) => `<b class="${r.d >= 0 ? 'up' : 'down'}">${r.d >= 0 ? '+' : ''}${fmt(r.d)}</b>` },
+    { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.pc)}</span>` },
+    { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p == null ? '–' : fmt(r.p, 1)} <span class="muted small">from ${r.pp == null ? '–' : fmt(r.pp, 1)}</span>` },
+  ], rows, { filter: false });
+  const pt = (rows) => table([
+    { key: 'k', label: 'Page', render: (r) => pageLink(r.k, pages) },
+    { key: 'd', label: 'Δ Clicks', num: 1, render: (r) => `<b class="${r.d >= 0 ? 'up' : 'down'}">${r.d >= 0 ? '+' : ''}${fmt(r.d)}</b>` },
+    { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.pc)}</span>` },
+    { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p == null ? '–' : fmt(r.p, 1)} <span class="muted small">from ${r.pp == null ? '–' : fmt(r.pp, 1)}</span>` },
+    { key: 'onpage', label: 'On-page', num: 1, render: (r) => (r.onpage == null ? '–' : `<span class="pill ${pillFor(r.onpage)}">${r.onpage}</span>`) },
+  ], rows, { filter: false });
+  const qs = m.queryStats, ps = m.pageStats;
+  return `<div class="grid kpis section">
+      <div class="card kpi"><div class="label">Queries growing</div><div class="value up">${fmt(qs.up)}</div><span class="small muted">+${fmt(qs.gained)} clicks</span></div>
+      <div class="card kpi"><div class="label">Queries declining</div><div class="value down">${fmt(qs.down)}</div><span class="small muted">${fmt(qs.lost)} clicks</span></div>
+      <div class="card kpi"><div class="label">Pages growing</div><div class="value up">${fmt(ps.up)}</div><span class="small muted">+${fmt(ps.gained)} clicks${m.winnersAvgOnpage != null ? ` · avg on-page ${m.winnersAvgOnpage}` : ''}</span></div>
+      <div class="card kpi"><div class="label">Pages declining</div><div class="value down">${fmt(ps.down)}</div><span class="small muted">${fmt(ps.lost)} clicks${m.losersAvgOnpage != null ? ` · avg on-page ${m.losersAvgOnpage}` : ''}</span></div>
+    </div>
+    <div class="grid g2 section"><div class="card"><h2>📈 Top gaining queries</h2>${qt(m.queriesUp)}</div><div class="card"><h2>📉 Top losing queries</h2>${qt(m.queriesDown)}</div></div>
+    <div class="grid g2 section"><div class="card"><h2>📈 Top gaining pages</h2>${pt(m.pagesUp)}</div><div class="card"><h2>📉 Top losing pages</h2>${pt(m.pagesDown)}</div></div>`;
+}
+
+function viewGsc(run, pages) {
+  const s = run.summary, g = run.gsc;
+  const inR = (d, a, b) => d >= a && d <= b;
+  const cur = g.daily.filter((d) => inR(d.d, run.start_date, run.end_date)), prev = g.daily.filter((d) => inR(d.d, run.prev_start, run.prev_end));
+  const pb = s.prevBrand;
+  return `<div class="card"><h2>Clicks: current vs comparison</h2>${lineChart([
+      { name: `Clicks ${run.start_date} → ${run.end_date}`, values: cur.map((d) => d.c), color: 'var(--primary)', axis: true },
+      { name: `Clicks ${run.prev_start} → ${run.prev_end}`, values: prev.map((d) => d.c), color: 'var(--muted)', dash: true },
+    ], { labels: cur.map((d) => d.d.slice(5)) })}</div>
+    ${s.brand ? `<div class="card section"><h2>Branded vs non-branded</h2><div class="table-wrap"><table><thead><tr><th></th><th class="num">Clicks</th><th class="num">Impressions</th><th class="num">Queries</th></tr></thead><tbody>
+      ${[['Non-branded', 'nonBranded'], ['Branded', 'branded']].map(([l, k]) => `<tr><td><b>${l}</b></td><td class="num">${dcell(s.brand[k].c, pb?.[k]?.c)}</td><td class="num">${dcell(s.brand[k].i, pb?.[k]?.i)}</td><td class="num">${fmt(s.brand[k].n)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="hint">Brand terms: ${esc(s.brand.terms)}${s.scope ? ' · LOB scope' : ''}</p></div>` : ''}
+    ${moversTables(moversFor(run, pages), pages)}
+    <div class="grid g2 section"><div class="card"><h2>Devices</h2>${table([{ key: 'k', label: 'Device' }, { key: 'c', label: 'Clicks', num: 1, render: (r) => fmt(r.c) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) }, { key: 'p', label: 'Pos', num: 1 }], g.devices, { filter: false })}</div>
+      <div class="card"><h2>Top countries</h2>${table([{ key: 'k', label: 'Country', render: (r) => esc(r.k.toUpperCase()) }, { key: 'c', label: 'Clicks', num: 1, render: (r) => fmt(r.c) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'p', label: 'Pos', num: 1 }], g.countries, { filter: false })}</div></div>
+    <h2 class="section">All queries${s.scope ? ' <span class="muted small">(whole site)</span>' : ''}</h2>${viewQueries(g, run)}`;
+}
+
+function viewGa(run) {
+  const ga = run.ga, s = run.summary, match = scopeOf(s);
+  if (!ga) return '<div class="card center muted">No GA4 property connected to this project.</div>';
+  const inR = (d, a, b) => d >= a && d <= b;
+  const gcur = ga.daily.filter((d) => inR(d.d, run.start_date, run.end_date)), gprev = ga.daily.filter((d) => inR(d.d, run.prev_start, run.prev_end));
+  const origin = new URL(run.gsc.pages[0]?.u || 'https://x.invalid').origin;
+  const prev = Object.fromEntries((ga.prevLanding || []).map((l) => [l.path, l]));
+  const rows = ga.landing.filter((l) => !match || match(origin + l.path.split('?')[0])).map((l) => ({ ...l, p: prev[l.path] || null }));
+  const hp = !!ga.prevLanding;
+  return `<div class="card"><h2>Organic sessions: current vs comparison</h2>${lineChart([{ name: 'Sessions', values: gcur.map((d) => d.s), color: 'var(--good)', axis: true }, { name: 'Comparison period', values: gprev.map((d) => d.s), color: 'var(--muted)', dash: true }], { labels: gcur.map((d) => d.d.slice(5)) })}</div>
+    <div class="card section"><h2>Channels</h2>${table([{ key: 'name', label: 'Channel' }, { key: 's', label: 'Sessions', num: 1, render: (r) => dcell(r.cur?.sessions, r.prev?.sessions), sort: (r) => r.cur?.sessions || 0 }, { key: 'u', label: 'Users', num: 1, render: (r) => dcell(r.cur?.users, r.prev?.users), sort: (r) => r.cur?.users || 0 }, { key: 'e', label: 'Engagement', num: 1, render: (r) => dcell(r.cur?.engagementRate, r.prev?.engagementRate, (v) => pct(v), { isPct: true }), sort: (r) => r.cur?.engagementRate || 0 }, { key: 'k', label: 'Key events', num: 1, render: (r) => dcell(r.cur?.keyEvents, r.prev?.keyEvents), sort: (r) => r.cur?.keyEvents || 0 }], ga.channels, { filter: false })}</div>
+    <div class="card section"><h2>Organic landing pages${s.scope ? ' · ' + esc(s.scope) : ''}</h2>${table([
+      { key: 'path', label: 'Landing page', render: (r) => `<span class="url" style="display:inline-block">${esc(r.path)}</span>` },
+      { key: 'sessions', label: 'Sessions', num: 1, render: (r) => dcell(r.sessions, hp ? r.p?.sessions ?? 0 : null) },
+      { key: 'newUsers', label: 'New users', num: 1, render: (r) => dcell(r.newUsers, r.p?.newUsers) },
+      { key: 'ret', label: 'Returning', num: 1, render: (r) => fmt(Math.max(0, (r.users || 0) - (r.newUsers || 0))), sort: (r) => (r.users || 0) - (r.newUsers || 0) },
+      { key: 'bounceRate', label: 'Bounce', num: 1, render: (r) => dcell(r.bounceRate, r.p?.bounceRate, (v) => pct(v), { invert: true, isPct: true }) },
+      { key: 'engagementRate', label: 'Engaged', num: 1, render: (r) => pct(r.engagementRate) },
+      { key: 'views', label: 'Views', num: 1, render: (r) => fmt(r.views) },
+      { key: 'keyEvents', label: 'Key events', num: 1, render: (r) => dcell(r.keyEvents, hp ? r.p?.keyEvents ?? 0 : null) },
+    ], rows, { limit: 1000 })}${hp ? '' : '<p class="hint">Run a new analysis to get comparison numbers here.</p>'}</div>`;
+}
+
+function viewQuick(o, pages) {
   const sec = (title, desc, html) => `<div class="card section"><h2>${title}</h2><p class="muted small">${desc}</p>${html}</div>`;
   const pg = (u) => (u ? pageLink(u, pages) : '–');
-  return sec('🚀 Striking distance (positions 4–15)', 'High-impression queries just off the top spots — improving these pages usually gives the fastest traffic gains.',
+  return sec('🚀 Striking distance (positions 4–15)', 'High-impression queries just off the top spots — the fastest traffic gains.',
     table([{ key: 'q', label: 'Query' }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'c', label: 'Clicks', num: 1, render: (r) => fmt(r.c) }, { key: 'p', label: 'Pos', num: 1 }, { key: 'page', label: 'Ranking page', render: (r) => pg(r.page) }], o.quickWins))
-  + sec('📉 Low CTR for position', 'Ranking well but under-clicked vs typical CTR — rewrite titles/meta to be more compelling.',
+  + sec('✍️ Low CTR for position', 'Ranking well but under-clicked — rewrite title & meta.',
     table([{ key: 'q', label: 'Query' }, { key: 'p', label: 'Pos', num: 1 }, { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) }, { key: 'expected', label: 'Expected', num: 1, render: (r) => pct(r.expected, 0) }, { key: 'lostClicks', label: 'Lost clicks', num: 1 }, { key: 'page', label: 'Page', render: (r) => pg(r.page) }], o.lowCtr))
-  + sec('🧩 Content gaps on key pages', 'Important queries for a page that are missing from its title, H1, headings or copy.',
-    table([{ key: 'q', label: 'Query' }, { key: 'u', label: 'Page', render: (r) => pg(r.u) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'p', label: 'Pos', num: 1 }, { key: 'score', label: 'Coverage', num: 1, render: (r) => `<span class="pill ${pillFor(r.score)}">${r.score}</span>` }, { key: 'missing', label: 'Missing from', render: (r) => esc(r.missing.join(', ')) }], o.contentGaps))
-  + sec('⚔️ Keyword cannibalisation', 'Multiple pages splitting impressions for the same query — consolidate or differentiate.',
-    table([{ key: 'q', label: 'Query' }, { key: 'total', label: 'Impr.', num: 1, render: (r) => fmt(r.total) }, { key: 'pages', label: 'Competing pages', render: (r) => r.pages.map((p) => `${pg(p.u)} <span class="muted small">${fmt(p.i)} impr · pos ${p.p}</span>`).join('<br>') }], o.cannibalization))
-  + `<div class="grid g2">` + sec('🔻 Declining pages', 'Pages that lost 30%+ clicks vs the previous period.',
-    table([{ key: 'u', label: 'Page', render: (r) => pg(r.u) }, { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.prevC)}</span>` }, { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p} <span class="muted small">from ${r.prevP}</span>` }], o.decliningPages, { filter: false }))
-  + sec('📈 Rising queries', 'Growing demand — build on what is working.',
-    table([{ key: 'q', label: 'Query' }, { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.prevC)}</span>` }, { key: 'p', label: 'Pos', num: 1 }], o.risingQueries, { filter: false })) + `</div>`
-  + (o.lowEngagement.length ? sec('😴 Low engagement organic landing pages (GA4)', 'Search visitors are leaving quickly — check intent match, above-the-fold content and speed.',
-    table([{ key: 'path', label: 'Landing page' }, { key: 'sessions', label: 'Sessions', num: 1 }, { key: 'engagementRate', label: 'Engagement', num: 1, render: (r) => pct(r.engagementRate) }, { key: 'avgDuration', label: 'Avg time (s)', num: 1 }, { key: 'keyEvents', label: 'Key events', num: 1 }], o.lowEngagement)) : '')
-  + sec('🔻 Declining queries', 'Queries that lost 30%+ clicks.',
-    table([{ key: 'q', label: 'Query' }, { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.prevC)}</span>` }, { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p} <span class="muted small">from ${r.prevP}</span>` }], o.decliningQueries));
+  + sec('🧩 Missing keywords on key pages', 'Queries a page ranks for that are missing from its title, H1, headings or copy.',
+    table([{ key: 'q', label: 'Query' }, { key: 'u', label: 'Page', render: (r) => pg(r.u) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'p', label: 'Pos', num: 1 }, { key: 'score', label: 'Coverage', num: 1, render: (r) => `<span class="pill ${pillFor(r.score)}">${r.score}</span>` }, { key: 'missing', label: 'Missing from', render: (r) => esc(r.missing.join(', ')) }], o.contentGaps));
 }
+
+function viewMajor(run, pages) {
+  const s = run.summary, o = s.opps;
+  const sec = (title, desc, html) => `<div class="card section"><h2>${title}</h2><p class="muted small">${desc}</p>${html}</div>`;
+  const pg = (u) => (u ? pageLink(u, pages) : '–');
+  const weak = pages.filter((p) => p.meta && (p.gsc?.i || 0) > 0 && (p.onpage_score < 70 || p.content_score < 50)).sort((a, b) => (b.gsc?.i || 0) - (a.gsc?.i || 0)).slice(0, 25);
+  const js = pages.filter((p) => p.checks.find((c) => c.id === 'js')?.val === 0);
+  const ng = s.navGaps;
+  return sec('🔻 Declining pages', 'Pages that lost 30%+ clicks vs the comparison period. If many fell in position together it points to a ranking/core update; otherwise check the page.',
+      table([{ key: 'u', label: 'Page', render: (r) => pg(r.u) }, { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.prevC)}</span>` }, { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p} <span class="muted small">from ${r.prevP}</span>` }], o.decliningPages, { filter: false }))
+    + sec('🛠️ High-impression pages with weak on-page / content scores', 'Fixing these moves the most traffic.',
+      table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'i', label: 'Impr.', num: 1, render: (p) => fmt(p.gsc?.i), sort: (p) => p.gsc?.i || 0 }, { key: 'onpage_score', label: 'On-page', num: 1, render: (p) => `<span class="pill ${pillFor(p.onpage_score)}">${p.onpage_score}</span>` }, { key: 'content_score', label: 'Content', num: 1, render: (p) => `<span class="pill ${pillFor(p.content_score)}">${p.content_score}</span>` }, { key: 'issues', label: 'Main issues', render: (p) => esc(p.checks.filter((c) => c.val < 1).sort((a, b) => b.weight - a.weight).slice(0, 3).map((c) => c.label).join(' · ')) }], weak, { filter: false }))
+    + sec('⚔️ Keyword cannibalisation', 'Several pages split impressions for one query — consolidate or differentiate.',
+      table([{ key: 'q', label: 'Query' }, { key: 'total', label: 'Impr.', num: 1, render: (r) => fmt(r.total) }, { key: 'pages', label: 'Competing pages', render: (r) => r.pages.map((p) => `${pg(p.u)} <span class="muted small">${fmt(p.i)} impr · pos ${p.p}</span>`).join('<br>') }], o.cannibalization))
+    + (o.lowEngagement.length ? sec('😴 Low-engagement organic landing pages (GA4)', 'Visitors from search leave quickly — CRO candidates.',
+      table([{ key: 'path', label: 'Landing page' }, { key: 'sessions', label: 'Sessions', num: 1 }, { key: 'engagementRate', label: 'Engaged', num: 1, render: (r) => pct(r.engagementRate) }, { key: 'bounceRate', label: 'Bounce', num: 1, render: (r) => pct(r.bounceRate) }, { key: 'keyEvents', label: 'Key events', num: 1 }], o.lowEngagement)) : '')
+    + sec('⚙️ JavaScript rendering risk', 'Pages whose raw HTML has little text — search bots may not read the content. Needs dev help (server-side rendering / pre-rendering).',
+      js.length ? table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta?.wordCount), sort: (p) => p.meta?.wordCount || 0 }, { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta?.scripts), sort: (p) => p.meta?.scripts || 0 }], js, { filter: false }) : '<p class="muted">No JS-rendering risk found on crawled pages 🎉</p>')
+    + sec('🖥️ Rendering: SSR vs CSR', `Checked from the raw HTML search bots receive first. ${Object.entries(s.renderModes || {}).map(([k, v]) => `<b>${esc(k)}</b>: ${v}`).join(' · ') || 'Run a new analysis to see this.'}. CSR pages need server-side rendering or pre-rendering so Google sees the content without running JavaScript.`,
+      table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'm', label: 'Rendering', render: (p) => `<span class="pill ${p.meta?.renderMode === 'CSR' ? 'bad' : p.meta?.renderMode === 'SSR (framework)' ? 'info' : 'good'}">${esc(p.meta?.renderMode || '–')}</span>`, text: (p) => p.meta?.renderMode || '', sort: (p) => p.meta?.renderMode || '' }, { key: 'f', label: 'Framework', render: (p) => esc(p.meta?.framework || '–') }, { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta?.wordCount), sort: (p) => p.meta?.wordCount || 0 }, { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta?.scripts), sort: (p) => p.meta?.scripts || 0 }], pages.filter((p) => p.meta?.renderMode).sort((a, b) => (a.meta.renderMode === 'CSR' ? 0 : 1) - (b.meta.renderMode === 'CSR' ? 0 : 1)), { limit: 300 }))
+    + (s.links ? sec('🔗 Internal link opportunities', 'These pages already mention the target keyword in their copy but don\'t link to the target page. Turn the mention into a link with that anchor text.',
+      table([{ key: 'from', label: 'Add link on', render: (r) => pg(r.from) }, { key: 'anchor', label: 'Anchor text', render: (r) => `<b>“${esc(r.anchor)}”</b>` }, { key: 'to', label: 'Link to', render: (r) => `${r.toMoney ? '💰 ' : ''}${pg(r.to)}` }, { key: 'impressions', label: 'Target impr.', num: 1, render: (r) => fmt(r.impressions) }, { key: 'position', label: 'Target pos', num: 1, render: (r) => fmt(r.position, 1) }], s.links.suggestions, { limit: 100 })
+      + `<h3 style="margin-top:18px">Pages with few internal links pointing to them</h3>` + table([{ key: 'url', label: 'Page', render: (r) => `${r.money ? '💰 ' : ''}${pg(r.url)}` }, { key: 'inbound', label: 'Inbound links (from crawled pages)', num: 1 }, { key: 'impressions', label: 'Impr.', num: 1, render: (r) => fmt(r.impressions) }], s.links.weakInbound, { filter: false })) : '')
+    + (ng ? sec('🧭 Main keywords missing from top navigation & footer', `Checked ${ng.navCount} nav links and ${ng.footerCount} footer links on ${esc(ng.page)} against your LOBs and top non-branded queries.`,
+      table([{ key: 'term', label: 'Keyword / LOB' }, { key: 'src', label: 'Source' }, { key: 'i', label: 'Impr.', num: 1, render: (r) => (r.i ? fmt(r.i) : '–') }, { key: 'inNav', label: 'In nav', render: (r) => mark(r.inNav ? 1 : 0) }, { key: 'inFooter', label: 'In footer', render: (r) => mark(r.inFooter ? 1 : 0) }], ng.rows, { filter: false })) : '')
+    + sec('🔗 External links per page', 'Outbound external links found on crawled pages. Backlink / competitor comparison needs a backlink tool (e.g. Ahrefs, Semrush) — Search Console\'s API does not expose links.',
+      table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'e', label: 'External links', num: 1, render: (p) => fmt(p.meta?.externalLinks), sort: (p) => p.meta?.externalLinks || 0 }, { key: 'n', label: 'Internal links', num: 1, render: (p) => fmt(p.meta?.internalLinks), sort: (p) => p.meta?.internalLinks || 0 }], pages.filter((p) => p.meta), { filter: false, limit: 50 }));
+}
+
 
 function viewPages(pages, project, run) {
   return `<div class="card">${table([
@@ -1383,23 +1612,6 @@ function viewTechnical(site, pages) {
     ${dup('Duplicate titles', site.duplicates.titles)}${dup('Duplicate meta descriptions', site.duplicates.descriptions)}`;
 }
 
-function viewTraffic(gsc, ga, run) {
-  const cur = gsc.daily.filter((d) => d.d >= run.start_date), prev = gsc.daily.filter((d) => d.d <= run.prev_end);
-  const devTable = table([{ key: 'k', label: 'Device' }, { key: 'c', label: 'Clicks', num: 1, render: (r) => fmt(r.c) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) }, { key: 'p', label: 'Pos', num: 1 }], gsc.devices, { filter: false });
-  const ctyTable = table([{ key: 'k', label: 'Country', render: (r) => esc(r.k.toUpperCase()) }, { key: 'c', label: 'Clicks', num: 1, render: (r) => fmt(r.c) }, { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) }, { key: 'p', label: 'Pos', num: 1 }], gsc.countries, { filter: false });
-  let gaHtml = '';
-  if (ga) {
-    const gcur = ga.daily.filter((d) => d.d >= run.start_date), gprev = ga.daily.filter((d) => d.d <= run.prev_end);
-    gaHtml = `<div class="card section"><h2>Organic sessions (GA4)</h2>${lineChart([{ name: 'Sessions', values: gcur.map((d) => d.s), color: 'var(--good)', axis: true }, { name: 'Previous period', values: gprev.map((d) => d.s), color: 'var(--muted)', dash: true }], { labels: gcur.map((d) => d.d.slice(5)) })}</div>
-    <div class="card section"><h2>Channels (GA4)</h2>${table([{ key: 'name', label: 'Channel' }, { key: 's', label: 'Sessions', num: 1, render: (r) => `${fmt(r.cur?.sessions)} ${delta(r.cur?.sessions, r.prev?.sessions)}`, sort: (r) => r.cur?.sessions || 0 }, { key: 'u', label: 'Users', num: 1, render: (r) => fmt(r.cur?.users), sort: (r) => r.cur?.users || 0 }, { key: 'e', label: 'Engagement', num: 1, render: (r) => pct(r.cur?.engagementRate), sort: (r) => r.cur?.engagementRate || 0 }, { key: 'k', label: 'Key events', num: 1, render: (r) => `${fmt(r.cur?.keyEvents)} ${delta(r.cur?.keyEvents, r.prev?.keyEvents)}`, sort: (r) => r.cur?.keyEvents || 0 }], ga.channels, { filter: false })}</div>`;
-  }
-  return `<div class="card"><h2>Search clicks & impressions</h2>${lineChart([
-      { name: 'Clicks', values: cur.map((d) => d.c), color: 'var(--primary)', axis: true },
-      { name: 'Clicks (previous period)', values: prev.map((d) => d.c), color: 'var(--muted)', dash: true },
-      { name: 'Impressions (scaled)', values: cur.map((d) => d.i), color: 'var(--warn)' },
-    ], { labels: cur.map((d) => d.d.slice(5)) })}</div>
-    <div class="grid g2 section"><div class="card"><h2>Devices</h2>${devTable}</div><div class="card"><h2>Top countries</h2>${ctyTable}</div></div>${gaHtml}`;
-}
 
 function viewHistory(runs, project) {
   const done = runs.filter((r) => r.status === 'done').slice().reverse();
