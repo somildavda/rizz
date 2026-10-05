@@ -151,7 +151,7 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
   <form id="gForm" method="post" action="/auth/google">
    <p class="sub">Sign in once and the tool can read every Search Console site and Google Sheet your account can see.</p>
    <div class="status" id="gErr" style="color:var(--bad)"></div>
-   <p class="hide" id="gSaved">✅ Google app saved. Just click the button. <a href="#" id="gEdit">Change Client ID</a></p>
+   <p class="hide" id="gSaved">✅ Google app saved. Just click the button.</p>
    <div class="grid2" id="gCreds"><div><label>OAuth Client ID</label><input name="cid" id="gCid" placeholder="…apps.googleusercontent.com" autocomplete="off"></div>
     <div><label>Client secret</label><input name="secret" id="gSecret" type="password" autocomplete="off"></div></div>
    <div class="row"><button class="big" id="gBtn">Sign in with Google</button></div>
@@ -163,6 +163,7 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
     <li>Copy the <b>Client ID</b> and <b>Client secret</b> into the boxes above and click <b>Sign in with Google</b>. When Google says the app isn't verified, click <b>Advanced → Go to Searchverse Insights</b>. It's your own app.</li>
    </ol></details>
   </form>
+  <form method="post" action="/auth/google/reset" class="row" onsubmit="return confirm('Remove the saved Client ID, secret and Google sign-in?')"><button class="ghost">🔄 Start over (clear Google setup)</button></form>
   <details class="note" style="margin-top:14px"><summary>Advanced: use a service account key file instead</summary>
    <input type="file" id="kGscFile" accept=".json,application/json" style="margin-top:8px"><div id="gscInfo" style="margin-top:6px"></div>
    <p>Create a service account in Google Cloud, download its JSON key, upload it here, then add its email as a user in Search Console.</p></details>
@@ -225,7 +226,6 @@ async function loadSites(){if(!hasGoogle())return null;const d=await post('/api/
  if(d.sites&&d.sites.length){const cur=$('site').value;$('siteSel').innerHTML='<option value="">Choose a website…</option>'+d.sites.map(x=>'<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>').join('')}
  else if(d.sites){$('siteSel').innerHTML='<option value="">No Search Console sites on this Google account</option>'}
  return d}
-$('gEdit').onclick=e=>{e.preventDefault();$('gCreds').classList.remove('hide');$('gSaved').classList.add('hide')};
 $('gForm').onsubmit=e=>{if(!gInfo.configured&&(!$('gCid').value.trim()||!$('gSecret').value.trim())){e.preventDefault();alert('Paste the Client ID and Client secret first. The setup steps are just below.');return}store.set('gcid',$('gCid').value.trim())};
 
 /* settings */

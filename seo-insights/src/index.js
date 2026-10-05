@@ -107,7 +107,7 @@ async function googleRoutes(request, env, url) {
       const why = tok.error_description || tok.error || 'Google sent no refresh token';
       return back(/redirect_uri/i.test(why)
         ? 'Redirect URI mismatch. In Google Cloud → Clients, add exactly ' + redirectUri + ' under Authorized redirect URIs.'
-        : /invalid_client|unauthorized/i.test(why) ? 'The Client ID or Client secret is wrong. Copy both again from Google Cloud → Clients.' : why);
+        : /invalid_client|unauthorized|secret is invalid/i.test(why) ? 'The Client secret doesn\'t match the Client ID. Click "Start over" and paste both again from the same client in Google Cloud → Clients.' : why);
     }
     let email = '';
     try { email = JSON.parse(new TextDecoder().decode(unb64u(tok.id_token.split('.')[1]))).email; } catch {}
@@ -119,9 +119,10 @@ async function googleRoutes(request, env, url) {
     headers.append('set-cookie', setCookie('g_pending', '', 0));
     return new Response(null, { status: 302, headers });
   }
-  if (url.pathname === '/auth/google/disconnect' && request.method === 'POST') {
+  if ((url.pathname === '/auth/google/disconnect' || url.pathname === '/auth/google/reset') && request.method === 'POST') {
     const saved = await kvGet(env, 'settings', {});
     delete saved.google;
+    if (url.pathname.endsWith('/reset')) { delete saved.cid; delete saved.secret; }
     await kvPut(env, 'settings', saved);
     return new Response(null, { status: 303, headers: { location: '/', 'set-cookie': setCookie('g_conn', '', 0) } });
   }
