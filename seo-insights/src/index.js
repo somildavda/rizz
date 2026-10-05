@@ -210,6 +210,18 @@ async function callAI(env, system, content, max_tokens = 4000) {
   throw new Error('Add your free Gemini API key in Settings to get AI recommendations.');
 }
 
+// Daily Gemini usage (requests and tokens), kept for the last 30 days.
+async function recordUsage(env, model, meta) {
+  if (!env.SETTINGS) return;
+  const day = new Date().toISOString().slice(0, 10);
+  const u = await kvGet(env, 'usage', {});
+  const d = (u[day] ||= { requests: 0, input: 0, output: 0, model: '' });
+  d.requests++; d.input += meta?.promptTokenCount || 0;
+  d.output += (meta?.candidatesTokenCount || 0) + (meta?.thoughtsTokenCount || 0); d.model = model;
+  for (const k of Object.keys(u).sort().slice(0, -30)) delete u[k];
+  await kvPut(env, 'usage', u);
+}
+
 async function callGemini(env, system, content, maxOutputTokens) {
   // Google retires model names over time, so fall back to the "latest" aliases when one is unavailable.
   const models = [...new Set([env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-pro-latest'])];
@@ -230,6 +242,7 @@ async function callGemini(env, system, content, maxOutputTokens) {
       if (res.status === 404 || /no longer available|not found|not supported/i.test(data.error.message)) continue;
       throw new Error(lastError);
     }
+    await recordUsage(env, model, data.usageMetadata);
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
     if (!text) throw new Error('Gemini returned no text (' + (data.candidates?.[0]?.finishReason || 'unknown') + ')');
     return text;
@@ -267,7 +280,7 @@ export default {
       if (pass !== env.ACCESS_TOKEN) return html(LOGIN.replace('<!--err-->', '<p class="err">Wrong passcode</p>'), 401);
       return new Response(null, { status: 303, headers: {
         location: '/',
-        'set-cookie': `seo_pass=${encodeURIComponent(pass)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`,
+        'set-cookie': `seo_pass=${encodeURIComponent(pass)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`,
       } });
     }
     if (!authed) return url.pathname.startsWith('/api/') ? json({ error: 'Unauthorized' }, 401) : html(LOGIN);
@@ -285,6 +298,7 @@ export default {
       return json({
         connected: !!google, email: google?.email || null, redirectUri: url.origin + '/auth/callback',
         configured: !!(saved.cid && saved.secret), gemini: !!env.GEMINI_API_KEY, serverStorage: !!env.SETTINGS,
+        usage: await kvGet(env, 'usage', {}),
       });
 
     // Keys sent from the Settings page override the saved ones for this request.

@@ -141,6 +141,8 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
   <p class="sub">Writes the insights and recommendations. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> → <b>Create API key</b>, then paste it here.</p>
   <div class="row" style="margin:0"><input id="kGemini" type="password" placeholder="AIza…" autocomplete="off" style="flex:1"><button id="saveKeys">Save &amp; test</button></div>
   <div class="status" id="testOut"></div>
+  <h3>Gemini usage</h3><div id="usage" class="note">No AI requests yet.</div>
+  <p class="note">Google doesn't report how much free quota is left. Your exact limits and remaining quota are at <a href="https://aistudio.google.com/usage" target="_blank">AI Studio → Usage</a>. The free tier allows a set number of requests per minute and per day; when one runs out, Gemini returns a "quota exceeded" error and resets the next day.</p>
  </div>
 
  <div class="card"><div class="step"><span class="num">2</span><h2 style="margin:0">Google: Search Console &amp; Sheets</h2></div>
@@ -214,7 +216,11 @@ $('siteSel').onchange=()=>{$('site').value=$('siteSel').value};
  o.push('<option value="">All data in the sheet / CSV</option>');$('week').innerHTML=o.join('')})();
 
 /* google + sites */
-async function loadGoogle(){try{gInfo=await (await fetch('/api/google')).json()}catch{}renderStatus()}
+async function loadGoogle(){try{gInfo=await (await fetch('/api/google')).json()}catch{}renderStatus();renderUsage()}
+function renderUsage(){const u=gInfo.usage||{},days=Object.keys(u).sort().reverse();if(!days.length)return;
+ const today=new Date().toISOString().slice(0,10),t=u[today]||{requests:0,input:0,output:0};
+ const sum=days.slice(0,7).reduce((a,d)=>({r:a.r+u[d].requests,t:a.t+u[d].input+u[d].output}),{r:0,t:0});
+ $('usage').innerHTML='<div class="kpis" style="margin:8px 0"><div class="kpi"><small>Requests today</small><b>'+t.requests+'</b></div><div class="kpi"><small>Tokens today</small><b>'+(t.input+t.output).toLocaleString()+'</b><small>'+t.input.toLocaleString()+' in · '+t.output.toLocaleString()+' out</small></div><div class="kpi"><small>Requests, last 7 days</small><b>'+sum.r+'</b></div><div class="kpi"><small>Tokens, last 7 days</small><b>'+sum.t.toLocaleString()+'</b></div></div>Model: '+esc((u[days[0]]||{}).model||'')}
 async function loadSites(){if(!hasGoogle())return null;const d=await post('/api/sites',{});
  if(d.sites&&d.sites.length){const cur=$('site').value;$('siteSel').innerHTML='<option value="">Choose a website…</option>'+d.sites.map(x=>'<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>').join('')}
  else if(d.sites){$('siteSel').innerHTML='<option value="">No Search Console sites on this Google account</option>'}
@@ -238,7 +244,7 @@ $('saveKeys').onclick=async()=>{const k=keys();k.gemini=$('kGemini').value.trim(
  await post('/api/settings',{gemini:k.gemini}).catch(()=>{});await loadGoogle();
  if(!k.gemini){$('testOut').textContent='Removed.';return}
  $('testOut').textContent='Testing…';const d=await post('/api/ask',{question:'Reply with just: OK',findings:{}});
- $('testOut').innerHTML=d.error?'❌ '+esc(d.error):'✅ Gemini works'};
+ $('testOut').innerHTML=d.error?'❌ '+esc(d.error):'✅ Gemini works';loadGoogle()};
 $('clearKeys').onclick=()=>{if(confirm('Remove the saved Gemini key and key file from this browser?')){store.set('keys',{});fillSettings();renderStatus()}};
 
 /* clients + history */
