@@ -391,6 +391,7 @@ async function handleApi(req, env, url) {
     return json({
       user: { email: user.email, name: user.name, picture: user.picture, role: user.role, hasGeminiKey: !!user.gemini_key_enc },
       serverGeminiKey: !!env.GEMINI_API_KEY,
+      mailEnabled: !!(env.BREVO_API_KEY && env.MAIL_FROM),
       connections: conns.n,
     });
   }
@@ -414,32 +415,39 @@ async function handleApi(req, env, url) {
     return json(await archiveOldRuns(env));
   }
 
-  // storage usage (free D1 database = 500 MB)
+  // storage usage across all free storage databases (500 MB each)
   if (path === '/api/usage' && method === 'GET') {
-    const limitMb = Number(env.DB_LIMIT_MB) || 500;
-    const probe = await DB.prepare('SELECT 1').run();
-    const one = (sql) => DB.prepare(sql).all().then((r) => r.results);
-    const [runs, pages, blobs, avgPage, blobRate] = await Promise.all([
-      one(`SELECT project_id, COUNT(*) AS runs, SUM(COALESCE(LENGTH(summary_json),0)+COALESCE(LENGTH(gsc_json),0)+COALESCE(LENGTH(ga_json),0)+COALESCE(LENGTH(ai_json),0)) AS b FROM runs GROUP BY project_id`),
-      one(`SELECT r.project_id, SUM(LENGTH(p.data_json)) AS b, COUNT(*) AS n FROM pages p JOIN runs r ON r.id = p.run_id GROUP BY r.project_id`),
-      one(`SELECT r.project_id, SUM(LENGTH(x.data)) AS b FROM run_blobs x JOIN runs r ON r.id = x.run_id GROUP BY r.project_id`),
-      one(`SELECT AVG(LENGTH(data_json)) AS a FROM (SELECT data_json FROM pages ORDER BY rowid DESC LIMIT 500)`),
-      one(`SELECT AVG(LENGTH(gsc_json)) AS g FROM (SELECT gsc_json FROM runs WHERE gsc_json IS NOT NULL ORDER BY created_at DESC LIMIT 20)`),
-    ]);
+    const list = shards(env);
+    const sizes = await Promise.all(list.map((x) => shardSize(x.db).catch(() => 0)));
+    const { results: runRows } = await DB.prepare(
+      'SELECT id, project_id, COALESCE(LENGTH(summary_json),0)+COALESCE(LENGTH(gsc_json),0)+COALESCE(LENGTH(ga_json),0)+COALESCE(LENGTH(ai_json),0) AS b FROM runs'
+    ).all();
+    const runProject = Object.fromEntries(runRows.map((r) => [r.id, r.project_id]));
     const per = {};
-    const add = (list, k) => list.forEach((r) => { const t = (per[r.project_id] ||= { runs: 0, run: 0, pages: 0, exports: 0, pagesCount: 0 }); t[k] += r.b || 0; if (k === 'run') t.runs = r.runs; if (k === 'pages') t.pagesCount = r.n; });
-    add(runs, 'run'); add(pages, 'pages'); add(blobs, 'exports');
-    const counted = Object.values(per).reduce((s, t) => s + t.run + t.pages + t.exports, 0);
-    const dbBytes = probe.meta?.size_after || counted;
+    const bucket = (pid) => (per[pid] ||= { runs: 0, run: 0, pages: 0, exports: 0, pagesCount: 0 });
+    for (const r of runRows) { const t = bucket(r.project_id); t.runs++; t.run += r.b; }
+    let avgPage = null;
+    for (const x of list) {
+      const [pg, bl, av] = await Promise.all([
+        x.db.prepare('SELECT run_id, SUM(LENGTH(data_json)) AS b, COUNT(*) AS n FROM pages GROUP BY run_id').all().then((r) => r.results).catch(() => []),
+        x.db.prepare('SELECT run_id, SUM(LENGTH(data)) AS b FROM run_blobs GROUP BY run_id').all().then((r) => r.results).catch(() => []),
+        x.db.prepare('SELECT AVG(LENGTH(data_json)) AS a FROM (SELECT data_json FROM pages ORDER BY rowid DESC LIMIT 500)').first().catch(() => null),
+      ]);
+      for (const r of pg) if (runProject[r.run_id]) { const t = bucket(runProject[r.run_id]); t.pages += r.b; t.pagesCount += r.n; }
+      for (const r of bl) if (runProject[r.run_id]) bucket(runProject[r.run_id]).exports += r.b;
+      if (av?.a) avgPage = avgPage ? (avgPage + av.a) / 2 : av.a;
+    }
+    const avgRun = runRows.length ? runRows.reduce((t, r) => t + r.b, 0) / runRows.length : 600000;
     let projects = [];
     if (user.role === 'admin') {
       const { results: names } = await DB.prepare('SELECT id, name FROM projects').all();
-      projects = names.map((p) => ({ id: p.id, name: p.name, ...(per[p.id] || { runs: 0, run: 0, pages: 0, exports: 0, pagesCount: 0 }) }))
+      projects = names.map((p) => ({ id: p.id, name: p.name, ...(per[p.id] || bucket(p.id)) }))
         .map((p) => ({ ...p, bytes: p.run + p.pages + p.exports })).sort((a, b) => b.bytes - a.bytes);
     }
     return json({
-      dbBytes, limitBytes: limitMb * 1024 * 1024, exact: !!probe.meta?.size_after,
-      avgPageBytes: Math.round(avgPage[0]?.a || 15000), avgRunBytes: Math.round(blobRate[0]?.g || 600000),
+      dbBytes: sizes.reduce((t, v) => t + v, 0), limitBytes: list.length * SHARD_LIMIT, exact: sizes.every(Boolean),
+      databases: list.map((x, i) => ({ name: x.name, bytes: sizes[i], limit: SHARD_LIMIT })), maxDatabases: 10,
+      avgPageBytes: Math.round(avgPage || 15000), avgRunBytes: Math.round(Math.max(avgRun, 100000)),
       exportBytesPerRow: 14, projects,
     });
   }
@@ -552,12 +560,13 @@ async function handleApi(req, env, url) {
       return json({ ok: true });
     }
     if (method === 'DELETE') {
+      const { results: rids } = await DB.prepare('SELECT id FROM runs WHERE project_id = ?').bind(project.id).all();
+      await deleteRunData(env, rids.map((r) => r.id));
       await DB.batch([
-        DB.prepare('DELETE FROM pages WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').bind(project.id),
+        DB.prepare('DELETE FROM run_shard WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').bind(project.id),
         DB.prepare('DELETE FROM runs WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM project_members WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM project_meta WHERE project_id = ?').bind(project.id),
-        DB.prepare('DELETE FROM run_blobs WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').bind(project.id),
         DB.prepare('DELETE FROM lob_groups WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM lob_monthly WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM projects WHERE id = ?').bind(project.id),
@@ -576,6 +585,7 @@ async function handleApi(req, env, url) {
       await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)')
         .bind(project.id, email, b.role === 'viewer' ? 'viewer' : 'editor', now())
         .run();
+      return json({ ok: true, ...(await sendInvite(env, url.origin, email, user.email, project.name, b.role === 'viewer' ? 'viewer' : 'editor')) });
     } else if (method === 'DELETE') {
       await DB.prepare('DELETE FROM project_members WHERE project_id = ? AND email = ?').bind(project.id, email).run();
     }
@@ -604,7 +614,19 @@ async function handleApi(req, env, url) {
       .bind(email, email, b.role === 'admin' ? 'admin' : 'member', user.email, now())
       .run();
     await setAccess(env, email, b.projects);
-    return json({ ok: true });
+    const firstProject = (b.projects || [])[0] ? await DB.prepare('SELECT name FROM projects WHERE id = ?').bind(String(b.projects[0].id)).first() : null;
+    return json({ ok: true, ...(await sendInvite(env, url.origin, email, user.email, (b.projects || []).length === 1 ? firstProject?.name : null, b.role === 'admin' ? 'admin' : 'editor')) });
+  }
+  // (re)send an invite; returns the text so the browser can fall back to the user's own mail app
+  if (path === '/api/invite' && method === 'POST') {
+    requireAdmin(user);
+    const b = await body(req);
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email');
+    const proj = b.projectId ? await DB.prepare('SELECT name FROM projects WHERE id = ?').bind(String(b.projectId)).first() : null;
+    const role = b.role || 'editor';
+    const sent = b.manualOnly ? { emailed: false, reason: 'manual' } : await sendInvite(env, url.origin, email, user.email, proj?.name, role);
+    return json({ ...sent, ...inviteText(url.origin, user.email, proj?.name, role), to: email });
   }
   if ((m = path.match(/^\/api\/users\/([^/]+)$/))) {
     const email = decodeURIComponent(m[1]).toLowerCase();
@@ -805,6 +827,7 @@ async function handleApi(req, env, url) {
       )
         .bind(rid, project.id, user.email, now(), pr.start, pr.end, pr.pstart, pr.pend)
         .run();
+      await dataDb(env, rid, true);
       return json({ run: { id: rid, ...pr } });
     }
   }
@@ -812,7 +835,7 @@ async function handleApi(req, env, url) {
   if ((m = path.match(/^\/api\/runs\/(\w+)$/))) {
     const { run, project } = await getRun(env, m[1], user.email);
     if (method === 'GET') {
-      const { results: pages } = await DB.prepare('SELECT url, onpage_score, content_score, data_json FROM pages WHERE run_id = ?')
+      const { results: pages } = await (await dataDb(env, run.id)).prepare('SELECT url, onpage_score, content_score, data_json FROM pages WHERE run_id = ?')
         .bind(run.id)
         .all();
       return json({
@@ -833,11 +856,8 @@ async function handleApi(req, env, url) {
     }
     if (method === 'DELETE') {
       requireAdmin(user);
-      await DB.batch([
-        DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(run.id),
-        DB.prepare('DELETE FROM run_blobs WHERE run_id = ?').bind(run.id),
-        DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id),
-      ]);
+      await deleteRunData(env, [run.id]);
+      await DB.batch([DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id), DB.prepare('DELETE FROM run_shard WHERE run_id = ?').bind(run.id)]);
       return json({ ok: true });
     }
   }
@@ -908,10 +928,10 @@ async function handleApi(req, env, url) {
       const chunk = Math.max(0, Math.min(500, Number(url.searchParams.get('chunk')) || 0));
       const text = await req.text();
       if (text.length > 1_800_000) throw new HttpError(413, 'Chunk too large');
-      await DB.prepare('INSERT OR REPLACE INTO run_blobs (run_id, kind, chunk, data) VALUES (?, ?, ?, ?)').bind(run.id, kind, chunk, text).run();
+      await (await dataDb(env, run.id, true)).prepare('INSERT OR REPLACE INTO run_blobs (run_id, kind, chunk, data) VALUES (?, ?, ?, ?)').bind(run.id, kind, chunk, text).run();
       return json({ ok: true });
     }
-    const { results } = await DB.prepare('SELECT data FROM run_blobs WHERE run_id = ? AND kind = ? ORDER BY chunk').bind(run.id, kind).all();
+    const { results } = await (await dataDb(env, run.id)).prepare('SELECT data FROM run_blobs WHERE run_id = ? AND kind = ? ORDER BY chunk').bind(run.id, kind).all();
     if (!results.length) throw new HttpError(404, 'Not stored for this run');
     if (results[0].data.startsWith('gz:')) return json({ gz: results.map((r) => r.data.slice(3)) });
     // older uncompressed chunks are JSON arrays; join them into one array without parsing
@@ -939,9 +959,10 @@ async function handleApi(req, env, url) {
     const { run, project } = await getRun(env, m[1], user.email);
     requireRun(project);
     const b = await body(req);
+    const D = await dataDb(env, run.id, true);
     const stmts = (b.pages || []).slice(0, 50).map((p) => {
       const { url: pageUrl, onpage_score, content_score, ...rest } = p;
-      return DB.prepare('INSERT OR REPLACE INTO pages (run_id, url, onpage_score, content_score, data_json) VALUES (?, ?, ?, ?, ?)').bind(
+      return D.prepare('INSERT OR REPLACE INTO pages (run_id, url, onpage_score, content_score, data_json) VALUES (?, ?, ?, ?, ?)').bind(
         run.id,
         String(pageUrl),
         Math.round(onpage_score) || 0,
@@ -949,7 +970,7 @@ async function handleApi(req, env, url) {
         JSON.stringify(rest)
       );
     });
-    if (stmts.length) await DB.batch(stmts);
+    if (stmts.length) await D.batch(stmts);
     return json({ ok: true, saved: stmts.length });
   }
 
@@ -1081,6 +1102,60 @@ function gaFilter(organicOnly, patterns) {
   return exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } };
 }
 
+// ---------- invite emails (Brevo free plan: 300 emails/day, no card) ----------
+function inviteText(origin, inviter, projectName, role) {
+  const where = projectName ? `the "${projectName}" project` : 'Searchverse';
+  const can = role === 'admin' ? 'full admin access' : role === 'viewer' ? 'view-only access' : 'permission to view and run analyses';
+  return {
+    subject: `${inviter} invited you to Searchverse${projectName ? ` — ${projectName}` : ''}`,
+    text: `Hi,\n\n${inviter} has invited you to ${where} in Searchverse (GA & GSC SEO insights), with ${can}.\n\nHow to open it:\n1. Go to ${origin}\n2. Click "Sign in with Google"\n3. Choose this email address\n\nIf Google says "app not verified", click Continue — it's your team's internal tool.\n\nThanks`,
+  };
+}
+async function sendInvite(env, origin, to, inviter, projectName, role) {
+  if (!env.BREVO_API_KEY || !env.MAIL_FROM) return { emailed: false, reason: 'not_configured' };
+  const t = inviteText(origin, inviter, projectName, role);
+  const html = t.text.split('\n').map((l) => (l ? l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(origin, `<a href="${origin}">${origin}</a>`) : '<br>')).join('<br>');
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ sender: { email: env.MAIL_FROM, name: env.MAIL_FROM_NAME || 'Searchverse' }, to: [{ email: to }], replyTo: { email: inviter }, subject: t.subject, textContent: t.text, htmlContent: html }),
+  }).catch((e) => ({ ok: false, statusText: e.message }));
+  if (res.ok) return { emailed: true };
+  const err = await res.json?.().catch(() => ({}));
+  return { emailed: false, reason: err?.message || res.statusText || 'send_failed' };
+}
+
+// ---------- storage shards ----------
+// The free plan allows 10 databases of 500 MB each. Run metadata stays in DB; the bulky per-run data
+// (crawled pages + exports) goes to whichever storage database has the most room: DB itself or DATA1..DATA9.
+const SHARD_LIMIT = 500 * 1024 * 1024;
+function shards(env) {
+  const list = [{ name: 'main', db: env.DB }];
+  for (let i = 1; i <= 9; i++) if (env['DATA' + i]) list.push({ name: 'DATA' + i, db: env['DATA' + i] });
+  return list;
+}
+async function shardSize(db) {
+  const r = await db.prepare('SELECT 1').run();
+  return r.meta?.size_after || 0;
+}
+async function dataDb(env, runId, assign = false) {
+  const list = shards(env);
+  const row = await env.DB.prepare('SELECT shard FROM run_shard WHERE run_id = ?').bind(runId).first();
+  if (row) return (list.find((x) => x.name === row.shard) || list[0]).db;
+  if (!assign || list.length === 1) return env.DB;
+  const sizes = await Promise.all(list.map((x) => shardSize(x.db).catch(() => Infinity)));
+  let best = 0;
+  sizes.forEach((v, i) => { if (v < sizes[best]) best = i; });
+  await env.DB.prepare('INSERT OR IGNORE INTO run_shard (run_id, shard) VALUES (?, ?)').bind(runId, list[best].name).run();
+  return list[best].db;
+}
+async function deleteRunData(env, runIds) {
+  for (const id of runIds) {
+    const db = await dataDb(env, id);
+    await db.batch([db.prepare('DELETE FROM pages WHERE run_id = ?').bind(id), db.prepare('DELETE FROM run_blobs WHERE run_id = ?').bind(id)]);
+  }
+}
+
 async function retentionDays(env) {
   const r = await env.DB.prepare("SELECT value FROM app_settings WHERE key = 'retention_days'").first().catch(() => null);
   return r ? Number(r.value) : 0; // 0 = keep everything
@@ -1093,14 +1168,11 @@ async function archiveOldRuns(env) {
   if (!days) return { archived: 0 };
   const cutoff = now() - days * DAY;
   const { results } = await env.DB.prepare(
-    "SELECT id FROM runs WHERE created_at < ? AND status = 'done' AND (gsc_json IS NOT NULL OR ga_json IS NOT NULL OR id IN (SELECT run_id FROM pages) OR id IN (SELECT run_id FROM run_blobs)) LIMIT 50"
+    "SELECT id FROM runs WHERE created_at < ? AND status = 'done' AND (error IS NULL OR error != 'archived') LIMIT 50"
   ).bind(cutoff).all();
   for (const r of results) {
-    await env.DB.batch([
-      env.DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(r.id),
-      env.DB.prepare('DELETE FROM run_blobs WHERE run_id = ?').bind(r.id),
-      env.DB.prepare("UPDATE runs SET gsc_json = NULL, ga_json = NULL, error = 'archived' WHERE id = ?").bind(r.id),
-    ]);
+    await deleteRunData(env, [r.id]);
+    await env.DB.prepare("UPDATE runs SET gsc_json = NULL, ga_json = NULL, error = 'archived' WHERE id = ?").bind(r.id).run();
   }
   return { archived: results.length };
 }

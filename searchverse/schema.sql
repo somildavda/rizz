@@ -153,3 +153,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Which storage database holds a run's crawled pages & exports (main or DATA1..DATA9)
+CREATE TABLE IF NOT EXISTS run_shard (
+  run_id TEXT PRIMARY KEY,
+  shard TEXT NOT NULL
+);

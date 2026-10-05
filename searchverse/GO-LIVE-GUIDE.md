@@ -177,3 +177,20 @@ Download the new code, put your `database_id` and `ADMIN_EMAILS` back in `wrangl
 | No properties in the dropdown | You connected the wrong Google account. Connect the one that sees the site in Search Console |
 | "Google access … expired" | Settings → **Reconnect** |
 | AI step failed / 429 | Gemini free limit hit. Wait a minute → Insights tab → **Regenerate** |
+
+---
+
+## More storage (free, up to 5 GB)
+The free plan gives you up to 10 databases of 500 MB. Each command adds one:
+```
+npm run add-storage
+npm run deploy
+```
+Run it again whenever Settings → Storage gets full (max 9 extra = 5 GB). Searchverse automatically saves new runs to the database with the most room.
+⚠️ After this, when updating the app **don't download `wrangler.toml` again** — it now holds your extra databases.
+
+## Automatic invite emails (free)
+Without setup, adding a teammate opens your own mail app with the invite ready. For automatic emails:
+1. Sign up free at https://www.brevo.com (no card) → **Senders** → add & verify the sender email.
+2. **SMTP & API → API keys** → generate a key.
+3. In Terminal: `npx wrangler secret put BREVO_API_KEY` (paste key), `npx wrangler secret put MAIL_FROM` (sender email), then `npm run deploy`.

@@ -13,7 +13,7 @@ function storageBar(u, extra = 0) {
   const pu = Math.min(100, (used / lim) * 100), pe = Math.min(100 - pu, (extra / lim) * 100);
   const col = pu + pe > 90 ? 'var(--bad)' : pu + pe > 70 ? 'var(--warn)' : 'var(--primary)';
   return `<div class="progress" style="height:12px;display:flex"><div style="width:${pu}%;background:${col}"></div><div style="width:${pe}%;background:${col};opacity:.35"></div></div>
-    <div class="row spread small"><span><b>${mb(used)}</b> used of ${mb(lim)} (free plan)${u.exact ? '' : ' · approx.'}</span><span><b>${mb(left)}</b> left</span></div>`;
+    <div class="row spread small"><span><b>${mb(used)}</b> used of ${mb(lim)} (free plan${u.databases?.length > 1 ? `, ${u.databases.length} databases` : ''})${u.exact ? '' : ' · approx.'}</span><span><b>${mb(left)}</b> left</span></div>`;
 }
 const date = (ts) => new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const shortUrl = (u) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
@@ -264,10 +264,20 @@ async function renderSettings(err, p) {
       </div>
     </div>`;
   if (isAdmin()) {
+    app.insertAdjacentHTML('beforeend', `<div class="card section"><h2>✉️ Invite emails</h2>${me.mailEnabled
+      ? '<p><span class="pill good">Automatic emails on</span> — new users and project members get an invite email (Brevo free plan, 300/day).</p>'
+      : `<p><span class="pill warn">Using your mail app</span> — when you add someone, your own email app opens with the invite ready to send.</p>
+         <details><summary class="small"><b>Turn on automatic emails (free)</b></summary><ol class="small">
+         <li>Sign up free at <a href="https://www.brevo.com" target="_blank" rel="noopener">brevo.com</a> (no card).</li>
+         <li>Senders, Domains & Dedicated IPs → <b>Senders</b> → add & verify the address emails should come from.</li>
+         <li>SMTP & API → <b>API keys</b> → Generate a new key and copy it.</li>
+         <li>In Terminal (searchverse folder): <code>npx wrangler secret put BREVO_API_KEY</code> (paste key) and <code>npx wrangler secret put MAIL_FROM</code> (type the verified sender email), then <code>npm run deploy</code>.</li></ol></details>`}</div>`);
     app.insertAdjacentHTML('beforeend', `<div class="card section" id="storage-card"><h2>💾 Storage</h2><p class="muted small">Loading…</p></div>`);
     Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => {
       u.retentionDays = r.days;
       document.getElementById('storage-card').innerHTML = `<h2>💾 Storage</h2>${storageBar(u)}
+        <div class="row small" style="margin:8px 0">${(u.databases || []).map((d) => `<span class="pill ${d.bytes / d.limit > 0.9 ? 'bad' : d.bytes / d.limit > 0.7 ? 'warn' : 'info'}">${d.name === 'main' ? 'Main' : d.name}: ${mb(d.bytes)} / 500 MB</span>`).join(' ')}</div>
+        ${(u.databases || []).length < 10 ? `<p class="small">➕ <b>Need more space? It's free:</b> in Terminal (searchverse folder) run <code>npm run add-storage</code> then <code>npm run deploy</code>. Each run adds 500 MB — up to ${mb(10 * 500 * 1024 * 1024)} on the free plan (you have ${(u.databases || []).length} of 10 databases).</p>` : '<p class="small">You are using the free maximum of 10 databases (5 GB).</p>'}
         <p class="small muted">Average crawled page ≈ ${mb(u.avgPageBytes)} · full export ≈ ${u.exportBytesPerRow} bytes per row (compressed). Free D1 databases hold ${mb(u.limitBytes)}. To free space, open a project → History → Delete old runs.</p>
         <div class="card" style="margin:14px 0;padding:14px"><b>🗄️ Data retention</b>
           <p class="small muted" style="margin:4px 0 10px">Recent runs keep everything. Older runs keep scores, KPIs, the AI report and the History trend, but their crawled pages, exports and raw data are removed. Runs automatically after every analysis.</p>
@@ -287,6 +297,21 @@ async function renderSettings(err, p) {
   const saveKey = async (geminiKey) => { await api('/api/settings', { method: 'PUT', body: { geminiKey } }); state.me = null; toast('Saved'); location.hash = '#/settings'; route(); };
   document.getElementById('savekey').onclick = () => { const v = document.getElementById('gkey').value.trim(); if (v) saveKey(v); };
   document.getElementById('clearkey')?.addEventListener('click', () => saveKey(''));
+}
+
+// ---------- invites ----------
+// Emails the invite through Brevo when configured; otherwise opens your own mail app with the message ready.
+function openMailApp(r) {
+  location.href = `mailto:${encodeURIComponent(r.to)}?subject=${encodeURIComponent(r.subject)}&body=${encodeURIComponent(r.text)}`;
+}
+async function sendInviteUi(email, projectId, role, alreadySent) {
+  if (alreadySent?.emailed) return toast(`✉️ Invite emailed to ${email}`);
+  try {
+    const r = await api('/api/invite', { method: 'POST', body: { email, projectId, role, manualOnly: alreadySent && alreadySent.reason === 'not_configured' } });
+    if (r.emailed) return toast(`✉️ Invite emailed to ${email}`);
+    openMailApp(r);
+    toast(r.reason === 'not_configured' || r.reason === 'manual' ? 'Opening your mail app with the invite ready — just press Send' : `Auto-email failed (${r.reason}) — opening your mail app instead`, 6000);
+  } catch (e) { toast(e.message); }
 }
 
 // ---------- users (admin) ----------
@@ -320,14 +345,19 @@ function userEditor(u, projects) {
         <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Can run analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>View only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
     </div>
     ${isNew ? '' : `<label><input type="checkbox" id="ue-dis" style="width:auto" ${u.disabled ? 'checked' : ''}> Disable sign-in (keeps their settings)</label>`}
-    <div class="row" style="margin-top:20px"><button class="btn primary" id="ue-save">${isNew ? 'Add user' : 'Save'}</button>${isNew ? '' : '<button class="btn danger" id="ue-del">Remove user</button>'}</div>`);
+    <div class="row" style="margin-top:20px"><button class="btn primary" id="ue-save">${isNew ? 'Add user & send invite' : 'Save'}</button>${isNew ? '' : '<button class="btn" id="ue-inv">✉️ Send invite</button><button class="btn danger" id="ue-del">Remove user</button>'}</div>`);
+  document.getElementById('ue-inv')?.addEventListener('click', () => sendInviteUi(u.email, u.projects[0]?.id, u.role === 'admin' ? 'admin' : u.projects[0]?.role || 'editor'));
   const role = document.getElementById('ue-role');
   role.onchange = () => document.getElementById('ue-proj').classList.toggle('hidden', role.value === 'admin');
   document.getElementById('ue-save').onclick = async () => {
     const projectsSel = [...document.querySelectorAll('[data-pid]')].filter((s) => s.value).map((s) => ({ id: s.dataset.pid, role: s.value }));
     const b = { role: role.value, projects: role.value === 'admin' ? [] : projectsSel };
     try {
-      if (isNew) await api('/api/users', { method: 'POST', body: { ...b, email: document.getElementById('ue-email').value } });
+      if (isNew) {
+        const email = document.getElementById('ue-email').value.trim().toLowerCase();
+        const r = await api('/api/users', { method: 'POST', body: { ...b, email } });
+        await sendInviteUi(email, b.projects[0]?.id, b.role === 'admin' ? 'admin' : b.projects[0]?.role || 'editor', r);
+      }
       else await api('/api/users/' + encodeURIComponent(u.email), { method: 'PUT', body: { ...b, disabled: document.getElementById('ue-dis').checked } });
       toast('Saved');
       route();
@@ -372,7 +402,7 @@ async function renderProjectForm(pid) {
       </div>
       ${pid ? `<div class="card"><h2>Team access</h2>
         <p class="muted small">Admins see every project. Members only see the projects you add them to: <b>View only</b> lets them see results, and <b>Can run analysis</b> also lets them run new analyses. Members sign in with their own Google account.</p>
-        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button></div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
+        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div><button class="btn sm" data-inv="${esc(m.email)}" data-role="${m.role}">✉️ Invite</button><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button></div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
         <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto"><option value="editor">Can run analysis</option><option value="viewer">View only</option></select><button class="btn" id="m-add">Add</button></div>
       </div>` : ''}
     </div>`;
@@ -408,8 +438,10 @@ async function renderProjectForm(pid) {
     await api('/api/projects/' + pid, { method: 'DELETE' }); location.hash = '#/';
   });
   document.getElementById('m-add')?.addEventListener('click', async () => {
-    try { await api(`/api/projects/${pid}/members`, { method: 'POST', body: { email: document.getElementById('m-email').value, role: document.getElementById('m-role').value } }); route(); } catch (e) { toast(e.message); }
+    const email = document.getElementById('m-email').value.trim(), role = document.getElementById('m-role').value;
+    try { const r = await api(`/api/projects/${pid}/members`, { method: 'POST', body: { email, role } }); await sendInviteUi(email.toLowerCase(), pid, role, r); route(); } catch (e) { toast(e.message); }
   });
+  app.querySelectorAll('[data-inv]').forEach((b) => (b.onclick = () => sendInviteUi(b.dataset.inv, pid, b.dataset.role)));
   app.querySelectorAll('[data-rm]').forEach((b) => b.onclick = async () => { await api(`/api/projects/${pid}/members`, { method: 'DELETE', body: { email: b.dataset.rm } }); route(); });
 }
 
