@@ -2,10 +2,18 @@ import { normalizeRows, analyze } from './analyze.js';
 import { parseCsv } from './csv.js';
 import { fetchGsc, fetchSheet } from './gsc.js';
 import { SYSTEM_PROMPT, userPrompt } from './prompt.js';
-import { HTML } from './ui.js';
+import { HTML, LOGIN } from './ui.js';
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
+
+const html = (body, status = 200) =>
+  new Response(body, { status, headers: { 'content-type': 'text/html;charset=utf-8' } });
+
+function cookie(request, name) {
+  const m = (request.headers.get('cookie') || '').match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 async function loadRows(body, env) {
   if (body.source === 'gsc') {
@@ -45,11 +53,20 @@ async function writeSummary(findings, ctx, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const authed = !env.ACCESS_TOKEN || cookie(request, 'seo_pass') === env.ACCESS_TOKEN;
+
+    if (url.pathname === '/login' && request.method === 'POST') {
+      const pass = (await request.formData()).get('pass');
+      if (pass !== env.ACCESS_TOKEN) return html(LOGIN.replace('<!--err-->', '<p class="err">Wrong passcode</p>'), 401);
+      return new Response(null, { status: 303, headers: {
+        location: '/',
+        'set-cookie': `seo_pass=${encodeURIComponent(pass)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`,
+      } });
+    }
+    if (!authed) return url.pathname.startsWith('/api/') ? json({ error: 'Unauthorized' }, 401) : html(LOGIN);
     if (url.pathname === '/') return new Response(HTML, { headers: { 'content-type': 'text/html;charset=utf-8' } });
 
     if (url.pathname === '/api/analyze' && request.method === 'POST') {
-      if (env.ACCESS_TOKEN && request.headers.get('x-access-token') !== env.ACCESS_TOKEN)
-        return json({ error: 'Unauthorized' }, 401);
       try {
         const body = await request.json();
         const rows = normalizeRows(await loadRows(body, env));

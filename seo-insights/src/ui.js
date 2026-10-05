@@ -25,7 +25,6 @@ table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:4px 6px;b
 <div data-s="gsc" class="hide"><label>Property (e.g. sc-domain:example.com)</label><input id="site"><label>Days per period</label><input id="days" type="number" value="28"></div>
 <label>Client name</label><input id="client">
 <label>Context for the write-up (launches, migrations, seasonality…)</label><input id="notes">
-<label>Access token (if set)</label><input id="tok" type="password">
 <button id="go">Generate insights</button>
 </div>
 <div id="out" class="card hide"></div>
@@ -36,7 +35,7 @@ const tbl=(rows,cols)=>rows.length?'<table><tr>'+cols.map(c=>'<th>'+c+'</th>').j
 $('go').onclick=async()=>{
   const out=$('out');out.classList.remove('hide');out.innerHTML='Analysing…';
   const body={source:$('source').value,csv:$('csv').value,csvUrl:$('csvUrl').value,sheetId:$('sheetId').value,range:$('range').value,site:$('site').value,days:+$('days').value,client:$('client').value,notes:$('notes').value};
-  const r=await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json','x-access-token':$('tok').value},body:JSON.stringify(body)});
+  const r=await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const d=await r.json();if(d.error){out.textContent=d.error;return}
   const f=d.findings;
   out.innerHTML=(d.summary?marked.parse(d.summary):'<p><i>Set ANTHROPIC_API_KEY to get the written client summary.</i></p>')+
@@ -47,3 +46,13 @@ $('go').onclick=async()=>{
   '<h3>Sections</h3>'+tbl(f.sections,['section','pages','clicks','prev_clicks','impressions']);
 };
 </script></body></html>`;
+
+export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>SEO Insights</title>
+<style>:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1b;--line:#e4e4df;--acc:#2f6f4f}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1d;--ink:#ecece8;--line:#33332f;--acc:#6fbf94}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:15px system-ui,sans-serif}
+form{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:24px;width:min(320px,90vw)}
+input{width:100%;box-sizing:border-box;padding:10px;margin:12px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+button{width:100%;padding:10px;border:0;border-radius:6px;background:var(--acc);color:#fff;font:inherit}.err{color:#c0392b}</style></head>
+<body><form method="post" action="/login"><h2>SEO Insights</h2><!--err--><input name="pass" type="password" placeholder="Passcode" autofocus><button>Enter</button></form></body></html>`;

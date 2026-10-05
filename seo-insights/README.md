@@ -3,7 +3,13 @@
 Turns page-path SEO data into a plain-language client update plus data tables for the team.
 It deploys as its **own** Worker (`seo-insights`) and is not connected to the Rizz site.
 
-## Deploy to a new Cloudflare account
+## Deploy (one command)
+```
+cd seo-insights && ./deploy.sh
+```
+It logs in to Cloudflare in your browser, deploys, and creates a passcode saved in `~/seo-insights/.passcode`.
+
+## Deploy manually
 ```
 cd seo-insights
 npm install
