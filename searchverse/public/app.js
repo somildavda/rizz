@@ -449,8 +449,13 @@ async function renderRunner(pid) {
       <div class="row"><select id="r-rows" style="width:auto">
         <option value="0">Standard — top 1,000 queries & pages (fast)</option>
         <option value="25000">Full export — up to 25,000 rows</option>
+        <option value="50000">Full export — up to 50,000 rows</option>
         <option value="100000">Full export — up to 100,000 rows</option>
-        <option value="250000">Full export — up to 250,000 rows (slow)</option></select></div>
+        <option value="250000">Full export — up to 250,000 rows</option>
+        <option value="500000">Full export — up to 500,000 rows (slow)</option>
+        <option value="1000000">Full export — up to 1,000,000 rows (very slow)</option>
+        <option value="5000000">Everything Search Console returns — no cap (slowest)</option></select>
+        <span class="small muted" id="r-rows-note"></span></div>
       <div class="hint">Full export pulls every query, every page and every page × query pair (25,000 rows per request), uses them for the scores and opportunities, and saves them with the run for the Queries tab & CSV.</div>
 
       <div class="row" style="margin-top:22px"><button class="btn primary lg" id="r-go">▶ Start analysis</button>
@@ -477,6 +482,11 @@ async function renderRunner(pid) {
   };
   ['r-start', 'r-end'].forEach((id) => ($(id).onchange = () => { $('r-preset').value = 'custom'; cmpText(); }));
   $('r-compare').onchange = cmpText;
+  const rowsNote = () => {
+    const n = +$('r-rows').value;
+    $('r-rows-note').textContent = !n ? '' : n <= 100000 ? '≈ 1–3 min' : n <= 500000 ? '≈ 5–10 min, keep the tab open' : 'can take 15+ min on big sites; Search Console decides how many rows it gives (it stops when there are no more)';
+  };
+  $('r-rows').onchange = rowsNote;
   ['r-pstart', 'r-pend'].forEach((id) => ($(id).onchange = cmpText));
   cmpText();
   $('r-go').onclick = () => runAnalysis(project, {
