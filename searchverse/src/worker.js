@@ -1,4 +1,4 @@
-// SEO Insights — Cloudflare Worker backend.
+// Searchverse — Cloudflare Worker backend.
 // Handles Google sign-in, multi-account Google connections (GSC + GA4),
 // data pulls, a domain-restricted page fetcher for crawling, Gemini analysis, and storage in D1.
 
@@ -109,20 +109,32 @@ async function body(req) {
 
 // ---------- auth ----------
 
-async function isAllowed(env, email) {
-  const list = (env.ALLOWED_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (!list.length) return true;
-  email = email.toLowerCase();
-  if (list.some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a))) return true;
-  const member = await env.DB.prepare('SELECT 1 FROM project_members WHERE email = ? LIMIT 1').bind(email).first();
-  return !!member;
+const emailList = (v) => (v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const listMatch = (list, email) => list.some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a));
+
+// Decides whether an email may sign in and with which role. Returns null if not allowed.
+//  - ADMIN_EMAILS (env) are always admins.
+//  - Users an admin has added (users table) sign in with their stored role unless disabled.
+//  - ALLOWED_EMAILS (env, optional) lets matching people self-join as members with no projects.
+//  - If no admin exists yet and ADMIN_EMAILS is empty, the first person to sign in becomes admin.
+async function signInRole(env, email) {
+  if (listMatch(emailList(env.ADMIN_EMAILS), email)) return 'admin';
+  const u = await env.DB.prepare('SELECT role, disabled FROM users WHERE email = ?').bind(email).first();
+  if (u) return u.disabled ? null : u.role;
+  if (listMatch(emailList(env.ALLOWED_EMAILS), email)) return 'member';
+  if (!emailList(env.ADMIN_EMAILS).length) {
+    const admin = await env.DB.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").first();
+    if (!admin) return 'admin';
+  }
+  return null;
 }
 
 async function currentUser(req, env) {
   const sid = cookies(req).sid;
   if (!sid) return null;
   const row = await env.DB.prepare(
-    'SELECT u.email, u.name, u.picture, u.gemini_key_enc FROM sessions s JOIN users u ON u.email = s.email WHERE s.id = ? AND s.expires_at > ?'
+    `SELECT u.email, u.name, u.picture, u.gemini_key_enc, u.role FROM sessions s JOIN users u ON u.email = s.email
+     WHERE s.id = ? AND s.expires_at > ? AND u.disabled = 0`
   )
     .bind(sid, now())
     .first();
@@ -135,6 +147,10 @@ async function requireUser(req, env) {
   return user;
 }
 
+function requireAdmin(user) {
+  if (user.role !== 'admin') throw new HttpError(403, 'Only admins can do this');
+}
+
 async function handleAuth(req, env, url) {
   const redirectUri = url.origin + '/auth/callback';
   const path = url.pathname;
@@ -145,6 +161,7 @@ async function handleAuth(req, env, url) {
     if (mode === 'connect') {
       const user = await currentUser(req, env);
       if (!user) return redirect('/');
+      if (user.role !== 'admin') return redirect('/#/?error=' + encodeURIComponent('Only admins can connect Google accounts'));
       email = user.email;
     }
     const state = id();
@@ -191,14 +208,15 @@ async function handleAuth(req, env, url) {
     if (!email || profile.email_verified === false) return redirect('/#/?error=' + encodeURIComponent('Google account email not verified'));
 
     if (st.mode === 'login') {
-      if (!(await isAllowed(env, email))) {
-        return redirect('/#/?error=' + encodeURIComponent(`${email} is not allowed to use this tool`));
+      const role = await signInRole(env, email);
+      if (!role) {
+        return redirect('/#/?error=' + encodeURIComponent(`${email} doesn't have access yet. Ask your admin to add you.`));
       }
       await env.DB.prepare(
-        `INSERT INTO users (email, name, picture, created_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(email) DO UPDATE SET name = excluded.name, picture = excluded.picture`
+        `INSERT INTO users (email, name, picture, role, last_login, created_at) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(email) DO UPDATE SET name = excluded.name, picture = excluded.picture, role = excluded.role, last_login = excluded.last_login`
       )
-        .bind(email, profile.name || email, profile.picture || '', now())
+        .bind(email, profile.name || email, profile.picture || '', role, now(), now())
         .run();
       const sid = id() + id();
       await env.DB.prepare('INSERT INTO sessions (id, email, expires_at) VALUES (?, ?, ?)')
@@ -289,11 +307,12 @@ async function gfetch(token, url, payload) {
 
 async function getProject(env, projectId, email) {
   const p = await env.DB.prepare(
-    `SELECT p.*, CASE WHEN p.owner_email = ? THEN 'owner' ELSE m.role END AS my_role
-     FROM projects p LEFT JOIN project_members m ON m.project_id = p.id AND m.email = ?
-     WHERE p.id = ? AND (p.owner_email = ? OR m.email IS NOT NULL)`
+    `SELECT p.*, CASE WHEN u.role = 'admin' THEN 'admin' ELSE m.role END AS my_role
+     FROM projects p JOIN users u ON u.email = ?
+     LEFT JOIN project_members m ON m.project_id = p.id AND m.email = u.email
+     WHERE p.id = ? AND (u.role = 'admin' OR m.email IS NOT NULL)`
   )
-    .bind(email, email, projectId, email)
+    .bind(email, projectId)
     .first();
   if (!p) throw new HttpError(404, 'Project not found');
   return p;
@@ -304,6 +323,11 @@ async function getRun(env, runId, email) {
   if (!run) throw new HttpError(404, 'Run not found');
   const project = await getProject(env, run.project_id, email);
   return { run, project };
+}
+
+const canRun = (project) => project.my_role === 'admin' || project.my_role === 'editor';
+function requireRun(project) {
+  if (!canRun(project)) throw new HttpError(403, 'You have view-only access to this project');
 }
 
 function hostAllowed(project, target) {
@@ -340,9 +364,9 @@ async function handleApi(req, env, url) {
   if (path === '/api/me') {
     const user = await currentUser(req, env);
     if (!user) return json({ user: null });
-    const conns = await env.DB.prepare('SELECT COUNT(*) AS n FROM connections WHERE owner_email = ?').bind(user.email).first();
+    const conns = await env.DB.prepare('SELECT COUNT(*) AS n FROM connections').first();
     return json({
-      user: { email: user.email, name: user.name, picture: user.picture, hasGeminiKey: !!user.gemini_key_enc },
+      user: { email: user.email, name: user.name, picture: user.picture, role: user.role, hasGeminiKey: !!user.gemini_key_enc },
       serverGeminiKey: !!env.GEMINI_API_KEY,
       connections: conns.n,
     });
@@ -362,20 +386,19 @@ async function handleApi(req, env, url) {
   }
 
   // connections
+  if (path.startsWith('/api/connections') || path.startsWith('/api/users')) requireAdmin(user);
   if (path === '/api/connections' && method === 'GET') {
     const { results } = await DB.prepare(
-      'SELECT id, google_email, scopes, created_at, COALESCE(connected_at, created_at) AS connected_at, expired FROM connections WHERE owner_email = ? ORDER BY created_at'
-    )
-      .bind(user.email)
-      .all();
+      'SELECT id, google_email, owner_email AS added_by, scopes, created_at, COALESCE(connected_at, created_at) AS connected_at, expired FROM connections ORDER BY created_at'
+    ).all();
     return json({ connections: results });
   }
   if ((m = path.match(/^\/api\/connections\/(\w+)$/)) && method === 'DELETE') {
-    await DB.prepare('DELETE FROM connections WHERE id = ? AND owner_email = ?').bind(m[1], user.email).run();
+    await DB.prepare('DELETE FROM connections WHERE id = ?').bind(m[1]).run();
     return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/connections\/(\w+)\/properties$/))) {
-    const c = await DB.prepare('SELECT id FROM connections WHERE id = ? AND owner_email = ?').bind(m[1], user.email).first();
+    const c = await DB.prepare('SELECT id FROM connections WHERE id = ?').bind(m[1]).first();
     if (!c) throw new HttpError(404, 'Connection not found');
     const token = await accessToken(env, c.id);
     const [sites, ga] = await Promise.allSettled([
@@ -408,10 +431,11 @@ async function handleApi(req, env, url) {
         (SELECT score FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_score,
         (SELECT created_at FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_run,
         (SELECT summary_json FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_summary
+        , CASE WHEN ? = 'admin' THEN 'admin' ELSE m.role END AS my_role
        FROM projects p LEFT JOIN project_members m ON m.project_id = p.id AND m.email = ?
-       WHERE p.owner_email = ? OR m.email IS NOT NULL ORDER BY p.created_at DESC`
+       WHERE ? = 'admin' OR m.email IS NOT NULL ORDER BY p.created_at DESC`
     )
-      .bind(user.email, user.email)
+      .bind(user.role, user.email, user.role)
       .all();
     return json({
       projects: results.map((p) => {
@@ -422,6 +446,7 @@ async function handleApi(req, env, url) {
     });
   }
   if (path === '/api/projects' && method === 'POST') {
+    requireAdmin(user);
     const b = await body(req);
     const p = await validateProject(env, user, b);
     const pid = id();
@@ -442,7 +467,7 @@ async function handleApi(req, env, url) {
         : null;
       return json({ project: { ...project, members, connection_email: conn?.google_email || null } });
     }
-    if (project.my_role !== 'owner') throw new HttpError(403, 'Only the project owner can change it');
+    requireAdmin(user);
     if (method === 'PUT') {
       const p = await validateProject(env, user, await body(req));
       await DB.prepare(
@@ -464,18 +489,70 @@ async function handleApi(req, env, url) {
   }
   if ((m = path.match(/^\/api\/projects\/(\w+)\/members$/))) {
     const project = await getProject(env, m[1], user.email);
-    if (project.my_role !== 'owner') throw new HttpError(403, 'Only the project owner can share it');
+    requireAdmin(user);
     const b = await body(req);
     const email = String(b.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email');
     if (method === 'POST') {
+      await ensureUser(env, email, user.email);
       await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)')
-        .bind(project.id, email, 'editor', now())
+        .bind(project.id, email, b.role === 'viewer' ? 'viewer' : 'editor', now())
         .run();
     } else if (method === 'DELETE') {
       await DB.prepare('DELETE FROM project_members WHERE project_id = ? AND email = ?').bind(project.id, email).run();
     }
     return json({ ok: true });
+  }
+
+  // users (admin only — guarded above)
+  if (path === '/api/users' && method === 'GET') {
+    const { results: users } = await DB.prepare(
+      'SELECT email, name, picture, role, disabled, invited_by, last_login, created_at FROM users ORDER BY role, email'
+    ).all();
+    const { results: access } = await DB.prepare(
+      'SELECT m.email, m.project_id, m.role, p.name FROM project_members m JOIN projects p ON p.id = m.project_id'
+    ).all();
+    return json({
+      users: users.map((u) => ({ ...u, projects: access.filter((a) => a.email === u.email).map((a) => ({ id: a.project_id, name: a.name, role: a.role })) })),
+    });
+  }
+  if (path === '/api/users' && method === 'POST') {
+    const b = await body(req);
+    const email = String(b.email || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email');
+    const exists = await DB.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first();
+    if (exists) throw new HttpError(400, 'That user already exists — edit them instead');
+    await DB.prepare('INSERT INTO users (email, name, role, invited_by, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(email, email, b.role === 'admin' ? 'admin' : 'member', user.email, now())
+      .run();
+    await setAccess(env, email, b.projects);
+    return json({ ok: true });
+  }
+  if ((m = path.match(/^\/api\/users\/([^/]+)$/))) {
+    const email = decodeURIComponent(m[1]).toLowerCase();
+    const target = await DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+    if (!target) throw new HttpError(404, 'User not found');
+    const otherAdmins = await DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0 AND email != ?").bind(email).first();
+    if (method === 'PUT') {
+      const b = await body(req);
+      const role = b.role === 'admin' ? 'admin' : 'member';
+      const disabled = b.disabled ? 1 : 0;
+      if (target.role === 'admin' && (role !== 'admin' || disabled) && !otherAdmins.n) throw new HttpError(400, 'There must be at least one active admin');
+      await DB.prepare('UPDATE users SET role = ?, disabled = ? WHERE email = ?').bind(role, disabled, email).run();
+      if (disabled) await DB.prepare('DELETE FROM sessions WHERE email = ?').bind(email).run();
+      if (Array.isArray(b.projects)) await setAccess(env, email, b.projects);
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') {
+      if (email === user.email) throw new HttpError(400, "You can't remove yourself");
+      if (target.role === 'admin' && !otherAdmins.n) throw new HttpError(400, 'There must be at least one active admin');
+      await DB.batch([
+        DB.prepare('DELETE FROM project_members WHERE email = ?').bind(email),
+        DB.prepare('DELETE FROM sessions WHERE email = ?').bind(email),
+        DB.prepare('DELETE FROM users WHERE email = ?').bind(email),
+      ]);
+      return json({ ok: true });
+    }
   }
 
   // runs
@@ -497,6 +574,7 @@ async function handleApi(req, env, url) {
       });
     }
     if (method === 'POST') {
+      requireRun(project);
       if (!project.connection_id) throw new HttpError(400, 'This project has no Google account connected');
       const b = await body(req).catch(() => ({}));
       const days = [7, 28, 90].includes(Number(b.days)) ? Number(b.days) : 28;
@@ -535,6 +613,7 @@ async function handleApi(req, env, url) {
       });
     }
     if (method === 'DELETE') {
+      requireAdmin(user);
       await DB.batch([DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(run.id), DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id)]);
       return json({ ok: true });
     }
@@ -542,6 +621,7 @@ async function handleApi(req, env, url) {
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/gsc$/)) && method === 'POST') {
     const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
     const token = await accessToken(env, project.connection_id);
     const gsc = await pullGsc(token, project, run);
     await DB.prepare('UPDATE runs SET gsc_json = ? WHERE id = ?').bind(JSON.stringify(gsc), run.id).run();
@@ -550,6 +630,7 @@ async function handleApi(req, env, url) {
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/ga$/)) && method === 'POST') {
     const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
     if (!project.ga4_property) return json({ ga: null });
     const token = await accessToken(env, project.connection_id);
     const ga = await pullGa(token, project, run);
@@ -559,11 +640,13 @@ async function handleApi(req, env, url) {
 
   if ((m = path.match(/^\/api\/projects\/(\w+)\/fetch$/))) {
     const project = await getProject(env, m[1], user.email);
+    requireRun(project);
     return json(await fetchPage(project, url.searchParams.get('url')));
   }
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/pages$/)) && method === 'POST') {
-    const { run } = await getRun(env, m[1], user.email);
+    const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
     const b = await body(req);
     const stmts = (b.pages || []).slice(0, 50).map((p) => {
       const { url: pageUrl, onpage_score, content_score, ...rest } = p;
@@ -580,7 +663,8 @@ async function handleApi(req, env, url) {
   }
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/finish$/)) && method === 'POST') {
-    const { run } = await getRun(env, m[1], user.email);
+    const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
     const b = await body(req);
     await DB.prepare('UPDATE runs SET status = ?, score = ?, summary_json = ?, error = ? WHERE id = ?')
       .bind(b.error ? 'error' : 'done', Math.round(b.score) || 0, JSON.stringify(b.summary || {}), b.error || null, run.id)
@@ -590,6 +674,7 @@ async function handleApi(req, env, url) {
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/ai$/)) && method === 'POST') {
     const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
     const b = await body(req);
     const key = user.gemini_key_enc ? await decrypt(env, user.gemini_key_enc) : env.GEMINI_API_KEY;
     if (!key) throw new HttpError(400, 'No Gemini API key. Add your free key in Settings (aistudio.google.com/apikey).');
@@ -600,6 +685,30 @@ async function handleApi(req, env, url) {
   }
 
   throw new HttpError(404, 'Not found');
+}
+
+async function ensureUser(env, email, invitedBy) {
+  await env.DB.prepare(
+    "INSERT INTO users (email, name, role, invited_by, created_at) VALUES (?, ?, 'member', ?, ?) ON CONFLICT(email) DO NOTHING"
+  )
+    .bind(email, email, invitedBy, now())
+    .run();
+}
+
+// Replaces a user's project access with [{id, role: 'viewer'|'editor'}]
+async function setAccess(env, email, projects) {
+  const stmts = [env.DB.prepare('DELETE FROM project_members WHERE email = ?').bind(email)];
+  for (const p of projects || []) {
+    stmts.push(
+      env.DB.prepare('INSERT INTO project_members (project_id, email, role, added_at) SELECT id, ?, ?, ? FROM projects WHERE id = ?').bind(
+        email,
+        p.role === 'viewer' ? 'viewer' : 'editor',
+        now(),
+        String(p.id)
+      )
+    );
+  }
+  await env.DB.batch(stmts);
 }
 
 async function validateProject(env, user, b) {
@@ -614,8 +723,8 @@ async function validateProject(env, user, b) {
   } catch {
     throw new HttpError(400, 'Homepage URL is not valid');
   }
-  const conn = await env.DB.prepare('SELECT id FROM connections WHERE id = ? AND owner_email = ?').bind(b.connection_id || '', user.email).first();
-  if (!conn) throw new HttpError(400, 'Pick one of your connected Google accounts');
+  const conn = await env.DB.prepare('SELECT id FROM connections WHERE id = ?').bind(b.connection_id || '').first();
+  if (!conn) throw new HttpError(400, 'Pick one of the connected Google accounts');
   return {
     name,
     site_url,
@@ -742,7 +851,7 @@ async function fetchPage(project, raw) {
     res = await fetch(current, {
       redirect: 'manual',
       headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; SEOInsightsBot/1.0; +https://developers.google.com/search)',
+        'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0; +https://developers.google.com/search)',
         accept: 'text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.5',
       },
     });

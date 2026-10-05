@@ -1,4 +1,6 @@
-# SEO Insights
+# Searchverse — GA & GSC Connectors
+
+👉 **New here? Follow [GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md) step by step.**
 
 A free SEO analysis tool. It runs on Cloudflare Workers + D1 (free tier). You sign in with Google, connect the Google account(s) that have **Search Console** and **GA4** access, crawl the top pages, and get:
 
@@ -17,7 +19,7 @@ You sign in with one account (e.g. your company email). Under **Settings → Con
 ## One-time setup (all free)
 
 ### 1. Google Cloud OAuth client
-1. Go to https://console.cloud.google.com and create a project (e.g. `seo-insights`).
+1. Go to https://console.cloud.google.com and create a project (e.g. `searchverse`).
 2. **APIs & Services → Library**: enable **Google Search Console API**, **Google Analytics Data API** and **Google Analytics Admin API**.
 3. **OAuth consent screen**: pick **External**, fill in the app name and your email, and add the scopes `.../auth/webmasters.readonly` and `.../auth/analytics.readonly`.
    Leave it in **Testing** and add every Google account that will connect data (yours plus the GSC/GA account emails) under **Test users**.
@@ -31,10 +33,10 @@ Create a free key at https://aistudio.google.com/apikey. Either set it as a serv
 
 ### 3. Deploy to Cloudflare
 ```bash
-cd seo-insights
+cd searchverse
 npm install
 npx wrangler login
-npx wrangler d1 create seo-insights        # copy database_id into wrangler.toml
+npx wrangler d1 create searchverse        # copy database_id into wrangler.toml
 npm run db:init                            # creates tables
 npx wrangler secret put GOOGLE_CLIENT_ID
 npx wrangler secret put GOOGLE_CLIENT_SECRET
@@ -42,9 +44,12 @@ npx wrangler secret put APP_SECRET         # any long random string (encrypts to
 npx wrangler secret put GEMINI_API_KEY     # optional
 npm run deploy
 ```
-Put the printed `https://seo-insights.<you>.workers.dev/auth/callback` into the OAuth client's redirect URIs.
+Put the printed `https://searchverse.<you>.workers.dev/auth/callback` into the OAuth client's redirect URIs.
 
-To restrict who can sign in, set `ALLOWED_EMAILS` in `wrangler.toml` (e.g. `"@infidigit.com, me@gmail.com"`). People you add as project members can always sign in.
+## Users & roles
+- **Admin** (set with `ADMIN_EMAILS` in `wrangler.toml`; if that's empty, the first person to sign in becomes admin). Admins do all the setup: they connect Google accounts, create/edit/delete projects, add/remove users and delete runs.
+- **Member**: an admin adds them by email on the **Users** page and picks which projects they can open. On each project a member is either **Can run analysis** (the default) or **View only**. Members can't change any setup.
+- Anyone else gets "doesn't have access yet" when they sign in. (Optional: `ALLOWED_EMAILS = "@yourcompany.com"` lets matching people self-join as members with no projects.)
 
 ### Local development
 Create `.dev.vars` with `GOOGLE_CLIENT_ID=…`, `GOOGLE_CLIENT_SECRET=…`, `APP_SECRET=…` (and optionally `GEMINI_API_KEY=…`). Then run:

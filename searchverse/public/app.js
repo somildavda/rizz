@@ -11,6 +11,9 @@ const date = (ts) => new Date(ts).toLocaleString(undefined, { dateStyle: 'medium
 const shortUrl = (u) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
 const scoreColor = (v) => (v >= 80 ? 'var(--good)' : v >= 55 ? 'var(--warn)' : 'var(--bad)');
 const pillFor = (v) => (v >= 80 ? 'good' : v >= 55 ? 'warn' : 'bad');
+const isAdmin = () => state.me?.user.role === 'admin';
+const canRun = (p) => p.my_role === 'admin' || p.my_role === 'editor';
+const accessPill = (r) => r === 'admin' ? '<span class="pill info">Admin</span>' : r === 'editor' ? '<span class="pill good">Can run analysis</span>' : '<span class="pill">View only</span>';
 const ring = (v, big) => `<div class="ring ${big ? 'big' : ''}" style="--v:${v || 0};--c:${scoreColor(v)}"><span>${v ?? '–'}</span></div>`;
 const mark = (v) => (v >= 1 ? '<span class="yes">✓</span>' : v > 0 ? '<span class="part">~</span>' : '<span class="no">✗</span>');
 
@@ -134,7 +137,7 @@ function renderNav() {
   const nav = document.getElementById('nav');
   if (!state.me) { nav.innerHTML = ''; return; }
   const u = state.me.user;
-  nav.innerHTML = `<a href="#/">Projects</a><a href="#/settings">Settings</a>
+  nav.innerHTML = `<a href="#/">Projects</a>${isAdmin() ? '<a href="#/users">Users</a>' : ''}<a href="#/settings">Settings</a>
     <span class="row" style="gap:8px">${u.picture ? `<img class="avatar" src="${esc(u.picture)}" referrerpolicy="no-referrer">` : ''}<span class="hide-sm small muted">${esc(u.email)}</span></span>
     <a href="/auth/logout" class="btn sm">Sign out</a>`;
 }
@@ -153,6 +156,10 @@ async function route() {
   try {
     if (path === '/') return await renderHome(err);
     if (path === '/settings') return await renderSettings(err, p);
+    if (['/new', '/users'].includes(path) || /\/edit$/.test(path)) {
+      if (!isAdmin()) { app.innerHTML = '<div class="banner err">Only admins can open this page.</div>'; return; }
+    }
+    if (path === '/users') return await renderUsers(err);
     if (path === '/new') return await renderProjectForm(null);
     if ((m = path.match(/^\/p\/(\w+)\/edit$/))) return await renderProjectForm(m[1]);
     if ((m = path.match(/^\/p\/(\w+)\/run$/))) return await renderRunner(m[1]);
@@ -166,25 +173,50 @@ window.addEventListener('hashchange', route);
 
 // ---------- login ----------
 function renderLogin(err) {
+  const feat = (icon, t, d) => `<div class="feat"><div class="feat-icon">${icon}</div><b>${t}</b><p>${d}</p></div>`;
   app.innerHTML = `${err}<div class="hero">
-    <h1>SEO Insights</h1>
-    <p class="muted">Connect Google Search Console & GA4, crawl your key pages, and get a professional SEO score with AI-powered recommendations — per project, with full history.</p>
-    <p style="margin-top:28px"><a class="btn primary" href="/auth/login">
-      <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+    <div class="hero-badge">Search Console · GA4 · Gemini AI</div>
+    <h1>Searchverse <span class="grad">GA &amp; GSC Connectors</span></h1>
+    <p class="muted lead">Connect Google Search Console and GA4, crawl your key pages and get a professional SEO score with clear, prioritised recommendations. Every project's history is saved.</p>
+    <p style="margin-top:28px"><a class="btn primary lg" href="/auth/login">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
       Sign in with Google</a></p>
+    <p class="small muted">Access is by invitation. Ask your admin to add your email.</p>
+  </div>
+  <div class="feats">
+    ${feat('🎯', 'SEO score', 'Overall, on-page, content and technical scores, weighted by real impressions.')}
+    ${feat('🔎', 'Query coverage', 'Checks whether each page targets the queries it ranks for: title, H1, headings, copy and how often they appear.')}
+    ${feat('🚀', 'Opportunities', 'Striking-distance keywords, low-CTR snippets, cannibalisation and declining pages.')}
+    ${feat('🤖', 'AI recommendations', 'Gemini writes the action plan: new titles, metas, content gaps and quick wins.')}
   </div>`;
 }
 
 // ---------- home ----------
 async function renderHome(err) {
-  const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), api('/api/connections')]);
-  const noConn = !connections.length
-    ? `<div class="banner">👋 First, <a href="#/settings"><b>connect the Google account</b></a> that has access to Search Console / GA4. It can be a different account from the one you signed in with.</div>` : '';
+  const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), isAdmin() ? api('/api/connections') : { connections: null }]);
+  if (!connections) {
+    app.innerHTML = `${err}<h1>Projects</h1>
+      <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access.</div>'}</div>`;
+    return;
+  }
+  const steps = [
+    { done: connections.length > 0, t: 'Connect the Google account that has Search Console / GA4 access', href: '#/settings', cta: 'Connect' },
+    { done: projects.length > 0, t: 'Create your first project', href: '#/new', cta: 'Create' },
+    { done: projects.some((p) => p.last_run), t: 'Run the first analysis', href: projects[0] ? `#/p/${projects[0].id}/run` : '#/new', cta: 'Run' },
+    { done: false, t: 'Invite your team by email (optional)', href: '#/users', cta: 'Invite', optional: true },
+  ];
+  const noConn = steps.slice(0, 3).some((x) => !x.done)
+    ? `<div class="card onboard"><h2>Get started</h2>${steps.map((x, i) => `<div class="ostep ${x.done ? 'done' : ''}"><span class="onum">${x.done ? '✓' : i + 1}</span><span style="flex:1">${x.t}</span>${x.done ? '' : `<a class="btn sm ${x.optional ? '' : 'primary'}" href="${x.href}">${x.cta}</a>`}</div>`).join('')}</div>` : '';
   const stale = connections.filter((c) => connStatus(c).expired || connStatus(c).days <= 1);
   const expBanner = stale.length ? `<div class="banner err">⏳ Google access ${stale.length > 1 ? 'needs' : 'needs'} a refresh for ${stale.map((c) => `<b>${esc(c.google_email)}</b> ${reconnectBtn(c)}`).join(' ')} — takes 10 seconds.</div>` : '';
   app.innerHTML = `${err}${noConn}${expBanner}
     <div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
-    <div class="grid g3 section">${projects.map((p) => `
+    <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
+    </div>`;
+}
+
+function projectCard(p) {
+  return `
       <a class="card click" href="#/p/${p.id}" style="color:inherit;text-decoration:none">
         <div class="row spread"><div style="min-width:0"><h3 style="margin:0">${esc(p.name)}</h3><div class="muted small url">${esc(p.gsc_property)}</div></div>${ring(p.last_score)}</div>
         <div class="row small muted" style="margin-top:12px;gap:16px">
@@ -192,19 +224,18 @@ async function renderHome(err) {
           <span>Impr. <b style="color:var(--text)">${fmt(p.kpis?.impressions)}</b></span>
           <span>${p.last_run ? 'Last run ' + new Date(p.last_run).toLocaleDateString() : 'Never analysed'}</span>
         </div>
-        ${p.owner_email !== state.me.user.email ? `<div class="pill info" style="margin-top:8px">Shared by ${esc(p.owner_email)}</div>` : ''}
-      </a>`).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
-    </div>`;
+        ${p.my_role !== 'admin' ? `<div style="margin-top:8px">${accessPill(p.my_role)}</div>` : ''}
+      </a>`;
 }
 
 // ---------- settings ----------
 async function renderSettings(err, p) {
-  const { connections } = await api('/api/connections');
   const me = state.me;
+  const { connections } = isAdmin() ? await api('/api/connections') : { connections: null };
   app.innerHTML = `${err}${p.connected ? `<div class="banner">✅ Connected <b>${esc(p.connected)}</b>. You can now use its Search Console / GA4 properties in projects.</div>` : ''}
     <h1>Settings</h1>
     <div class="grid g2 section">
-      <div class="card">
+      ${connections ? `<div class="card">
         <h2>Google data accounts</h2>
         <p class="muted small">You're signed in as <b>${esc(me.user.email)}</b>. If GSC / GA4 access lives on a different Google account (e.g. a client or personal Gmail), connect that account here — read-only access. You can connect as many as you need.</p>
         ${connections.map((c) => `<div class="check"><div style="flex:1"><b>${esc(c.google_email)}</b>
@@ -213,7 +244,7 @@ async function renderSettings(err, p) {
             <div class="row" style="gap:6px">${reconnectBtn(c, connStatus(c).days <= 2 ? 'btn sm primary' : 'btn sm')}<button class="btn sm danger" data-del="${c.id}">Remove</button></div></div>`).join('') || '<p class="muted">No accounts connected yet.</p>'}
         <p><a class="btn primary" href="/auth/connect">+ Connect a Google account</a></p>
         <p class="hint">Tip: on Google's screen pick the account that owns the properties and tick both permission boxes. While the Google app is in testing mode, access lasts 7 days. Click <b>Reconnect</b> when it expires. Your projects and history are kept.</p>
-      </div>
+      </div>` : `<div class="card"><h2>Your access</h2><p>You're a <b>member</b>. An admin manages Google connections, projects and who can see what.</p><p class="muted small">Ask your admin if you need access to another project or permission to run analyses.</p></div>`}
       <div class="card">
         <h2>Gemini AI key</h2>
         <p class="muted small">AI recommendations use Google Gemini's free tier. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Stored encrypted on the server.</p>
@@ -232,12 +263,62 @@ async function renderSettings(err, p) {
   document.getElementById('clearkey')?.addEventListener('click', () => saveKey(''));
 }
 
+// ---------- users (admin) ----------
+async function renderUsers(err) {
+  const [{ users }, { projects }] = await Promise.all([api('/api/users'), api('/api/projects')]);
+  const me = state.me.user.email;
+  app.innerHTML = `${err}<div class="row spread"><div><h1>Users</h1><div class="muted small">Admins have full access. Members only see the projects you give them.</div></div>
+      <button class="btn primary" id="u-add">+ Add user</button></div>
+    <div class="card section">${table([
+      { key: 'email', label: 'User', render: (u) => `<div class="row" style="gap:8px;flex-wrap:nowrap">${u.picture ? `<img class="avatar" src="${esc(u.picture)}" referrerpolicy="no-referrer">` : ''}<div><b>${esc(u.name && u.name !== u.email ? u.name : u.email)}</b>${u.email === me ? ' <span class="pill">you</span>' : ''}<div class="small muted">${esc(u.email)}</div></div></div>` },
+      { key: 'role', label: 'Role', render: (u) => (u.role === 'admin' ? '<span class="pill info">Admin</span>' : '<span class="pill">Member</span>') },
+      { key: 'access', label: 'Project access', render: (u) => (u.role === 'admin' ? '<span class="muted small">All projects</span>' : u.projects.map((p) => `<div class="small">${esc(p.name)} · ${p.role === 'editor' ? 'can run' : 'view only'}</div>`).join('') || '<span class="muted small">None</span>') },
+      { key: 'status', label: 'Status', render: (u) => (u.disabled ? '<span class="pill bad">Disabled</span>' : u.last_login ? '<span class="pill good">Active</span>' : '<span class="pill warn">Invited</span>') },
+      { key: 'last_login', label: 'Last sign-in', render: (u) => (u.last_login ? date(u.last_login) : '–') },
+    ], users, { onRow: (u) => userEditor(u, projects) })}<p class="hint">Click a user to edit their role or project access. Added users sign in with the Google account for that email.</p></div>`;
+  document.getElementById('u-add').onclick = () => userEditor(null, projects);
+}
+
+function userEditor(u, projects) {
+  const isNew = !u;
+  u = u || { email: '', role: 'member', disabled: 0, projects: [] };
+  const access = Object.fromEntries(u.projects.map((p) => [p.id, p.role]));
+  openDrawer(`<h2>${isNew ? 'Add user' : esc(u.email)}</h2>
+    ${isNew ? '<label>Email (their Google account)</label><input id="ue-email" placeholder="name@company.com">' : ''}
+    <label>Role</label>
+    <select id="ue-role"><option value="member" ${u.role === 'member' ? 'selected' : ''}>Member — limited access</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin — full access</option></select>
+    <div class="hint">Admins do the setup: connect Google accounts, create/edit/delete projects, manage users. Members can open their projects and run analyses, but can't change any setup.</div>
+    <div id="ue-proj" class="${u.role === 'admin' ? 'hidden' : ''}">
+      <label>Project access</label>
+      ${projects.map((p) => `<div class="check" style="align-items:center"><div style="flex:1"><b>${esc(p.name)}</b><div class="small muted">${esc(p.gsc_property)}</div></div>
+        <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Can run analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>View only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
+    </div>
+    ${isNew ? '' : `<label><input type="checkbox" id="ue-dis" style="width:auto" ${u.disabled ? 'checked' : ''}> Disable sign-in (keeps their settings)</label>`}
+    <div class="row" style="margin-top:20px"><button class="btn primary" id="ue-save">${isNew ? 'Add user' : 'Save'}</button>${isNew ? '' : '<button class="btn danger" id="ue-del">Remove user</button>'}</div>`);
+  const role = document.getElementById('ue-role');
+  role.onchange = () => document.getElementById('ue-proj').classList.toggle('hidden', role.value === 'admin');
+  document.getElementById('ue-save').onclick = async () => {
+    const projectsSel = [...document.querySelectorAll('[data-pid]')].filter((s) => s.value).map((s) => ({ id: s.dataset.pid, role: s.value }));
+    const b = { role: role.value, projects: role.value === 'admin' ? [] : projectsSel };
+    try {
+      if (isNew) await api('/api/users', { method: 'POST', body: { ...b, email: document.getElementById('ue-email').value } });
+      else await api('/api/users/' + encodeURIComponent(u.email), { method: 'PUT', body: { ...b, disabled: document.getElementById('ue-dis').checked } });
+      toast('Saved');
+      route();
+    } catch (e) { toast(e.message); }
+  };
+  document.getElementById('ue-del')?.addEventListener('click', async () => {
+    if (!confirm(`Remove ${u.email}? They will lose access immediately.`)) return;
+    try { await api('/api/users/' + encodeURIComponent(u.email), { method: 'DELETE' }); route(); } catch (e) { toast(e.message); }
+  });
+}
+
 // ---------- project form ----------
 async function renderProjectForm(pid) {
   const { connections } = await api('/api/connections');
   if (!connections.length) { location.hash = '#/settings'; return toast('Connect a Google account first'); }
   const p = pid ? (await api('/api/projects/' + pid)).project : { max_pages: 25 };
-  const isOwner = !pid || p.my_role === 'owner';
+  const isOwner = isAdmin();
   app.innerHTML = `<div class="row spread"><h1>${pid ? 'Edit project' : 'New project'}</h1><a class="btn" href="${pid ? '#/p/' + pid : '#/'}">Cancel</a></div>
     <div class="grid g2 section">
       <div class="card">
@@ -255,9 +336,9 @@ async function renderProjectForm(pid) {
         ${pid && isOwner ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
       </div>
       ${pid ? `<div class="card"><h2>Team access</h2>
-        <p class="muted small">People you add can sign in with their own Google account and view & run analyses for this project, using your connected data account.</p>
-        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}</div>${isOwner ? `<button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button>` : ''}</div>`).join('') || '<p class="muted">Only you.</p>'}
-        ${isOwner ? `<div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><button class="btn" id="m-add">Add</button></div>` : ''}
+        <p class="muted small">Admins see every project. Members only see the projects you add them to: <b>View only</b> lets them see results, and <b>Can run analysis</b> also lets them run new analyses. Members sign in with their own Google account.</p>
+        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button></div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
+        <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto"><option value="editor">Can run analysis</option><option value="viewer">View only</option></select><button class="btn" id="m-add">Add</button></div>
       </div>` : ''}
     </div>`;
 
@@ -292,7 +373,7 @@ async function renderProjectForm(pid) {
     await api('/api/projects/' + pid, { method: 'DELETE' }); location.hash = '#/';
   });
   document.getElementById('m-add')?.addEventListener('click', async () => {
-    try { await api(`/api/projects/${pid}/members`, { method: 'POST', body: { email: document.getElementById('m-email').value } }); route(); } catch (e) { toast(e.message); }
+    try { await api(`/api/projects/${pid}/members`, { method: 'POST', body: { email: document.getElementById('m-email').value, role: document.getElementById('m-role').value } }); route(); } catch (e) { toast(e.message); }
   });
   app.querySelectorAll('[data-rm]').forEach((b) => b.onclick = async () => { await api(`/api/projects/${pid}/members`, { method: 'DELETE', body: { email: b.dataset.rm } }); route(); });
 }
@@ -300,6 +381,7 @@ async function renderProjectForm(pid) {
 // ---------- runner ----------
 async function renderRunner(pid) {
   const { project } = await api('/api/projects/' + pid);
+  if (!canRun(project)) { app.innerHTML = '<div class="banner err">You have view-only access to this project.</div>'; return; }
   app.innerHTML = `<div class="row spread"><div><h1>Run analysis</h1><div class="muted">${esc(project.name)} · ${esc(project.gsc_property)}</div></div><a class="btn" href="#/p/${pid}">Back</a></div>
     <div class="card section" id="setup">
       <div class="row" style="align-items:flex-end">
@@ -446,9 +528,9 @@ async function renderProject(pid, runId) {
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
       <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${date(r.created_at)} · score ${r.score}</option>`).join('')}</select>` : ''}
-      <a class="btn" href="#/p/${pid}/edit">Settings</a><a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a></div></div>`;
+      ${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
-    app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">Run your first analysis to see scores, opportunities and AI recommendations.</p><a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a></div>`;
+    app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">${canRun(project) ? 'Run your first analysis to see scores, opportunities and AI recommendations.' : 'No analysis has been run yet. Ask someone with "Can run analysis" access to run one.'}</p>${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div>`;
     return;
   }
   const rid = runId && done.find((r) => r.id === runId) ? runId : done[0].id;
@@ -509,6 +591,13 @@ function bindTab(project, run, pages) {
       route();
     } catch (err) { toast(err.message, 6000); e.target.disabled = false; e.target.textContent = 'Retry AI analysis'; }
   });
+  document.getElementById('tab').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-delrun]');
+    if (!b || !confirm('Delete this run permanently?')) return;
+    await api('/api/runs/' + b.dataset.delrun, { method: 'DELETE' });
+    location.hash = '#/p/' + project.id;
+    route();
+  });
   document.querySelectorAll('[data-page]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     const p = pages.find((x) => x.url === a.dataset.page);
@@ -521,11 +610,12 @@ const pageLink = (u, pages) => (pages.some((p) => p.url === u) ? `<a href="#" da
 
 function viewInsights(project, run, pages) {
   const ai = run.ai;
-  if (!ai) return `<div class="card center"><h2>No AI recommendations yet</h2><p class="muted">Needs a Gemini key (free) in Settings.</p><button class="btn primary" id="ai-retry">Generate AI analysis</button></div>`;
+  const btn = (label, cls) => (canRun(project) ? `<button class="btn ${cls}" id="ai-retry">${label}</button>` : '');
+  if (!ai) return `<div class="card center"><h2>No AI recommendations yet</h2><p class="muted">Needs a Gemini key (free) in Settings.</p>${btn('Generate AI analysis', 'primary')}</div>`;
   const list = (arr, fn) => (arr || []).map(fn).join('') || '<p class="muted">None</p>';
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Executive summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>${(ai.risks || []).length ? `<h3>Risks</h3><ul>${ai.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
-      <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by Gemini</span><button class="btn sm" id="ai-retry">Regenerate</button></div></div>
+      <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by Gemini</span>${btn('Regenerate', 'sm')}</div></div>
     <div class="card section"><h2>Priority actions</h2>${list(ai.priorities, (p) => `<div class="reco"><div class="row spread"><h3>${esc(p.title)}</h3><span class="row" style="gap:6px">${impactPill(p.impact)}<span class="pill">${esc(p.effort || '')} effort</span></span></div>
       <p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${(p.urls || []).filter(Boolean).length ? `<p class="small">${p.urls.filter(Boolean).map((u) => pageLink(u, pages)).join(' · ')}</p>` : ''}</div>`)}</div>
     <div class="grid g2 section">
@@ -655,6 +745,7 @@ function viewHistory(runs, project) {
       { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.kpis?.impressions), sort: (r) => r.kpis?.impressions || 0 },
       { key: 'p', label: 'Pos', num: 1, render: (r) => fmt(r.kpis?.position, 1), sort: (r) => r.kpis?.position || 0 },
       { key: 'by', label: 'By', render: (r) => esc(r.created_by) },
+      ...(isAdmin() ? [{ key: 'del', label: '', render: (r) => `<button class="btn sm danger" data-delrun="${r.id}">Delete</button>` }] : []),
     ], runs, { filter: false })}</div>`;
 }
 

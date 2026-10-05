@@ -1,10 +1,14 @@
--- SEO Insights D1 schema. Apply with:
---   npx wrangler d1 execute seo-insights --remote --file=schema.sql
+-- Searchverse D1 schema. Apply with:
+--   npx wrangler d1 execute searchverse --remote --file=schema.sql
 CREATE TABLE IF NOT EXISTS users (
   email TEXT PRIMARY KEY,
   name TEXT,
   picture TEXT,
   gemini_key_enc TEXT,
+  role TEXT NOT NULL DEFAULT 'member',   -- 'admin' | 'member'
+  disabled INTEGER NOT NULL DEFAULT 0,
+  invited_by TEXT,
+  last_login INTEGER,
   created_at INTEGER
 );
 
@@ -52,7 +56,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_members (
   project_id TEXT NOT NULL,
   email TEXT NOT NULL,
-  role TEXT DEFAULT 'editor',
+  role TEXT DEFAULT 'editor',          -- 'editor' (can run analyses, default) | 'viewer' (view only)
   added_at INTEGER,
   PRIMARY KEY (project_id, email)
 );
