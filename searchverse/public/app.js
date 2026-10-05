@@ -7,6 +7,14 @@ const state = { me: null };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n, d = 0) => (n == null || isNaN(n) ? '–' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d }));
 const pct = (n, d = 1) => (n == null ? '–' : fmt(n * 100, d) + '%');
+const mb = (b) => (b >= 1024 * 1024 ? fmt(b / 1024 / 1024, 1) + ' MB' : fmt(b / 1024, 0) + ' KB');
+function storageBar(u, extra = 0) {
+  const used = u.dbBytes, lim = u.limitBytes, left = Math.max(0, lim - used);
+  const pu = Math.min(100, (used / lim) * 100), pe = Math.min(100 - pu, (extra / lim) * 100);
+  const col = pu + pe > 90 ? 'var(--bad)' : pu + pe > 70 ? 'var(--warn)' : 'var(--primary)';
+  return `<div class="progress" style="height:12px;display:flex"><div style="width:${pu}%;background:${col}"></div><div style="width:${pe}%;background:${col};opacity:.35"></div></div>
+    <div class="row spread small"><span><b>${mb(used)}</b> used of ${mb(lim)} (free plan)${u.exact ? '' : ' · approx.'}</span><span><b>${mb(left)}</b> left</span></div>`;
+}
 const date = (ts) => new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const shortUrl = (u) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
 const scoreColor = (v) => (v >= 80 ? 'var(--good)' : v >= 55 ? 'var(--warn)' : 'var(--bad)');
@@ -255,6 +263,14 @@ async function renderSettings(err, p) {
         <div class="row" style="margin-top:12px"><button class="btn primary" id="savekey">Save key</button>${me.user.hasGeminiKey ? '<button class="btn danger" id="clearkey">Remove my key</button>' : ''}</div>
       </div>
     </div>`;
+  if (isAdmin()) {
+    app.insertAdjacentHTML('beforeend', `<div class="card section" id="storage-card"><h2>💾 Storage</h2><p class="muted small">Loading…</p></div>`);
+    api('/api/usage').then((u) => {
+      document.getElementById('storage-card').innerHTML = `<h2>💾 Storage</h2>${storageBar(u)}
+        <p class="small muted">Average crawled page ≈ ${mb(u.avgPageBytes)} · full export ≈ ${u.exportBytesPerRow} bytes per row (compressed). Free D1 databases hold ${mb(u.limitBytes)}. To free space, open a project → History → Delete old runs.</p>
+        ${table([{ key: 'name', label: 'Project', render: (p) => `<a href="#/p/${p.id}">${esc(p.name)}</a>` }, { key: 'runs', label: 'Runs', num: 1 }, { key: 'pagesCount', label: 'Pages stored', num: 1, render: (p) => fmt(p.pagesCount) }, { key: 'pages', label: 'Page data', num: 1, render: (p) => mb(p.pages) }, { key: 'exports', label: 'Exports', num: 1, render: (p) => mb(p.exports) }, { key: 'bytes', label: 'Total', num: 1, render: (p) => `<b>${mb(p.bytes)}</b>` }], u.projects, { filter: false })}`;
+    }).catch(() => {});
+  }
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     if (!confirm('Remove this Google account? Projects using it will stop updating until you pick another account.')) return;
     await api('/api/connections/' + b.dataset.del, { method: 'DELETE' });
@@ -443,7 +459,7 @@ async function renderRunner(pid) {
         <div><label class="small" style="margin-top:0">Pages to crawl</label><input id="r-max" type="number" min="5" max="1000" value="${project.max_pages}" style="width:120px"></div>
         <label class="row small" style="margin:0 0 10px;gap:6px;font-weight:400"><input type="checkbox" id="r-sitemap" style="width:auto"> Also crawl URLs from the sitemap</label>
       </div>
-      <div class="hint">💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Up to 1,000 pages (≈ 1 min per 100 pages).</div>
+      <div class="hint">💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
 
       <h3 style="margin-top:22px">📦 Search Console data</h3>
       <div class="row"><select id="r-rows" style="width:auto">
@@ -457,6 +473,9 @@ async function renderRunner(pid) {
         <option value="5000000">Everything Search Console returns — no cap (slowest)</option></select>
         <span class="small muted" id="r-rows-note"></span></div>
       <div class="hint">Full export pulls every query, every page and every page × query pair (25,000 rows per request), uses them for the scores and opportunities, and saves them with the run for the Queries tab & CSV.</div>
+
+      <h3 style="margin-top:22px">💾 Storage</h3>
+      <div id="r-storage" class="muted small">Checking storage…</div>
 
       <div class="row" style="margin-top:22px"><button class="btn primary lg" id="r-go">▶ Start analysis</button>
         <span class="small muted">Keep this tab open while it runs.</span></div>
@@ -486,7 +505,23 @@ async function renderRunner(pid) {
     const n = +$('r-rows').value;
     $('r-rows-note').textContent = !n ? '' : n <= 100000 ? '≈ 1–3 min' : n <= 500000 ? '≈ 5–10 min, keep the tab open' : 'can take 15+ min on big sites; Search Console decides how many rows it gives (it stops when there are no more)';
   };
-  $('r-rows').onchange = rowsNote;
+  $('r-rows').onchange = () => { rowsNote(); storageNote(); };
+  $('r-max').oninput = () => storageNote();
+  let usage = null;
+  const storageNote = () => {
+    if (!usage) return;
+    const pages = Math.min(1000, Math.max(5, +$('r-max').value || 25));
+    const rows = +$('r-rows').value;
+    const rowsEst = rows >= 1000000 ? 1000000 : rows * 1.1; // page×query dominates; "everything" estimated at 1M
+    const est = usage.avgRunBytes + pages * usage.avgPageBytes + rowsEst * 2 * usage.exportBytesPerRow;
+    const left = Math.max(0, usage.limitBytes - usage.dbBytes);
+    const runsLeft = Math.floor(left / est);
+    const maxPages = Math.max(0, Math.min(1000, Math.floor((left - usage.avgRunBytes - rowsEst * 2 * usage.exportBytesPerRow) / usage.avgPageBytes)));
+    $('r-storage').innerHTML = storageBar(usage, est) + `
+      <div class="small" style="margin-top:6px">This run: <b>≈ ${mb(est)}</b> (${fmt(pages)} pages × ~${mb(usage.avgPageBytes)}${rows ? ` + ~${mb(rowsEst * 2 * usage.exportBytesPerRow)} export` : ''}).
+      ${est > left ? '<b class="down">Not enough space — delete old runs (History tab) or pick fewer pages / a smaller export.</b>' : `You can do <b>~${fmt(runsLeft)}</b> more runs like this. With the space left you can crawl up to <b>${fmt(maxPages)}</b> pages per run (limit 1,000).`}</div>`;
+  };
+  api('/api/usage').then((u) => { usage = u; storageNote(); }).catch(() => ($('r-storage').textContent = 'Storage info unavailable'));
   ['r-pstart', 'r-pend'].forEach((id) => ($(id).onchange = cmpText));
   cmpText();
   $('r-go').onclick = () => runAnalysis(project, {

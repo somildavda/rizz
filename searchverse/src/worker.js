@@ -398,6 +398,36 @@ async function handleApi(req, env, url) {
   const user = await requireUser(req, env);
   const DB = env.DB;
 
+  // storage usage (free D1 database = 500 MB)
+  if (path === '/api/usage' && method === 'GET') {
+    const limitMb = Number(env.DB_LIMIT_MB) || 500;
+    const probe = await DB.prepare('SELECT 1').run();
+    const one = (sql) => DB.prepare(sql).all().then((r) => r.results);
+    const [runs, pages, blobs, avgPage, blobRate] = await Promise.all([
+      one(`SELECT project_id, COUNT(*) AS runs, SUM(COALESCE(LENGTH(summary_json),0)+COALESCE(LENGTH(gsc_json),0)+COALESCE(LENGTH(ga_json),0)+COALESCE(LENGTH(ai_json),0)) AS b FROM runs GROUP BY project_id`),
+      one(`SELECT r.project_id, SUM(LENGTH(p.data_json)) AS b, COUNT(*) AS n FROM pages p JOIN runs r ON r.id = p.run_id GROUP BY r.project_id`),
+      one(`SELECT r.project_id, SUM(LENGTH(x.data)) AS b FROM run_blobs x JOIN runs r ON r.id = x.run_id GROUP BY r.project_id`),
+      one(`SELECT AVG(LENGTH(data_json)) AS a FROM (SELECT data_json FROM pages ORDER BY rowid DESC LIMIT 500)`),
+      one(`SELECT AVG(LENGTH(gsc_json)) AS g FROM (SELECT gsc_json FROM runs WHERE gsc_json IS NOT NULL ORDER BY created_at DESC LIMIT 20)`),
+    ]);
+    const per = {};
+    const add = (list, k) => list.forEach((r) => { const t = (per[r.project_id] ||= { runs: 0, run: 0, pages: 0, exports: 0, pagesCount: 0 }); t[k] += r.b || 0; if (k === 'run') t.runs = r.runs; if (k === 'pages') t.pagesCount = r.n; });
+    add(runs, 'run'); add(pages, 'pages'); add(blobs, 'exports');
+    const counted = Object.values(per).reduce((s, t) => s + t.run + t.pages + t.exports, 0);
+    const dbBytes = probe.meta?.size_after || counted;
+    let projects = [];
+    if (user.role === 'admin') {
+      const { results: names } = await DB.prepare('SELECT id, name FROM projects').all();
+      projects = names.map((p) => ({ id: p.id, name: p.name, ...(per[p.id] || { runs: 0, run: 0, pages: 0, exports: 0, pagesCount: 0 }) }))
+        .map((p) => ({ ...p, bytes: p.run + p.pages + p.exports })).sort((a, b) => b.bytes - a.bytes);
+    }
+    return json({
+      dbBytes, limitBytes: limitMb * 1024 * 1024, exact: !!probe.meta?.size_after,
+      avgPageBytes: Math.round(avgPage[0]?.a || 15000), avgRunBytes: Math.round(blobRate[0]?.g || 600000),
+      exportBytesPerRow: 14, projects,
+    });
+  }
+
   // settings
   if (path === '/api/settings' && method === 'PUT') {
     const b = await body(req);
