@@ -48,6 +48,16 @@ function hashParams() {
   return Object.fromEntries(new URLSearchParams(q));
 }
 
+// Testing-mode Google apps expire refresh tokens 7 days after consent.
+const TOKEN_DAYS = 7;
+function connStatus(c) {
+  const left = c.connected_at + TOKEN_DAYS * 86400000 - Date.now();
+  if (c.expired || left <= 0) return { expired: true, days: 0, html: '<span class="pill bad">Expired — reconnect</span>' };
+  const days = Math.ceil(left / 86400000);
+  return { expired: false, days, html: `<span class="pill ${days <= 2 ? 'warn' : 'good'}">Active · expires in ${days} day${days > 1 ? 's' : ''}</span>` };
+}
+const reconnectBtn = (c, cls = 'btn sm primary') => `<a class="${cls}" href="/auth/connect?hint=${encodeURIComponent(c.google_email)}">Reconnect</a>`;
+
 // ---------- charts ----------
 function lineChart(series, { height = 180, labels = [] } = {}) {
   const W = 800, H = height, P = { l: 44, r: 10, t: 10, b: 22 };
@@ -170,7 +180,9 @@ async function renderHome(err) {
   const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), api('/api/connections')]);
   const noConn = !connections.length
     ? `<div class="banner">👋 First, <a href="#/settings"><b>connect the Google account</b></a> that has access to Search Console / GA4. It can be a different account from the one you signed in with.</div>` : '';
-  app.innerHTML = `${err}${noConn}
+  const stale = connections.filter((c) => connStatus(c).expired || connStatus(c).days <= 1);
+  const expBanner = stale.length ? `<div class="banner err">⏳ Google access ${stale.length > 1 ? 'needs' : 'needs'} a refresh for ${stale.map((c) => `<b>${esc(c.google_email)}</b> ${reconnectBtn(c)}`).join(' ')} — takes 10 seconds.</div>` : '';
+  app.innerHTML = `${err}${noConn}${expBanner}
     <div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
     <div class="grid g3 section">${projects.map((p) => `
       <a class="card click" href="#/p/${p.id}" style="color:inherit;text-decoration:none">
@@ -196,10 +208,11 @@ async function renderSettings(err, p) {
         <h2>Google data accounts</h2>
         <p class="muted small">You're signed in as <b>${esc(me.user.email)}</b>. If GSC / GA4 access lives on a different Google account (e.g. a client or personal Gmail), connect that account here — read-only access. You can connect as many as you need.</p>
         ${connections.map((c) => `<div class="check"><div style="flex:1"><b>${esc(c.google_email)}</b>
-            <div class="small muted">${c.scopes?.includes('webmasters') ? 'Search Console ✓' : 'Search Console ✗'} · ${c.scopes?.includes('analytics') ? 'Analytics ✓' : 'Analytics ✗'} · added ${new Date(c.created_at).toLocaleDateString()}</div></div>
-            <button class="btn sm danger" data-del="${c.id}">Remove</button></div>`).join('') || '<p class="muted">No accounts connected yet.</p>'}
+            <div class="small muted">${c.scopes?.includes('webmasters') ? 'Search Console ✓' : 'Search Console ✗'} · ${c.scopes?.includes('analytics') ? 'Analytics ✓' : 'Analytics ✗'} · last connected ${new Date(c.connected_at).toLocaleDateString()}</div>
+            <div style="margin-top:4px">${connStatus(c).html}</div></div>
+            <div class="row" style="gap:6px">${reconnectBtn(c, connStatus(c).days <= 2 ? 'btn sm primary' : 'btn sm')}<button class="btn sm danger" data-del="${c.id}">Remove</button></div></div>`).join('') || '<p class="muted">No accounts connected yet.</p>'}
         <p><a class="btn primary" href="/auth/connect">+ Connect a Google account</a></p>
-        <p class="hint">Tip: on Google's screen pick the account that owns the properties and tick both permission boxes. To refresh access later, just connect the same account again.</p>
+        <p class="hint">Tip: on Google's screen pick the account that owns the properties and tick both permission boxes. While the Google app is in testing mode, access lasts 7 days. Click <b>Reconnect</b> when it expires. Your projects and history are kept.</p>
       </div>
       <div class="card">
         <h2>Gemini AI key</h2>
@@ -388,7 +401,9 @@ async function runAnalysis(project, days, maxPages) {
     setTimeout(() => (location.hash = `#/p/${project.id}?run=${run.id}`), 700);
   } catch (e) {
     log('Error: ' + e.message, 'no');
-    document.getElementById('p-step').textContent = 'Analysis failed';
+    document.getElementById('p-step').innerHTML = /expired/i.test(e.message)
+      ? `Google access expired — <a class="btn sm primary" href="/auth/connect">Reconnect</a> then run again`
+      : 'Analysis failed';
     if (run) api(`/api/runs/${run.id}/finish`, { method: 'POST', body: { error: e.message, summary: {} } }).catch(() => {});
   }
 }

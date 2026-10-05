@@ -20,7 +20,8 @@ You sign in with one account (e.g. your company email). Under **Settings → Con
 1. Go to https://console.cloud.google.com and create a project (e.g. `seo-insights`).
 2. **APIs & Services → Library**: enable **Google Search Console API**, **Google Analytics Data API** and **Google Analytics Admin API**.
 3. **OAuth consent screen**: pick **External**, fill in the app name and your email, and add the scopes `.../auth/webmasters.readonly` and `.../auth/analytics.readonly`.
-   Then click **Publish app** (set it to *In production*). If you skip this, Google expires the connection every 7 days. You don't need verification: people just see an "unverified app → Advanced → continue" screen once.
+   Leave it in **Testing** and add every Google account that will connect data (yours plus the GSC/GA account emails) under **Test users**.
+   In Testing mode Google expires the data connection 7 days after each connect. The tool shows "expires in N days" for each account in Settings. When access runs out, it puts a **Reconnect** banner on the dashboard, and Reconnect takes about 10 seconds. Projects and history are never lost. (Sign-in itself is not affected.)
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
    Authorised redirect URI: `https://<your-worker>.workers.dev/auth/callback` (add `http://localhost:8787/auth/callback` for local dev).
    Copy the Client ID and Client secret.

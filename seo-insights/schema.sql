@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS connections (
   access_expires INTEGER,
   scopes TEXT,
   created_at INTEGER,
+  connected_at INTEGER,
+  expired INTEGER DEFAULT 0,
   UNIQUE (owner_email, google_email)
 );
 

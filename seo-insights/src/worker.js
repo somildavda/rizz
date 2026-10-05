@@ -161,6 +161,7 @@ async function handleAuth(req, env, url) {
       prompt: mode === 'login' ? 'select_account' : 'consent select_account',
     });
     if (mode === 'connect') params.set('access_type', 'offline');
+    if (url.searchParams.get('hint')) params.set('login_hint', url.searchParams.get('hint'));
     return redirect(`${GOOGLE_AUTH}?${params}`);
   }
 
@@ -220,12 +221,13 @@ async function handleAuth(req, env, url) {
     const enc = await encrypt(env, tok.refresh_token);
     const accEnc = await encrypt(env, tok.access_token);
     await env.DB.prepare(
-      `INSERT INTO connections (id, owner_email, google_email, refresh_token_enc, access_token_enc, access_expires, scopes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO connections (id, owner_email, google_email, refresh_token_enc, access_token_enc, access_expires, scopes, created_at, connected_at, expired)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
        ON CONFLICT(owner_email, google_email) DO UPDATE SET refresh_token_enc = excluded.refresh_token_enc,
-         access_token_enc = excluded.access_token_enc, access_expires = excluded.access_expires, scopes = excluded.scopes`
+         access_token_enc = excluded.access_token_enc, access_expires = excluded.access_expires, scopes = excluded.scopes,
+         connected_at = excluded.connected_at, expired = 0`
     )
-      .bind(id(), st.email, email, enc, accEnc, now() + (tok.expires_in || 3600) * 1000, granted, now())
+      .bind(id(), st.email, email, enc, accEnc, now() + (tok.expires_in || 3600) * 1000, granted, now(), now())
       .run();
     return redirect('/#/settings?connected=' + encodeURIComponent(email));
   }
@@ -257,9 +259,10 @@ async function accessToken(env, connectionId) {
   });
   const tok = await res.json();
   if (!res.ok) {
+    if (tok.error === 'invalid_grant') await env.DB.prepare('UPDATE connections SET expired = 1 WHERE id = ?').bind(c.id).run();
     throw new HttpError(
       400,
-      `Google access for ${c.google_email} expired or was revoked (${tok.error}). Reconnect it in Settings.`
+      `Google access for ${c.google_email} has expired (Google limits testing-mode apps to 7 days). Go to Settings and click Reconnect.`
     );
   }
   await env.DB.prepare('UPDATE connections SET access_token_enc = ?, access_expires = ? WHERE id = ?')
@@ -361,7 +364,7 @@ async function handleApi(req, env, url) {
   // connections
   if (path === '/api/connections' && method === 'GET') {
     const { results } = await DB.prepare(
-      'SELECT id, google_email, scopes, created_at FROM connections WHERE owner_email = ? ORDER BY created_at'
+      'SELECT id, google_email, scopes, created_at, COALESCE(connected_at, created_at) AS connected_at, expired FROM connections WHERE owner_email = ? ORDER BY created_at'
     )
       .bind(user.email)
       .all();
