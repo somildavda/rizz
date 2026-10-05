@@ -3,6 +3,12 @@
 # Logs in to Cloudflare (browser) if needed, deploys, and sets a passcode saved in ~/seo-insights/.passcode
 set -e
 cd "$(dirname "$0")"
+# Use Node 22+ via nvm when the default node is too old (wrangler needs >=22)
+if [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -lt 22 ]; then
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  nvm install 22 >/dev/null && nvm use 22 >/dev/null && nvm alias default 22 >/dev/null
+fi
+node -v
 PASS_FILE="$HOME/seo-insights/.passcode"
 
 [ -d node_modules ] || npm install
