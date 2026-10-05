@@ -272,26 +272,28 @@ export function analyzePage(fetched, pageQueries = [], ga = null) {
 const EXPECTED_CTR = [0.3, 0.16, 0.1, 0.07, 0.05, 0.04, 0.03, 0.025, 0.02, 0.018];
 export const expectedCtr = (pos) => EXPECTED_CTR[Math.max(0, Math.round(pos) - 1)] ?? 0.01;
 
-export function opportunities(gsc, ga, pages) {
+export function opportunities(gsc, ga, pages, isBranded = () => false) {
   const out = {};
   const qs = gsc.queries || [];
   const impSorted = qs.map((q) => q.i).sort((a, b) => b - a);
   const impThreshold = Math.max(20, impSorted[Math.floor(impSorted.length * 0.25)] || 0);
 
-  out.quickWins = qs
+  // SEO opportunities are for non-branded demand only
+  const nb = qs.filter((q) => !isBranded(q.q));
+  out.quickWins = nb
     .filter((q) => q.p >= 4 && q.p <= 15 && q.i >= impThreshold)
     .sort((a, b) => b.i - a.i)
     .slice(0, 25)
     .map((q) => ({ ...q, page: bestPageFor(gsc, q.q) }));
 
-  out.lowCtr = qs
+  out.lowCtr = nb
     .filter((q) => q.p <= 6 && q.i >= impThreshold && q.ctr < expectedCtr(q.p) * 0.6)
     .map((q) => ({ ...q, expected: expectedCtr(q.p), lostClicks: Math.round(q.i * expectedCtr(q.p) - q.c), page: bestPageFor(gsc, q.q) }))
     .sort((a, b) => b.lostClicks - a.lostClicks)
     .slice(0, 25);
 
   const byQuery = {};
-  for (const r of gsc.pageQueries || []) (byQuery[r.q] ||= []).push(r);
+  for (const r of gsc.pageQueries || []) if (!isBranded(r.q)) (byQuery[r.q] ||= []).push(r);
   out.cannibalization = Object.entries(byQuery)
     .map(([q, rows]) => {
       const total = rows.reduce((s, r) => s + r.i, 0);

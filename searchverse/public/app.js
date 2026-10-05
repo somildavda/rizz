@@ -716,7 +716,8 @@ async function runAnalysis(project, opt) {
         const u = urls.shift();
         const f = await fetchUrl(u);
         let path = '/'; try { path = new URL(u).pathname; } catch {}
-        const res = analyzePage(f, pqByPage[u] || [], gaByPath[path] || null);
+        // content scoring & keyword gaps use non-branded queries only (SEO is for non-brand demand)
+        const res = analyzePage(f, (pqByPage[u] || []).filter((r) => !isBranded(r.q)), gaByPath[path] || null);
         res.gsc = gscPage[u] || null;
         if (moneySet.has(u)) res.money = true;
         pages.push(res);
@@ -730,7 +731,7 @@ async function runAnalysis(project, opt) {
     step('Scoring & finding opportunities', 78);
     const site = siteChecks(pages, robots, sitemap, project.site_url);
     const scores = overallScores(pages, site);
-    const opps = opportunities({ ...gsc, prevQueries: prevQ, prevPages: prevP }, ga, pages);
+    const opps = opportunities({ ...gsc, prevQueries: prevQ, prevPages: prevP }, ga, pages, isBranded);
     const movers = computeMovers(gsc.queries, prevQ, gsc.pages, prevP, pages, isBranded);
     const navTerms = [
       ...(opt.allGroups || []).map((g) => ({ term: g.name, src: 'LOB', i: 0 })),
@@ -907,17 +908,21 @@ async function renderLob(pid, params) {
     });
   }
   const partial = (c) => { const r = data.rows.find((x) => x.month === c.key); return r && r.days < c.full; };
+  // run-rate: for an incomplete month/week, project the total from the days with data so far
+  const daysFor = (gid, key) => byKey[gid + '|' + key]?.days || 0;
+  const projected = (v, gid, c) => { const d = daysFor(gid, c.key); return v != null && M.sum && d && d < c.full ? (v / d) * c.full : null; };
   const setQ = (k, v) => { const q = { ...params, [k]: v }; if (!v) delete q[k]; delete q.error; location.hash = `#/p/${pid}/lob?` + new URLSearchParams(q); };
   const lastUpdated = Math.max(0, ...data.rows.map((r) => r.updated_at || 0));
 
-  const rowCells = (vals) => {
+  const rowCells = (vals, gid) => {
     const nums = vals.filter((v) => v != null);
     const min = Math.min(...nums), max = Math.max(...nums);
-    return vals.map((v) => {
+    return vals.map((v, i) => {
       if (v == null) return '<td class="num lob-cell"></td>';
       let t = max > min ? (v - min) / (max - min) : 0.5;
       if (M.invert) t = 1 - t;
-      return `<td class="num lob-cell" style="background:${heat(t)};color:#1a1a1a">${M.fmt(v)}</td>`;
+      const est = gid ? projected(v, gid, cols[i]) : null;
+      return `<td class="num lob-cell" style="background:${heat(t)};color:#1a1a1a">${M.fmt(v)}${est ? `<div style="font-weight:500;font-size:11px">→ ~${M.fmt(est)} est.</div>` : ''}</td>`;
     }).join('');
   };
   const total = (list) => (M.sum ? list.reduce((s, r) => s + M.get(r), 0) : M.get(merge(list)));
@@ -932,7 +937,13 @@ async function renderLob(pid, params) {
   const allTot = allRecs.length ? total(allRecs) : null;
   const siteRecs = cols.map((c) => byKey['__site__|' + c.key]).filter(Boolean);
   const pathText = (p) => esc(p).replace(/\n/g, '<br>');
-  const lastVsPrev = (vals) => { const v = vals.filter((x) => x != null); return v.length >= 2 ? delta(v[v.length - 1], v[v.length - 2], { invert: M.invert }) : ''; };
+  const lastVsPrev = (vals, gid) => {
+    const idx = vals.map((x, i) => (x != null ? i : -1)).filter((i) => i >= 0);
+    if (idx.length < 2) return '';
+    const li = idx[idx.length - 1], pi = idx[idx.length - 2];
+    const est = gid ? projected(vals[li], gid, cols[li]) : null;
+    return delta(est ?? vals[li], vals[pi], { invert: M.invert }) + (est ? '<div class="small muted">run-rate</div>' : '');
+  };
 
   app.innerHTML = `<div class="row spread"><div><div class="small"><a href="#/p/${pid}">← ${esc(project.name)}</a></div><h1>LOB report</h1>
       <div class="muted small">${esc(project.gsc_property)}${data.hasGa ? ' · GA4: ' + esc(project.ga4_name || '') + ' (organic)' : ''}${lastUpdated ? ' · updated ' + date(lastUpdated) : ''}</div></div>
@@ -950,11 +961,11 @@ async function renderLob(pid, params) {
         ${data.isAdmin ? '<button class="btn primary" id="lob-edit2">+ Add URL groups</button>' : '<p class="muted small">Ask your admin to set up the groups.</p>'}</div>`
     : `<div class="card" style="padding:0"><div class="table-wrap"><table class="lob">
       <thead><tr><th>URLs grouped</th><th>Page path</th>${cols.map((c) => `<th class="num" title="${esc(c.sub || '')}">${c.label}${partial(c) ? ' *' : ''}${c.sub ? `<div style="font-weight:400;font-size:10px">${c.sub}</div>` : ''}</th>`).join('')}<th class="num">${M.sum ? 'Total' : 'All'}</th><th class="num">Last vs prev</th></tr></thead>
-      <tbody>${lines.map((l) => `<tr><td><b>${esc(l.g.name)}</b>${!cat && l.g.category ? `<div class="small muted">${esc(l.g.category)}</div>` : ''}</td><td class="small muted lob-path">${pathText(l.g.patterns)}</td>${rowCells(l.vals)}<td class="num"><b>${l.tot == null ? '' : M.fmt(l.tot)}</b></td><td class="num">${lastVsPrev(l.vals)}</td></tr>`).join('')}
+      <tbody>${lines.map((l) => `<tr><td><b>${esc(l.g.name)}</b>${!cat && l.g.category ? `<div class="small muted">${esc(l.g.category)}</div>` : ''}</td><td class="small muted lob-path">${pathText(l.g.patterns)}</td>${rowCells(l.vals, l.g.id)}<td class="num"><b>${l.tot == null ? '' : M.fmt(l.tot)}</b></td><td class="num">${lastVsPrev(l.vals, l.g.id)}</td></tr>`).join('')}
         <tr class="lob-total"><td colspan="2">Total (${cat || 'all groups'})</td>${totVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${allTot == null ? '' : M.fmt(allTot)}</td><td></td></tr>
-        ${!cat ? `<tr class="lob-site"><td colspan="2">Whole site</td>${siteVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${siteRecs.length ? M.fmt(total(siteRecs)) : ''}</td><td class="num">${lastVsPrev(siteVals)}</td></tr>` : ''}
+        ${!cat ? `<tr class="lob-site"><td colspan="2">Whole site</td>${siteVals.map((v, i) => { const e = projected(v, '__site__', cols[i]); return `<td class="num">${v == null ? '' : M.fmt(v)}${e ? `<div class="small">→ ~${M.fmt(e)} est.</div>` : ''}</td>`; }).join('')}<td class="num">${siteRecs.length ? M.fmt(total(siteRecs)) : ''}</td><td class="num">${lastVsPrev(siteVals, '__site__')}</td></tr>` : ''}
       </tbody></table></div></div>
-      <p class="hint">Colours compare ${view === 'week' ? 'weeks' : 'months'} within each row (red = lowest, green = highest${M.invert ? '; lower is better here' : ''}). * = not complete yet. "Last vs prev" compares the latest ${view} with the one before.
+      <p class="hint">Colours compare ${view === 'week' ? 'weeks' : 'months'} within each row (red = lowest, green = highest${M.invert ? '; lower is better here' : ''}). * = not complete yet; “→ ~X est.” is the run-rate (so far ÷ days with data × days in the ${view}), and “Last vs prev” uses it. "Last vs prev" compares the latest ${view} with the one before.
       Totals add up the groups, so a URL in two groups is counted twice — compare with "Whole site". GA4 numbers are organic sessions by landing page.
       ${data.rows.length ? '' : '<br><b>No data yet — click “Refresh”.</b>'} Every refresh is saved, so history beyond Search Console's 16 months stays here.</p>`}`;
 
@@ -1152,7 +1163,8 @@ async function renderUrls(pid, params) {
   const tile = (label, v, pv, f = fmt, opt = {}) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${f(v)}</div>${delta(v, pv, opt) || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const hasGa = !!project.ga4_property, hasLead = !!project.lead_event;
   const totS = sum('s'), totB = list.reduce((t, x) => t + (x.ga?.bounced || 0), 0), ptotS = sum('ps'), ptotB = list.reduce((t, x) => t + (x.pga?.bounced || 0), 0);
-  const cell = (v, pv, f = fmt, opt) => `${f(v)}<div class="small">${delta(v, pv, opt)}</div>`;
+  CMP.cur = per.label; CMP.prev = gran === 'month' ? periodLabel(prev.start, prev.end) : periodLabel(prev.start, prev.end);
+  const cell = dcell;
 
   document.getElementById('u-body').outerHTML = `<div class="grid kpis section">
       ${tile('Clicks', sum('c'), sum('pc'))}${tile('Impressions', sum('i'), sum('pi'))}
@@ -1198,25 +1210,35 @@ async function urlQueries(pid, project, x, per, prev, isBranded) {
       projGsc(pid, { startDate: prev.start, endDate: prev.end, dimensions: ['query'], page: x.url }, 25000),
     ]);
     const p = Object.fromEntries(old.map((r) => [r.keys[0], r]));
-    const rows = cur.map((r) => ({ q: r.keys[0], c: r.clicks, i: r.impressions, ctr: r.ctr, pos: r.position, pc: p[r.keys[0]]?.clicks ?? null, ppos: p[r.keys[0]]?.position ?? null, b: isBranded(r.keys[0]) }));
+    const rows = cur.map((r) => ({ q: r.keys[0], c: r.clicks, i: r.impressions, ctr: r.ctr, pos: r.position, pc: p[r.keys[0]]?.clicks ?? 0, pi: p[r.keys[0]]?.impressions ?? 0, ppos: p[r.keys[0]]?.position ?? null, b: isBranded(r.keys[0]) }))
+      .sort((a, b) => a.b - b.b || b.i - a.i); // non-branded first
     const split = brandSplit(rows, (q) => isBranded(q));
     const tot = split.branded.c + split.nonBranded.c;
+    const curL = periodLabel(per.start, per.end), prevL = periodLabel(prev.start, prev.end);
+    const qTable = (list) => table([
+      { key: 'q', label: 'Query', render: (r) => `${esc(r.q)} ${r.b ? '<span class="pill info">Branded</span>' : '<span class="pill good">Non-branded</span>'}`, text: (r) => r.q },
+      { key: 'c', label: `Clicks ${esc(curL)}`, num: 1, render: (r) => fmt(r.c) },
+      { key: 'pc', label: esc(prevL), num: 1, render: (r) => `<span class="muted">${fmt(r.pc)}</span>` },
+      { key: 'd', label: 'Δ', num: 1, render: (r) => `${delta(r.c, r.pc) || '<span class="muted">new</span>'}`, sort: (r) => r.c - r.pc },
+      { key: 'i', label: 'Impr.', num: 1, render: (r) => `${fmt(r.i)} <div class="small">${delta(r.i, r.pi)}</div>` },
+      { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
+      { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)} <span class="small muted">(${r.ppos == null ? '–' : fmt(r.ppos, 1)})</span>` },
+    ], list, { limit: 2000 });
     openDrawer(`<h2 style="word-break:break-all"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url)}</a></h2>
-      <div class="muted small">${per.start} → ${per.end} vs ${prev.start} → ${prev.end}${x.lob ? ' · LOB: ' + esc(x.lob) : ''}</div>
+      <div class="muted small">${esc(curL)} vs ${esc(prevL)}${x.lob ? ' · LOB: ' + esc(x.lob) : ''}</div>
       <div class="grid kpis section">
-        <div class="card kpi"><div class="label">Queries</div><div class="value">${fmt(rows.length)}</div></div>
         <div class="card kpi"><div class="label">Non-branded clicks</div><div class="value">${fmt(split.nonBranded.c)}</div><span class="small muted">${pct(split.nonBranded.c / Math.max(1, tot))} · ${fmt(split.nonBranded.n)} queries</span></div>
         <div class="card kpi"><div class="label">Branded clicks</div><div class="value">${fmt(split.branded.c)}</div><span class="small muted">${pct(split.branded.c / Math.max(1, tot))} · ${fmt(split.branded.n)} queries</span></div>
-        ${x.ga ? `<div class="card kpi"><div class="label">Sessions</div><div class="value">${fmt(x.s)}</div><span class="small muted">bounce ${pct(x.br)} · ${fmt(x.ke)} key events</span></div>` : ''}
+        ${x.ga ? `<div class="card kpi"><div class="label">Organic sessions</div><div class="value">${fmt(x.s)}</div><span class="small muted">bounce ${pct(x.br)} · ${fmt(x.ke)} key events</span></div>` : ''}
       </div>
       ${project.brand_terms ? '' : '<div class="banner">Add brand terms in project settings to tag branded queries.</div>'}
-      <div class="card section">${table([
-        { key: 'q', label: 'Query', render: (r) => `${esc(r.q)} ${r.b ? '<span class="pill info">Branded</span>' : '<span class="pill good">Non-branded</span>'}`, text: (r) => `${r.q} ${r.b ? 'branded' : 'non-branded'}` },
-        { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} ${delta(r.c, r.pc)}` },
-        { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) },
-        { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
-        { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)}${r.ppos ? ` <span class="small muted">(${fmt(r.ppos, 1)})</span>` : ''}` },
-      ], rows, { limit: 2000 })}<p class="hint">Type <b>non-branded</b> or <b>branded</b> in the filter to see one group. Brackets show last period's position.</p></div>`);
+      <div class="card section"><div class="seg" style="margin-bottom:12px"><button class="on" data-qf="nb">Non-branded (${fmt(split.nonBranded.n)})</button><button data-qf="b">Branded (${fmt(split.branded.n)})</button><button data-qf="all">All</button></div>
+        <div id="qf-box">${qTable(rows.filter((r) => !r.b))}</div><p class="hint">Brackets show the ${esc(prevL)} position.</p></div>`);
+    document.querySelectorAll('[data-qf]').forEach((btn) => (btn.onclick = () => {
+      document.querySelectorAll('[data-qf]').forEach((x2) => x2.classList.toggle('on', x2 === btn));
+      const f = btn.dataset.qf;
+      document.getElementById('qf-box').innerHTML = qTable(rows.filter((r) => (f === 'all' ? true : f === 'b' ? r.b : !r.b)));
+    }));
   } catch (e) {
     openDrawer(`<div class="banner err">${esc(e.message)}</div>`);
   }
@@ -1287,16 +1309,17 @@ async function renderProject(pid, runId) {
 
 function renderRun(project, { run, pages }, runs, head) {
   const s = run.summary, k = s.kpis, gsc = run.gsc, ga = run.ga;
+  CMP.cur = periodLabel(run.start_date, run.end_date); CMP.prev = periodLabel(run.prev_start, run.prev_end);
   pages.sort((a, b) => (b.gsc?.c || 0) - (a.gsc?.c || 0) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
     <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
-      <div class="score">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
-      <div class="score">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
-      <div class="score">${ring(s.scores.content)}<div><b>Content</b><div class="muted small">Query coverage & depth</div></div></div>
-      <div class="score">${ring(s.scores.technical)}<div><b>Technical</b><div class="muted small">Indexability, sitemap, robots</div></div></div>
+      <div class="score click-score" data-score="overall">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
+      <div class="score click-score" data-score="onpage">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
+      <div class="score click-score" data-score="content">${ring(s.scores.content)}<div><b>Content</b><div class="muted small">Query coverage & depth</div></div></div>
+      <div class="score click-score" data-score="technical">${ring(s.scores.technical)}<div><b>Technical</b><div class="muted small">Indexability, sitemap, robots</div></div></div>
     </div></div>
     <div class="grid kpis section">
       ${kpi('Clicks', fmt(k.clicks), delta(k.clicks, k.prev?.clicks))}
@@ -1307,11 +1330,12 @@ function renderRun(project, { run, pages }, runs, head) {
       ${k.keyEvents != null ? kpi('Organic key events', fmt(k.keyEvents), delta(k.keyEvents, k.prevKeyEvents)) : ''}
       ${s.brand ? kpi('Non-branded clicks', fmt(s.brand.nonBranded.c), `<span class="small muted">${pct(s.brand.nonBranded.c / Math.max(1, s.brand.nonBranded.c + s.brand.branded.c))} of clicks</span>`) + kpi('Branded clicks', fmt(s.brand.branded.c), `<span class="small muted">${fmt(s.brand.branded.n)} queries</span>`) : ''}
     </div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="small muted" style="margin-right:auto">Tip: click any score or number for the breakdown.</span><button class="btn" id="xlsx-btn">⬇ Excel report</button></div>
     <div class="tabs">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}">${t}</button>`).join('')}</div>
     <div id="tab"></div>`;
   const views = {
     Insights: () => viewInsights(project, run, pages),
-    'GSC + GA': () => viewGscGa(run, pages),
+    'GSC + GA': () => viewGscGa(run, pages, project),
     GSC: () => viewGsc(run, pages),
     GA: () => viewGa(run),
     'Quick wins': () => viewQuick(s.opps, pages),
@@ -1326,6 +1350,15 @@ function renderRun(project, { run, pages }, runs, head) {
     bindTab(project, run, pages);
   };
   app.querySelectorAll('.tab').forEach((b) => (b.onclick = () => show(b.dataset.t)));
+  // score cards (and the cards inside the overall drawer) open their breakdown
+  scoreCtx = { run, pages };
+  // KPI tiles jump to the matching tab
+  app.querySelectorAll('.kpis .kpi').forEach((el) => { el.classList.add('click'); el.onclick = () => show(/session|key event/i.test(el.textContent) ? 'GA' : 'GSC'); });
+  document.getElementById('xlsx-btn').onclick = async (e) => {
+    e.target.disabled = true; e.target.textContent = 'Building…';
+    try { await exportExcel(project, run, pages); } catch (err) { toast(err.message); }
+    e.target.disabled = false; e.target.textContent = '⬇ Excel report';
+  };
   show('Insights');
 }
 
@@ -1440,9 +1473,205 @@ function moversFor(run, pages) {
   const g = run.gsc;
   return computeMovers(g.queries, g.prevQueries, g.pages, g.prevPages, pages, brandTester(s.brand?.terms));
 }
-const dcell = (v, pv, f = fmt, opt) => `${v == null ? '–' : f(v)}<div class="small">${delta(v, pv, opt)}</div>`;
+// short labels like "Sep" / "Aug" (or date spans) used in every comparison cell
+const CMP = { cur: '', prev: '' };
+function periodLabel(a, b) {
+  const s = new Date(a + 'T00:00:00Z'), e = new Date(b + 'T00:00:00Z');
+  const mo = (d) => d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' });
+  const lastDay = new Date(Date.UTC(e.getUTCFullYear(), e.getUTCMonth() + 1, 0)).getUTCDate();
+  if (s.getUTCDate() === 1 && s.getUTCMonth() === e.getUTCMonth() && s.getUTCFullYear() === e.getUTCFullYear()) return mo(s) + (e.getUTCDate() === lastDay ? '' : ' (MTD)') + " '" + String(s.getUTCFullYear()).slice(2);
+  const f = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return `${f(s)}–${f(e)}`;
+}
+const dcell = (v, pv, f = fmt, opt) => `<span class="nowrap">${v == null ? '–' : f(v)}</span>${pv == null ? '' : `<div class="small nowrap"><span class="muted">${esc(CMP.prev)}: ${f(pv)}</span> ${delta(v, pv, opt)}</div>`}`;
 
-function viewGscGa(run, pages) {
+// ---------- score breakdowns & technical action items ----------
+let scoreCtx = null;
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-score]');
+  if (el && scoreCtx) scoreDetail(el.dataset.score, scoreCtx.run, scoreCtx.pages);
+});
+const CHECK_META = {
+  status: ['dev', 'Return HTTP 200 (or 301 to the right page) and remove broken URLs from sitemap & internal links'],
+  redirect: ['dev', 'Link straight to the final URL; update internal links and sitemap to skip the redirect'],
+  index: ['dev', 'Remove noindex (meta robots / X-Robots-Tag) if the page should rank'],
+  https: ['dev', 'Serve over HTTPS and 301 all HTTP URLs to HTTPS'],
+  canonical: ['dev', 'Add <link rel="canonical"> pointing to the preferred URL'],
+  'canon-self': ['seo', 'Check the canonical target — self-reference unless consolidating on purpose'],
+  viewport: ['dev', 'Add <meta name="viewport" content="width=device-width, initial-scale=1">'],
+  lang: ['dev', 'Add a lang attribute to <html> (e.g. lang="en-IN")'],
+  speed: ['dev', 'Cut server response time below 1.5 s (caching, CDN, backend)'],
+  size: ['dev', 'Reduce HTML size: move inline scripts/styles out, trim markup'],
+  js: ['dev', 'Server-side render or pre-render the main content so bots see it without JavaScript'],
+  title: ['seo', 'Write a unique 30–60 character title starting with the main non-branded keyword'],
+  'title-len': ['seo', 'Rewrite the title to 30–60 characters, keyword first'],
+  desc: ['seo', 'Write a 140–155 character meta description: keyword + benefit + CTA'],
+  'desc-len': ['seo', 'Rewrite the meta description to 140–155 characters'],
+  og: ['seo', 'Add og:title and og:image for social sharing'],
+  h1: ['seo', 'Use exactly one H1 containing the main non-branded keyword'],
+  h2: ['content', 'Add H2 subheadings for the sub-topics people search for'],
+  schema: ['seo', 'Add relevant JSON-LD (Product / FAQPage / Article / BreadcrumbList)'],
+  internal: ['seo', 'Add at least 5 contextual internal links to related pages'],
+  alt: ['content', 'Add descriptive alt text to images'],
+  words: ['content', 'Expand the copy to cover the page’s queries (aim for 600+ useful words)'],
+  'topq-title': ['seo', 'Add the top non-branded query to the title'],
+  'topq-h1': ['seo', 'Add the top non-branded query to the H1'],
+};
+function checkActions(pages, cats) {
+  const ok = pages.filter((p) => p.checks?.length);
+  const totalImp = ok.reduce((s, p) => s + (p.gsc?.i || 0), 0) || 1;
+  const by = {};
+  for (const p of ok) for (const c of p.checks) {
+    if (cats && !cats.includes(c.cat)) continue;
+    const id = c.id.startsWith('topq') ? c.id : c.id;
+    const t = (by[id] ||= { id, label: c.label.replace(/: “.*”$/, ''), cat: c.cat, weight: c.weight, fail: [], checked: 0 });
+    t.checked++;
+    if (c.val < 1) t.fail.push(p);
+  }
+  return Object.values(by).filter((t) => t.fail.length).map((t) => {
+    const imp = t.fail.reduce((s, p) => s + (p.gsc?.i || 0), 0);
+    const share = imp / totalImp, rate = t.fail.length / t.checked;
+    const money = t.fail.filter((p) => p.money).length;
+    const score = t.weight * (share * 2 + rate) + (money ? 2 : 0);
+    const impact = score >= 6 || (t.weight >= 5 && share >= 0.2) ? 'High' : score >= 2.5 ? 'Medium' : 'Low';
+    const [owner, fix] = CHECK_META[t.id] || ['seo', ''];
+    return { ...t, imp, share, rate, money, impact, owner, fix, score, examples: [...t.fail].sort((a, b) => (b.gsc?.i || 0) - (a.gsc?.i || 0)).slice(0, 5) };
+  }).sort((a, b) => b.score - a.score);
+}
+const impactPill2 = (v) => `<span class="pill ${v === 'High' ? 'bad' : v === 'Medium' ? 'warn' : 'info'}">${v}</span>`;
+function actionsTable(list, pages) {
+  return table([
+    { key: 'impact', label: 'Impact', render: (t) => impactPill2(t.impact), sort: (t) => t.score },
+    { key: 'label', label: 'Issue', render: (t) => `<b>${esc(t.label)}</b><div class="small muted">${esc(t.fix)}</div>` },
+    { key: 'owner', label: 'Owner', render: (t) => `<span class="pill">${t.owner}</span>` },
+    { key: 'n', label: 'Pages', num: 1, render: (t) => `${fmt(t.fail.length)}<div class="small muted">of ${fmt(t.checked)}${t.money ? ` · 💰${t.money}` : ''}</div>`, sort: (t) => t.fail.length },
+    { key: 'imp', label: 'Impr. affected', num: 1, render: (t) => `${fmt(t.imp)}<div class="small muted">${pct(t.share)}</div>` },
+    { key: 'ex', label: 'Example pages', render: (t) => t.examples.slice(0, 3).map((p) => pageLink(p.url, pages)).join('<br>') },
+  ], list, { filter: false, limit: 100 });
+}
+function scoreDetail(kind, run, pages) {
+  const s = run.summary;
+  const head = (t, v, sub) => `<div class="row" style="gap:16px">${ring(v, true)}<div><h2 style="margin:0">${t}</h2><div class="muted small">${sub}</div></div></div>`;
+  if (kind === 'overall') {
+    return openDrawer(`${head('Overall SEO score', s.scores.overall, 'Weighted: 40% on-page + 40% content + 20% technical. Pages count more when they get more impressions.')}
+      <div class="grid kpis section">${[['onpage', 'On-page', s.scores.onpage], ['content', 'Content', s.scores.content], ['technical', 'Technical', s.scores.technical]].map(([k, l, v]) => `<div class="card kpi click" data-score="${k}"><div class="label">${l}</div><div class="value">${v}</div><span class="small muted">open breakdown →</span></div>`).join('')}</div>
+      <div class="card section"><h3>Biggest fixes across the site</h3>${actionsTable(checkActions(pages).slice(0, 10), pages)}</div>`);
+  }
+  if (kind === 'onpage') {
+    return openDrawer(`${head('On-page score', s.scores.onpage, 'Titles, meta descriptions, headings, schema, internal links, images, content length — per page, weighted by impressions.')}
+      <div class="card section"><h3>Issues by impact</h3>${actionsTable(checkActions(pages, ['Meta', 'Structure', 'Content']), pages)}</div>
+      <div class="card section"><h3>Lowest on-page pages (by impressions)</h3>${table([{ key: 'url', label: 'Page', render: (p) => pageLink(p.url, pages) }, { key: 'onpage_score', label: 'Score', num: 1, render: (p) => `<span class="pill ${pillFor(p.onpage_score)}">${p.onpage_score}</span>` }, { key: 'i', label: 'Impr.', num: 1, render: (p) => fmt(p.gsc?.i), sort: (p) => p.gsc?.i || 0 }], pages.filter((p) => p.meta && p.onpage_score < 80).sort((a, b) => (b.gsc?.i || 0) - (a.gsc?.i || 0)).slice(0, 30), { filter: false })}</div>`);
+  }
+  if (kind === 'content') {
+    const rows = pages.filter((p) => p.meta).map((p) => ({ p, gaps: (p.queries || []).filter((q) => q.score < 60).slice(0, 3) })).filter((x) => x.gaps.length).sort((a, b) => (b.p.gsc?.i || 0) - (a.p.gsc?.i || 0)).slice(0, 40);
+    return openDrawer(`${head('Content score', s.scores.content, 'How well each page targets the non-branded queries it ranks for (title, H1, headings, meta, intro, body) plus content depth.')}
+      <div class="card section"><h3>Pages missing their non-branded keywords</h3>${table([
+        { key: 'url', label: 'Page', render: (x) => pageLink(x.p.url, pages) },
+        { key: 'score', label: 'Content', num: 1, render: (x) => `<span class="pill ${pillFor(x.p.content_score)}">${x.p.content_score}</span>`, sort: (x) => x.p.content_score },
+        { key: 'gaps', label: 'Keyword → missing from', render: (x) => x.gaps.map((q) => `<div class="small"><b>${esc(q.query)}</b> <span class="muted">(${fmt(q.impressions)} impr)</span> → ${esc(missingSpots(q).join(', ') || 'weak coverage')}</div>`).join('') },
+      ], rows, { filter: false })}</div>`);
+  }
+  // technical
+  const modes = s.renderModes || {};
+  return openDrawer(`${head('Technical score', s.scores.technical, 'Site checks (robots.txt, sitemap, duplicates, status codes, indexability) plus page-level technical checks.')}
+    <div class="card section"><h3>Site checks</h3>${s.site.checks.map((c) => `<div class="check"><span class="dot ${c.val >= 1 ? 'good' : c.val > 0 ? 'warn' : 'bad'}">${c.val >= 1 ? '✓' : c.val > 0 ? '!' : '✗'}</span><div><div>${esc(c.label)}</div><div class="small muted">${esc(c.detail)}</div></div></div>`).join('')}</div>
+    ${Object.keys(modes).length ? `<div class="card section"><h3>Rendering</h3><p>${Object.entries(modes).map(([k, v]) => `<span class="pill ${k === 'CSR' ? 'bad' : 'good'}">${esc(k)}: ${v}</span>`).join(' ')}</p></div>` : ''}
+    <div class="card section"><h3>Technical action items</h3>${actionsTable(checkActions(pages, ['Technical']), pages)}</div>`);
+}
+
+// ---------- Excel export ----------
+function loadXlsx() {
+  if (window.XLSX?.utils && window.XLSX.__styled) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = '/vendor/xlsx.bundle.js';
+    sc.onload = () => { window.XLSX.__styled = true; res(window.XLSX); };
+    sc.onerror = () => rej(new Error('Could not load the Excel library'));
+    document.head.appendChild(sc);
+  });
+}
+async function exportExcel(project, run, pages) {
+  const X = await loadXlsx();
+  const s = run.summary, k = s.kpis;
+  const isB = brandTester(s.brand?.terms || project.brand_terms);
+  const wb = X.utils.book_new();
+  const border = { top: { style: 'thin', color: { rgb: 'E3E6EE' } }, bottom: { style: 'thin', color: { rgb: 'E3E6EE' } }, left: { style: 'thin', color: { rgb: 'E3E6EE' } }, right: { style: 'thin', color: { rgb: 'E3E6EE' } } };
+  const HEAD = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4F46E5' } }, alignment: { vertical: 'center', wrapText: true }, border };
+  const FILL = { High: 'FDE2E1', Medium: 'FEF3C7', Low: 'E0E7FF' };
+  const sheet = (name, header, rows, widths, opts = {}) => {
+    const ws = X.utils.aoa_to_sheet([header, ...rows]);
+    const range = X.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; R++) for (let C = range.s.c; C <= range.e.c; C++) {
+      const a = X.utils.encode_cell({ r: R, c: C });
+      if (!ws[a]) ws[a] = { t: 's', v: '' };
+      if (R === 0) { ws[a].s = HEAD; continue; }
+      const st = { alignment: { vertical: 'top', wrapText: true }, border };
+      const v = ws[a].v;
+      if (opts.priorityCol === C && FILL[v]) st.fill = { fgColor: { rgb: FILL[v] } }, (st.font = { bold: true });
+      if (typeof v === 'number') { st.numFmt = opts.pctCols?.includes(C) ? '0.0%' : Number.isInteger(v) ? '#,##0' : '#,##0.0'; st.alignment = { vertical: 'top', horizontal: 'right' }; }
+      if (R % 2 === 0) st.fill ||= { fgColor: { rgb: 'F7F8FC' } };
+      ws[a].s = st;
+    }
+    ws['!cols'] = widths.map((w) => ({ wch: w }));
+    ws['!rows'] = [{ hpt: 28 }];
+    ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: range.e.r, c: range.e.c } }) };
+    X.utils.book_append_sheet(wb, ws, name);
+  };
+  const cur = CMP.cur, prev = CMP.prev;
+  const kp = (l, a, b, pctFmt) => [l, a ?? '', b ?? '', a != null && b ? (a - b) / b : ''];
+  sheet('Summary', ['Metric', cur, prev, 'Change %'], [
+    ['Project', project.name, '', ''], ['Period', `${run.start_date} → ${run.end_date}`, `${run.prev_start} → ${run.prev_end}`, ''],
+    ['Scope', s.scope || 'Whole site', '', ''], ['Overall SEO score', s.scores.overall, '', ''], ['On-page score', s.scores.onpage, '', ''], ['Content score', s.scores.content, '', ''], ['Technical score', s.scores.technical, '', ''],
+    kp('Clicks', k.clicks, k.prev?.clicks), kp('Impressions', k.impressions, k.prev?.impressions), kp('CTR', k.ctr, k.prev?.ctr), kp('Avg position', k.position, k.prev?.position),
+    kp('Organic sessions (GA4)', k.sessions, k.prevSessions), kp('Organic key events (GA4)', k.keyEvents, k.prevKeyEvents),
+    ...(s.brand ? [kp('Non-branded clicks', s.brand.nonBranded.c, s.prevBrand?.nonBranded.c), kp('Branded clicks', s.brand.branded.c, s.prevBrand?.branded.c)] : []),
+  ], [32, 26, 26, 12], { pctCols: [3] });
+
+  // keyword placement — non-branded only
+  const kw = [];
+  for (const p of pages) for (const q of p.queries || []) {
+    if (isB(q.query) || q.score >= 80 || q.impressions < 10) continue;
+    const miss = missingSpots(q);
+    const actions = [];
+    if (q.inTitle < 1) actions.push('Add to title');
+    if (q.inMeta < 1) actions.push('Add to meta description');
+    if (q.inH1 < 1) actions.push('Add to H1');
+    if (q.inH2 < 0.6) actions.push('Add an H2 for it');
+    if (!q.bodyCount) actions.push('Write a 100–150 word section using the exact phrase');
+    else if (q.inFirst100 < 0.6) actions.push('Mention it in the first 100 words');
+    const pr = q.position >= 4 && q.position <= 20 && q.impressions >= 500 ? 'High' : q.impressions >= 200 ? 'Medium' : 'Low';
+    kw.push([pr, p.url, q.query, q.impressions, q.clicks, +(+q.position).toFixed(1), q.inTitle >= 1 ? 'Yes' : 'No', q.inMeta >= 1 ? 'Yes' : 'No', q.inH1 >= 1 ? 'Yes' : 'No', q.inH2 >= 0.6 ? 'Yes' : 'No', q.bodyCount, q.score, actions.join('; '), p.money ? 'Yes' : '']);
+  }
+  kw.sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a[0]] - { High: 0, Medium: 1, Low: 2 }[b[0]]) || b[3] - a[3]);
+  sheet('Keyword placement (non-brand)', ['Priority', 'URL', 'Non-branded keyword', 'Impressions', 'Clicks', 'Position', 'In title', 'In meta', 'In H1', 'In H2', 'Times in copy', 'Coverage score', 'Action', 'Money page'], kw, [10, 50, 34, 12, 10, 9, 8, 8, 8, 8, 10, 10, 60, 10], { priorityCol: 0 });
+
+  const acts = checkActions(pages);
+  sheet('Technical action items', ['Impact', 'Issue', 'Category', 'Owner', 'Fix', 'Pages affected', 'Pages checked', 'Impressions affected', 'Share of impressions', 'Money pages affected', 'Example URLs'],
+    acts.map((t) => [t.impact, t.label, t.cat, t.owner, t.fix, t.fail.length, t.checked, t.imp, t.share, t.money, t.examples.map((p) => p.url).join('\n')]),
+    [10, 34, 12, 9, 50, 10, 10, 14, 12, 12, 60], { priorityCol: 0, pctCols: [8] });
+  const siteRows = (s.site?.checks || []).filter((c) => c.val < 1).map((c) => [c.weight >= 4 ? 'High' : 'Medium', c.label, 'Site', 'dev', c.detail]);
+  if (siteRows.length) {
+    const ws = wb.Sheets['Technical action items'];
+    X.utils.sheet_add_aoa(ws, siteRows, { origin: -1 });
+  }
+  sheet('Page audit', ['URL', 'Money page', 'On-page', 'Content', 'Rendering', 'Framework', 'Words', 'Title', 'Title length', 'Meta length', 'H1', 'Schema', 'Internal links', 'External links', 'Clicks', 'Impressions', 'Position', 'Failed checks'],
+    pages.filter((p) => p.meta).map((p) => [p.url, p.money ? 'Yes' : '', p.onpage_score, p.content_score, p.meta.renderMode || '', p.meta.framework || '', p.meta.wordCount, p.meta.title, (p.meta.title || '').length, (p.meta.description || '').length, (p.meta.h1s || []).join(' | '), (p.meta.schemaTypes || []).join(', '), p.meta.internalLinks, p.meta.externalLinks, p.gsc?.c ?? '', p.gsc?.i ?? '', p.gsc?.p ?? '', p.checks.filter((c) => c.val < 1).map((c) => c.label).join('; ')]),
+    [50, 8, 8, 8, 14, 10, 8, 40, 8, 8, 34, 24, 9, 9, 10, 12, 8, 60]);
+  sheet('Quick wins (non-brand)', ['Query', 'Ranking page', 'Position', 'Impressions', 'Clicks', 'CTR', 'Type'],
+    [...s.opps.quickWins.filter((q) => !isB(q.q)).map((q) => [q.q, q.page || '', q.p, q.i, q.c, q.ctr, 'Striking distance (pos 4–15)']),
+     ...s.opps.lowCtr.filter((q) => !isB(q.q)).map((q) => [q.q, q.page || '', q.p, q.i, q.c, q.ctr, `Low CTR (expected ${Math.round(q.expected * 100)}%)`])],
+    [34, 50, 9, 12, 10, 8, 26], { pctCols: [5] });
+  if (s.links?.suggestions?.length) sheet('Internal links', ['Add link on page', 'Anchor text', 'Link to', 'Target impressions', 'Target position', 'Target is money page'],
+    s.links.suggestions.map((l) => [l.from, l.anchor, l.to, l.impressions, +(+l.position).toFixed(1), l.toMoney ? 'Yes' : '']), [50, 30, 50, 14, 12, 12]);
+  const m = moversFor(run, pages);
+  const mv = (r, dir, type) => [type, dir, r.k, r.c, r.pc, r.c - r.pc, r.pc ? (r.c - r.pc) / r.pc : '', r.p ?? '', r.pp ?? ''];
+  sheet('Gainers & losers', ['Type', 'Direction', 'Query / page', `Clicks ${cur}`, `Clicks ${prev}`, 'Change', 'Change %', `Pos ${cur}`, `Pos ${prev}`],
+    [...m.queriesUp.map((r) => mv(r, 'Up', 'Query')), ...m.queriesDown.map((r) => mv(r, 'Down', 'Query')), ...m.pagesUp.map((r) => mv(r, 'Up', 'Page')), ...m.pagesDown.map((r) => mv(r, 'Down', 'Page'))],
+    [8, 9, 50, 12, 12, 10, 10, 9, 9], { pctCols: [6] });
+  X.writeFile(wb, `${project.name.replace(/[^\w.-]+/g, '-')}-SEO-${run.start_date}-to-${run.end_date}.xlsx`);
+}
+
+function viewGscGa(run, pages, project) {
   const s = run.summary, g = run.gsc, ga = run.ga, match = scopeOf(s);
   const origin = new URL(run.gsc.pages[0]?.u || 'https://x.invalid').origin;
   const rows = {};
@@ -1470,23 +1699,23 @@ function viewGscGa(run, pages) {
         { key: 'ke', label: 'Key events', num: 1, render: (x) => dcell(x.ke, hasPrevGa ? x.pke : null) },
       ] : []),
       { key: 'onpage', label: 'On-page', num: 1, render: (x) => (x.onpage == null ? '<span class="muted">–</span>' : `<span class="pill ${pillFor(x.onpage)}">${x.onpage}</span>`), sort: (x) => x.onpage ?? -1 },
-    ], list, { limit: 1000 })}</div>`;
+    ], list, { limit: 1000, onRow: (x) => urlQueries(project.id, project, { url: x.url, lob: '', ga: x.s ? 1 : null, s: x.s, br: x.br, ke: x.ke },
+      { start: run.start_date, end: run.end_date }, { start: run.prev_start, end: run.prev_end }, brandTester(s.brand?.terms || project.brand_terms)) })}
+    <p class="hint">Click a page to see its queries (non-branded first).</p></div>`;
 }
 
 function moversTables(m, pages) {
-  const qt = (rows) => table([
-    { key: 'k', label: 'Query', render: (r) => `${esc(r.k)} ${r.b ? '<span class="pill info">Branded</span>' : ''}` },
-    { key: 'd', label: 'Δ Clicks', num: 1, render: (r) => `<b class="${r.d >= 0 ? 'up' : 'down'}">${r.d >= 0 ? '+' : ''}${fmt(r.d)}</b>` },
-    { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.pc)}</span>` },
-    { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p == null ? '–' : fmt(r.p, 1)} <span class="muted small">from ${r.pp == null ? '–' : fmt(r.pp, 1)}</span>` },
-  ], rows, { filter: false });
-  const pt = (rows) => table([
-    { key: 'k', label: 'Page', render: (r) => pageLink(r.k, pages) },
-    { key: 'd', label: 'Δ Clicks', num: 1, render: (r) => `<b class="${r.d >= 0 ? 'up' : 'down'}">${r.d >= 0 ? '+' : ''}${fmt(r.d)}</b>` },
-    { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} <span class="muted small">from ${fmt(r.pc)}</span>` },
-    { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p == null ? '–' : fmt(r.p, 1)} <span class="muted small">from ${r.pp == null ? '–' : fmt(r.pp, 1)}</span>` },
-    { key: 'onpage', label: 'On-page', num: 1, render: (r) => (r.onpage == null ? '–' : `<span class="pill ${pillFor(r.onpage)}">${r.onpage}</span>`) },
-  ], rows, { filter: false });
+  const pctCh = (r) => (r.pc ? ((r.c - r.pc) / r.pc) * 100 : null);
+  const common = [
+    { key: 'c', label: `Clicks ${esc(CMP.cur)}`, num: 1, render: (r) => fmt(r.c) },
+    { key: 'pc', label: esc(CMP.prev), num: 1, render: (r) => `<span class="muted">${fmt(r.pc)}</span>` },
+    { key: 'd', label: 'Δ', num: 1, render: (r) => `<b class="${r.d >= 0 ? 'up' : 'down'}">${r.d >= 0 ? '+' : ''}${fmt(r.d)}</b>` },
+    { key: 'dp', label: 'Δ %', num: 1, render: (r) => (pctCh(r) == null ? '<span class="muted">new</span>' : `<span class="${r.d >= 0 ? 'up' : 'down'}">${pctCh(r) >= 0 ? '+' : ''}${fmt(pctCh(r), 1)}%</span>`), sort: (r) => pctCh(r) ?? 1e9 },
+    { key: 'p', label: 'Pos', num: 1, render: (r) => `${r.p == null ? '–' : fmt(r.p, 1)} <span class="muted small">(${r.pp == null ? '–' : fmt(r.pp, 1)})</span>`, sort: (r) => r.p ?? 999 },
+  ];
+  const qt = (rows) => table([{ key: 'k', label: 'Query', render: (r) => `${esc(r.k)} ${r.b ? '<span class="pill info">Branded</span>' : ''}` }, ...common], rows, { filter: false });
+  const pt = (rows) => table([{ key: 'k', label: 'Page', render: (r) => `<span class="url" style="display:inline-block;max-width:260px">${pageLink(r.k, pages)}</span>` }, ...common,
+    { key: 'onpage', label: 'On-page', num: 1, render: (r) => (r.onpage == null ? '–' : `<span class="pill ${pillFor(r.onpage)}">${r.onpage}</span>`), sort: (r) => r.onpage ?? -1 }], rows, { filter: false });
   const qs = m.queryStats, ps = m.pageStats;
   return `<div class="grid kpis section">
       <div class="card kpi"><div class="label">Queries growing</div><div class="value up">${fmt(qs.up)}</div><span class="small muted">+${fmt(qs.gained)} clicks</span></div>
@@ -1494,8 +1723,9 @@ function moversTables(m, pages) {
       <div class="card kpi"><div class="label">Pages growing</div><div class="value up">${fmt(ps.up)}</div><span class="small muted">+${fmt(ps.gained)} clicks${m.winnersAvgOnpage != null ? ` · avg on-page ${m.winnersAvgOnpage}` : ''}</span></div>
       <div class="card kpi"><div class="label">Pages declining</div><div class="value down">${fmt(ps.down)}</div><span class="small muted">${fmt(ps.lost)} clicks${m.losersAvgOnpage != null ? ` · avg on-page ${m.losersAvgOnpage}` : ''}</span></div>
     </div>
-    <div class="grid g2 section"><div class="card"><h2>📈 Top gaining queries</h2>${qt(m.queriesUp)}</div><div class="card"><h2>📉 Top losing queries</h2>${qt(m.queriesDown)}</div></div>
-    <div class="grid g2 section"><div class="card"><h2>📈 Top gaining pages</h2>${pt(m.pagesUp)}</div><div class="card"><h2>📉 Top losing pages</h2>${pt(m.pagesDown)}</div></div>`;
+    <p class="small muted section">${esc(CMP.cur)} vs ${esc(CMP.prev)} · brackets show the earlier position</p>
+    <div class="card section"><h2>📈 Top gaining queries</h2>${qt(m.queriesUp)}</div><div class="card section"><h2>📉 Top losing queries</h2>${qt(m.queriesDown)}</div>
+    <div class="card section"><h2>📈 Top gaining pages</h2>${pt(m.pagesUp)}</div><div class="card section"><h2>📉 Top losing pages</h2>${pt(m.pagesDown)}</div>`;
 }
 
 function viewGsc(run, pages) {
@@ -1669,6 +1899,10 @@ function viewQueries(gsc, run) {
 }
 
 function viewTechnical(site, pages) {
+  const actions = `<div class="card"><h2>🛠️ Technical & on-page action items</h2><p class="muted small">Sorted by impact = check importance × share of impressions on failing pages (money pages weigh extra). Owner tells you who fixes it.</p>${actionsTable(checkActions(pages), pages)}</div>`;
+  return actions + '<div class="section"></div>' + viewTechnicalBase(site, pages);
+}
+function viewTechnicalBase(site, pages) {
   const dup = (title, arr) => arr.length ? `<div class="card section"><h3>${title}</h3>${arr.map(([v, urls]) => `<div class="check"><div><b>${esc(v)}</b><div class="small">${urls.map((u) => pageLink(u, pages)).join(' · ')}</div></div></div>`).join('')}</div>` : '';
   const issueCount = {};
   for (const p of pages) for (const c of p.checks) if (c.val < 1) (issueCount[c.label] ||= []).push(p.url);

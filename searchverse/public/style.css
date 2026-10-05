@@ -1,3 +1,5 @@
+/* let the browser draw native controls (inputs, selects, scrollbars) for the active theme */
+:root { color-scheme: light dark; }
 :root {
   --bg: #f6f7fb; --surface: #ffffff; --surface-2: #f1f3f8; --border: #e3e6ee;
   --text: #161a26; --muted: #667085; --primary: #4f46e5; --primary-soft: #eef0ff;
@@ -151,3 +153,18 @@ code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-
 .ap-h { margin: 22px 0 10px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 15px; }
 .value.up { color: var(--good); } .value.down { color: var(--bad); }
 .check > .pill { align-self: flex-start; }
+
+.nowrap { white-space: nowrap; }
+td.num { white-space: nowrap; }
+.click-score, .kpi.click { cursor: pointer; border-radius: 10px; transition: background .15s; }
+.click-score:hover { background: var(--surface-2); }
+.kpi.click:hover { border-color: var(--primary); }
+@media (prefers-color-scheme: dark) {
+  select, input, textarea, option { background: var(--surface); color: var(--text); }
+  .drawer-bg { background: rgba(0,0,0,.6); }
+  table.lob tr.lob-site td { color: var(--text); }
+  .toast { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .chart text { fill: var(--muted); }
+  .btn { color: var(--text); }
+  a.url, .url a { color: var(--primary); }
+}
