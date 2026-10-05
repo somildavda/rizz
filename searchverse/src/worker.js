@@ -1026,7 +1026,7 @@ async function fetchPage(project, raw) {
 // ---------- Gemini ----------
 
 async function askGemini(env, key, project, input) {
-  const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = env.GEMINI_MODEL || 'gemini-3.8-flash';
   const prompt = `You are a senior technical SEO and content strategist at an SEO agency. Analyse the data for the website "${project.name}" (${project.site_url}).
 The data comes from Google Search Console, GA4 (organic sessions) and an on-page crawl of the top pages, with rule-based scores already computed.
 Give specific, data-backed, prioritised recommendations. Reference actual queries, URLs and numbers. Avoid generic advice.

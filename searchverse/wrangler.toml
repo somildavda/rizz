@@ -18,7 +18,7 @@ ADMIN_EMAILS = ""
 # Optional: let anyone matching these emails / "@domain.com" self-join as a member (they see no projects
 # until an admin gives access). Leave empty so that only users an admin adds can sign in.
 ALLOWED_EMAILS = ""
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.8-flash"
 
 # Secrets (set with `npx wrangler secret put NAME`):
 #   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_SECRET, GEMINI_API_KEY (optional; users can add their own)
