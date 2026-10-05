@@ -25,13 +25,13 @@ async function accessToken(saJson, scope) {
 
 const iso = (d) => d.toISOString().slice(0, 10);
 
-async function queryPages(token, site, start, end) {
+async function queryPages(token, site, start, end, dimensions = ['page']) {
   const res = await fetch(
     `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
     {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ startDate: iso(start), endDate: iso(end), dimensions: ['page'], rowLimit: 5000 }),
+      body: JSON.stringify({ startDate: iso(start), endDate: iso(end), dimensions, rowLimit: dimensions.length > 1 ? 25000 : 5000 }),
     },
   );
   const json = await res.json();
@@ -46,14 +46,20 @@ export async function fetchGsc(env, site, days = 28) {
   const start = new Date(end - (days - 1) * 864e5);
   const prevEnd = new Date(start - 864e5);
   const prevStart = new Date(prevEnd - (days - 1) * 864e5);
-  const [cur, prev] = await Promise.all([queryPages(token, site, start, end), queryPages(token, site, prevStart, prevEnd)]);
+  const [cur, prev, pq] = await Promise.all([
+    queryPages(token, site, start, end),
+    queryPages(token, site, prevStart, prevEnd),
+    queryPages(token, site, start, end, ['page', 'query']),
+  ]);
   const prevBy = Object.fromEntries(prev.map((r) => [r.keys[0], r]));
-  return cur.map((r) => ({
+  const rows = cur.map((r) => ({
     page: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position,
     'prev clicks': prevBy[r.keys[0]]?.clicks ?? 0,
     'prev impressions': prevBy[r.keys[0]]?.impressions ?? 0,
     'prev position': prevBy[r.keys[0]]?.position ?? '',
   }));
+  const queries = pq.map((r) => ({ page: r.keys[0], query: r.keys[1], clicks: r.clicks, impressions: r.impressions, position: r.position }));
+  return { rows, queries };
 }
 
 // Private sheet (shared with the service account email). Range like "Sheet1!A:Z".

@@ -28,5 +28,11 @@ Extra context from the account manager: ${ctx.notes || 'none'}
 Findings (computed from page-level Search Console / analytics data, JSON):
 ${JSON.stringify(findings, null, 1)}
 
-Field notes: ctr is a fraction; position is the average Google ranking; strikingDistance = pages ranking 4-20 with real impressions; lowCtr = ranking on page 1 but the click rate is well under what's typical for that position (missed_clicks is an estimate); concentration = share of clicks coming from the top 5 pages; sections = traffic grouped by first URL folder.`;
+Field notes: ctr is a fraction; position is the average Google ranking; strikingDistance = pages ranking 4-20 with real impressions; lowCtr = ranking on page 1 but the click rate is well under what's typical for that position (missed_clicks is an estimate); concentration = share of clicks coming from the top 5 pages; sections = traffic grouped by first URL folder; keywordOverlap = searches where several of the site's pages compete (consider merging or differentiating them); topSearches = the main searches bringing impressions.`;
 }
+
+export const ANALYST_PROMPT = `You are a senior SEO analyst helping an agency team work on a client's site.
+Answer the question using the findings JSON (page-level Search Console data, plus query data when present).
+Be specific: name the pages and searches, give concrete actions, and say how to measure whether they worked.
+Separate what the data shows from your hypotheses. Keep it tight and use Markdown with short lists.
+When asked for titles or meta descriptions, give ready-to-paste text with character counts.`;

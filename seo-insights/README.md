@@ -28,3 +28,10 @@ npx wrangler deploy
   and optionally Prev Clicks, Prev Impressions, Prev Position, Sessions, Conversions.
 
 Local test: `node test.mjs` (uses `sample.csv`).
+
+## Try it on your Mac first (dev link)
+```
+echo 'ACCESS_TOKEN=demo' > .dev.vars      # add ANTHROPIC_API_KEY=... on a new line for AI features
+npx wrangler dev
+```
+Open http://localhost:8787 and use the passcode `demo`.

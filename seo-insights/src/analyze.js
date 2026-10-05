@@ -59,6 +59,7 @@ export function analyze(rows) {
     const s = (sectionMap[seg] ||= { section: seg, pages: 0, clicks: 0, impressions: 0, prev_clicks: 0 });
     s.pages++; s.clicks += r.clicks || 0; s.impressions += r.impressions || 0; s.prev_clicks += r.prev_clicks || 0;
   }
+  if (!hasPrev) for (const s of Object.values(sectionMap)) s.prev_clicks = null;
   const sections = Object.values(sectionMap).sort((a, b) => b.clicks - a.clicks).slice(0, 10);
 
   const top = [...rows].sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
@@ -101,4 +102,30 @@ export function analyze(rows) {
     losers,
     converters,
   };
+}
+
+// Page+query rows -> keyword overlap (several pages ranking for one search) and top searches per page.
+export function analyzeQueries(qrows) {
+  const byQuery = {};
+  for (const r of qrows) {
+    if (r.impressions < 20) continue;
+    let path = r.page;
+    try { path = new URL(r.page).pathname; } catch {}
+    (byQuery[r.query] ||= []).push({ page: path, clicks: r.clicks, impressions: r.impressions, position: r.position });
+  }
+  const overlap = Object.entries(byQuery)
+    .filter(([, pages]) => pages.length > 1)
+    .map(([query, pages]) => ({
+      query,
+      impressions: pages.reduce((s, p) => s + p.impressions, 0),
+      pages: pages.sort((a, b) => b.impressions - a.impressions).slice(0, 4),
+    }))
+    .sort((a, b) => b.impressions - a.impressions).slice(0, 10);
+
+  const topSearches = Object.entries(byQuery)
+    .map(([query, pages]) => ({ query, clicks: pages.reduce((s, p) => s + p.clicks, 0),
+      impressions: pages.reduce((s, p) => s + p.impressions, 0), best_page: pages[0].page,
+      position: Math.min(...pages.map((p) => p.position)) }))
+    .sort((a, b) => b.impressions - a.impressions).slice(0, 15);
+  return { keywordOverlap: overlap, topSearches };
 }
