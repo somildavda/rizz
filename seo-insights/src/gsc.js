@@ -1,8 +1,31 @@
-// Google Search Console + Google Sheets access via a service account (WebCrypto JWT, no deps).
+// Google Search Console + Google Sheets access via "Sign in with Google" (OAuth refresh token)
+// or a service account (WebCrypto JWT, no deps).
 
 const b64url = (buf) =>
   btoa(typeof buf === 'string' ? buf : String.fromCharCode(...new Uint8Array(buf)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+export const GOOGLE_SCOPES = [
+  'openid', 'email',
+  'https://www.googleapis.com/auth/webmasters.readonly',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+].join(' ');
+
+async function getToken(env, scope) {
+  if (env.GOOGLE_OAUTH) {
+    const { cid, secret, rt } = env.GOOGLE_OAUTH;
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: cid, client_secret: secret, refresh_token: rt, grant_type: 'refresh_token' }),
+    });
+    const json = await res.json();
+    if (!json.access_token) throw new Error('Google sign-in expired. Sign in again in Settings (' + (json.error_description || json.error) + ')');
+    return json.access_token;
+  }
+  if (!env.GSC_SERVICE_ACCOUNT) throw new Error('Sign in with Google in Settings first.');
+  return accessToken(env.GSC_SERVICE_ACCOUNT, scope);
+}
 
 async function accessToken(saJson, scope) {
   const sa = JSON.parse(saJson);
@@ -41,7 +64,7 @@ async function queryPages(token, site, start, end, dimensions = ['page']) {
 
 // The selected week vs the week before it, merged per page.
 export async function fetchGsc(env, site, { start, end, prevStart, prevEnd }) {
-  const token = await accessToken(env.GSC_SERVICE_ACCOUNT, 'https://www.googleapis.com/auth/webmasters.readonly');
+  const token = await getToken(env, 'https://www.googleapis.com/auth/webmasters.readonly');
   const [cur, prev, pq] = await Promise.all([
     queryPages(token, site, start, end),
     queryPages(token, site, prevStart, prevEnd),
@@ -60,7 +83,7 @@ export async function fetchGsc(env, site, { start, end, prevStart, prevEnd }) {
 
 // Private sheet (shared with the service account email). Range like "Sheet1!A:Z".
 export async function fetchSheet(env, sheetId, range = 'A:Z') {
-  const token = await accessToken(env.GSC_SERVICE_ACCOUNT, 'https://www.googleapis.com/auth/spreadsheets.readonly');
+  const token = await getToken(env, 'https://www.googleapis.com/auth/spreadsheets.readonly');
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
     { headers: { authorization: `Bearer ${token}` } },
@@ -73,7 +96,7 @@ export async function fetchSheet(env, sheetId, range = 'A:Z') {
 
 // Properties the service account can see (to fill the property dropdown).
 export async function listSites(env) {
-  const token = await accessToken(env.GSC_SERVICE_ACCOUNT, 'https://www.googleapis.com/auth/webmasters.readonly');
+  const token = await getToken(env, 'https://www.googleapis.com/auth/webmasters.readonly');
   const res = await fetch('https://www.googleapis.com/webmasters/v3/sites', { headers: { authorization: `Bearer ${token}` } });
   const json = await res.json();
   if (json.error) throw new Error('GSC: ' + json.error.message);
