@@ -569,6 +569,8 @@ async function handleApi(req, env, url) {
         DB.prepare('DELETE FROM project_meta WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM lob_groups WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM lob_monthly WHERE project_id = ?').bind(project.id),
+        DB.prepare('DELETE FROM ai_checks WHERE project_id = ?').bind(project.id),
+        DB.prepare('DELETE FROM ai_prompts WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM projects WHERE id = ?').bind(project.id),
       ]);
       return json({ ok: true });
@@ -793,6 +795,54 @@ async function handleApi(req, env, url) {
     }
     for (let i = 0; i < stmts.length; i += 400) await DB.batch(stmts.slice(i, i + 400));
     return json({ ok: true, updated: results.length, range: [start, end] });
+  }
+
+  // AI answer visibility: track prompts in Gemini + Google Search grounding (free Gemini key)
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/ai-prompts$/))) {
+    const project = await getProject(env, m[1], user.email);
+    if (method === 'GET') {
+      const [{ results: prompts }, { results: checks }] = await Promise.all([
+        DB.prepare('SELECT id, prompt, created_at FROM ai_prompts WHERE project_id = ? ORDER BY created_at').bind(project.id).all(),
+        DB.prepare('SELECT id, prompt_id, run_at, engine, model, answer, search_queries, sources, mentioned, cited, error FROM ai_checks WHERE project_id = ? ORDER BY run_at DESC LIMIT 500').bind(project.id).all(),
+      ]);
+      return json({ prompts, checks: checks.map((c) => ({ ...c, sources: JSON.parse(c.sources || '[]'), search_queries: JSON.parse(c.search_queries || '[]') })), canRun: canRun(project) });
+    }
+    requireRun(project);
+    const b = await body(req);
+    if (method === 'POST') {
+      const list = String(b.prompts || '').split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 50);
+      const { results: have } = await DB.prepare('SELECT COUNT(*) AS n FROM ai_prompts WHERE project_id = ?').bind(project.id).all();
+      if (have[0].n + list.length > 100) throw new HttpError(400, 'Up to 100 prompts per project');
+      if (list.length) await DB.batch(list.map((pr) => DB.prepare('INSERT INTO ai_prompts (id, project_id, prompt, created_at) VALUES (?, ?, ?, ?)').bind(id(), project.id, pr.slice(0, 500), now())));
+      return json({ ok: true, added: list.length });
+    }
+    if (method === 'DELETE') {
+      await DB.batch([
+        DB.prepare('DELETE FROM ai_checks WHERE prompt_id = ? AND project_id = ?').bind(String(b.id), project.id),
+        DB.prepare('DELETE FROM ai_prompts WHERE id = ? AND project_id = ?').bind(String(b.id), project.id),
+      ]);
+      return json({ ok: true });
+    }
+  }
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/ai-prompts\/check$/)) && method === 'POST') {
+    const project = await getProject(env, m[1], user.email);
+    requireRun(project);
+    const b = await body(req);
+    const key = user.gemini_key_enc ? await decrypt(env, user.gemini_key_enc) : env.GEMINI_API_KEY;
+    if (!key) throw new HttpError(400, 'Add your free Gemini key in Settings first');
+    const ids = (b.ids || []).slice(0, 3); // a few per request; the browser loops
+    const { results: prompts } = await DB.prepare(`SELECT id, prompt FROM ai_prompts WHERE project_id = ? AND id IN (${ids.map(() => '?').join(',') || "''"})`).bind(project.id, ...ids).all();
+    const meta = await getMeta(env, project.id);
+    const out = [];
+    for (const pr of prompts) {
+      const r = await checkPrompt(env, key, project, meta, pr.prompt);
+      const cid = id();
+      await DB.prepare(
+        'INSERT INTO ai_checks (id, prompt_id, project_id, run_at, engine, model, answer, search_queries, sources, mentioned, cited, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(cid, pr.id, project.id, now(), r.engine, r.model, r.answer, JSON.stringify(r.queries), JSON.stringify(r.sources), r.mentioned ? 1 : 0, r.cited ? 1 : 0, r.error || null).run();
+      out.push({ prompt_id: pr.id, ...r });
+    }
+    return json({ results: out });
   }
 
   // runs
@@ -1468,6 +1518,37 @@ function parseAiJson(text) {
     }
     return null;
   }
+}
+
+// Ask Gemini with Google Search grounding and record what it answered and which sites it cited.
+async function checkPrompt(env, key, project, meta, prompt) {
+  const model = env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || 'gemini-3.8-flash';
+  const host = (() => { try { return new URL(project.site_url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+  const domain = project.gsc_property.startsWith('sc-domain:') ? project.gsc_property.slice(10) : host;
+  const brands = String(meta.brand_terms || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const base = { engine: 'Gemini + Google Search', model, answer: '', queries: [], sources: [], mentioned: false, cited: false };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }] }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if ((res.status === 429 || res.status === 503) && attempt < 2) { await sleep(3000 * (attempt + 1)); continue; }
+      return { ...base, error: d.error?.message || res.statusText };
+    }
+    const cand = d.candidates?.[0] || {};
+    const answer = (cand.content?.parts || []).map((x) => x.text || '').join('').trim();
+    const gm = cand.groundingMetadata || {};
+    const sources = (gm.groundingChunks || []).map((c) => ({ title: c.web?.title || '', uri: c.web?.uri || '' })).filter((x) => x.title || x.uri);
+    const srcDomain = (x) => (x.title || '').toLowerCase().replace(/^www\./, '');
+    const cited = !!domain && sources.some((x) => srcDomain(x).endsWith(domain) || x.uri.includes(domain));
+    const low = answer.toLowerCase();
+    const mentioned = brands.some((t) => low.includes(t)) || (!!domain && low.includes(domain));
+    return { ...base, model: d.modelVersion || model, answer: answer.slice(0, 20000), queries: gm.webSearchQueries || [], sources: sources.slice(0, 30), mentioned, cited };
+  }
+  return { ...base, error: 'Gemini is busy, try again' };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

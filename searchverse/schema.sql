@@ -159,3 +159,26 @@ CREATE TABLE IF NOT EXISTS run_shard (
   run_id TEXT PRIMARY KEY,
   shard TEXT NOT NULL
 );
+
+-- AI answer visibility: prompts to track and each check's result
+CREATE TABLE IF NOT EXISTS ai_prompts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  created_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS ai_checks (
+  id TEXT PRIMARY KEY,
+  prompt_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  run_at INTEGER,
+  engine TEXT,
+  model TEXT,
+  answer TEXT,
+  search_queries TEXT,
+  sources TEXT,
+  mentioned INTEGER,
+  cited INTEGER,
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_checks ON ai_checks (project_id, run_at);

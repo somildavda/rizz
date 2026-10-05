@@ -1812,7 +1812,7 @@ async function exportExcel(project, run, pages) {
 // ---------- AI search & GEO readiness ----------
 function viewGeo(run, pages) {
   const g = run.summary.geo;
-  if (!g) return '<div class="card center"><h2>Run a new analysis</h2><p class="muted">AI-search readiness is checked during the crawl — older runs don’t have it.</p></div>';
+  if (!g) { setTimeout(() => loadAiVisibility(run.project_id, run, pages)); return '<div class="card center"><h2>Run a new analysis</h2><p class="muted">AI-search readiness is checked during the crawl — older runs don’t have it.</p></div><div id="aivis"></div>'; }
   const ok = pages.filter((p) => p.geo);
   const byCheck = {};
   for (const p of ok) for (const c of p.geo.checks) {
@@ -1823,6 +1823,7 @@ function viewGeo(run, pages) {
   const ai = run.ai?.ai_search_geo || [];
   const st = (s) => `<span class="pill ${s === 'Allowed' ? 'good' : s === 'Blocked' ? 'bad' : 'warn'}">${s}</span>`;
   const tick = (v) => mark(v ? 1 : 0);
+  setTimeout(() => loadAiVisibility(run.project_id, run, pages));
   return `<div class="card"><div class="scores">
       <div class="score">${ring(g.score, true)}<div><b>AI search readiness</b><div class="muted small">How easily AI Overviews, AI Mode, ChatGPT, Perplexity & Copilot can read, trust and quote your pages</div></div></div>
       <div class="score">${ring(g.pageScore)}<div><b>Page content</b><div class="muted small">Answer-ready structure, freshness, authorship, facts</div></div></div>
@@ -1853,8 +1854,76 @@ function viewGeo(run, pages) {
       { key: 'au', label: 'Author', render: (p) => tick(p.meta.hasAuthor) },
       { key: 'd', label: 'Updated', render: (p) => esc(p.meta.lastDate || '–') },
       { key: 'r', label: 'Rendering', render: (p) => esc(p.meta.renderMode || '') },
-    ], ok, { limit: 1000, onRow: (p) => pageDetail(p, run) })}</div>`;
+    ], ok, { limit: 1000, onRow: (p) => pageDetail(p, run) })}</div>
+    <div id="aivis"><div class="card section muted">Loading AI answer visibility…</div></div>`;
 }
+// ---------- AI answer visibility (Gemini + Google Search grounding) ----------
+const dom = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+async function loadAiVisibility(pid, run, pages) {
+  const box = document.getElementById('aivis');
+  if (!box) return;
+  let data;
+  try { data = await api(`/api/projects/${pid}/ai-prompts`); } catch (e) { box.innerHTML = `<div class="banner err">${esc(e.message)}</div>`; return; }
+  const latest = {};
+  const hist = {};
+  for (const c of data.checks) { (hist[c.prompt_id] ||= []).push(c); if (!latest[c.prompt_id]) latest[c.prompt_id] = c; }
+  const done = data.prompts.filter((p) => latest[p.id] && !latest[p.id].error);
+  const citedN = done.filter((p) => latest[p.id].cited).length, mentN = done.filter((p) => latest[p.id].mentioned).length;
+  const compet = {};
+  for (const p of done) for (const s0 of latest[p.id].sources) { const d = (s0.title || dom(s0.uri)).toLowerCase(); compet[d] = (compet[d] || 0) + 1; }
+  const topDomains = Object.entries(compet).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const isB = brandTester(run.summary.brand?.terms);
+  const suggest = (run.gsc?.queries || []).filter((q) => !isB(q.q) && q.q.split(' ').length >= 2).sort((a, b) => b.i - a.i).slice(0, 10).map((q) => q.q);
+  const yes = (v) => (v ? '<span class="pill good">Yes</span>' : '<span class="pill bad">No</span>');
+  box.innerHTML = `<div class="card section"><h2>📣 AI answer visibility — Gemini + Google Search</h2>
+    <p class="muted small">For each prompt, Searchverse asks <b>Gemini with live Google Search</b> (the same grounding behind Google's AI answers), using your free Gemini key, and records the model version, the full answer, every source it cited, and whether your site is cited or your brand mentioned. ChatGPT, Perplexity and Claude aren't included — their APIs are paid. Free Gemini limits apply (a few dozen prompts a day is fine).</p>
+    ${done.length ? `<div class="grid kpis section">
+      <div class="card kpi"><div class="label">Prompts tracked</div><div class="value">${data.prompts.length}</div></div>
+      <div class="card kpi"><div class="label">Your site cited</div><div class="value">${citedN}/${done.length}</div><span class="small muted">${pct(citedN / done.length, 0)} of latest answers</span></div>
+      <div class="card kpi"><div class="label">Brand mentioned</div><div class="value">${mentN}/${done.length}</div><span class="small muted">${pct(mentN / done.length, 0)} of latest answers</span></div>
+    </div>
+    <p class="small"><b>Most-cited sites:</b> ${topDomains.map(([d, n]) => `<span class="pill ${d.includes(dom(run.gsc?.pages?.[0]?.u || '')) ? 'good' : ''}">${esc(d)} · ${n}</span>`).join(' ')}</p>` : ''}
+    ${data.canRun ? `<div class="row" style="align-items:flex-start;margin:12px 0"><textarea id="ai-new" rows="3" style="flex:1" placeholder="One prompt per line, e.g.&#10;best broadband plans in Delhi under 1000&#10;which postpaid plan has the most data"></textarea>
+      <div style="display:flex;flex-direction:column;gap:6px"><button class="btn" id="ai-add">+ Add prompts</button>${suggest.length ? '<button class="btn sm" id="ai-suggest">Suggest from my top non-branded queries</button>' : ''}<button class="btn primary" id="ai-run" ${data.prompts.length ? '' : 'disabled'}>▶ Check all prompts</button></div></div>
+      <div id="ai-prog" class="small muted"></div>` : ''}
+    ${data.prompts.length ? table([
+      { key: 'prompt', label: 'Prompt', render: (p) => `<b>${esc(p.prompt)}</b>` },
+      { key: 'model', label: 'Model / date', render: (p) => (latest[p.id] ? `<span class="small">${esc(latest[p.id].model || '')}<br><span class="muted">${date(latest[p.id].run_at)}</span></span>` : '<span class="muted small">not checked yet</span>') },
+      { key: 'cited', label: 'Site cited', render: (p) => (latest[p.id] ? (latest[p.id].error ? `<span class="pill warn" title="${esc(latest[p.id].error)}">error</span>` : yes(latest[p.id].cited)) : '–'), sort: (p) => latest[p.id]?.cited ?? -1 },
+      { key: 'ment', label: 'Brand mentioned', render: (p) => (latest[p.id] && !latest[p.id].error ? yes(latest[p.id].mentioned) : '–'), sort: (p) => latest[p.id]?.mentioned ?? -1 },
+      { key: 'src', label: 'Top sources', render: (p) => (latest[p.id]?.sources || []).slice(0, 4).map((x) => `<span class="pill">${esc(x.title || dom(x.uri))}</span>`).join(' ') },
+      { key: 'h', label: 'History', render: (p) => (hist[p.id] || []).slice(0, 8).reverse().map((c) => `<span title="${date(c.run_at)}" class="dot ${c.error ? 'warn' : c.cited ? 'good' : 'bad'}" style="display:inline-grid;width:12px;height:12px;margin-right:2px"></span>`).join('') },
+      { key: 'x', label: '', render: (p) => `${latest[p.id] ? `<button class="btn sm" data-aiview="${p.id}">View answer</button>` : ''} ${data.canRun ? `<button class="btn sm danger" data-aidel="${p.id}">✕</button>` : ''}` },
+    ], data.prompts, { filter: false }) : '<p class="muted">No prompts yet. Add the questions your customers ask AI assistants.</p>'}
+    <p class="hint">“Site cited” = your domain is among the sources Gemini used. “Brand mentioned” = your brand terms appear in the answer. History dots: green cited · red not cited.</p></div>`;
+  const $ = (i) => document.getElementById(i);
+  $('ai-suggest')?.addEventListener('click', () => { $('ai-new').value = suggest.join('\n'); });
+  $('ai-add')?.addEventListener('click', async () => { try { await api(`/api/projects/${pid}/ai-prompts`, { method: 'POST', body: { prompts: $('ai-new').value } }); loadAiVisibility(pid, run, pages); } catch (e) { toast(e.message); } });
+  box.querySelectorAll('[data-aidel]').forEach((b) => (b.onclick = async () => { if (!confirm('Remove this prompt and its history?')) return; await api(`/api/projects/${pid}/ai-prompts`, { method: 'DELETE', body: { id: b.dataset.aidel } }); loadAiVisibility(pid, run, pages); }));
+  box.querySelectorAll('[data-aiview]').forEach((b) => (b.onclick = () => {
+    const p = data.prompts.find((x) => x.id === b.dataset.aiview), c = latest[p.id];
+    openDrawer(`<h2>${esc(p.prompt)}</h2><div class="muted small">${esc(c.engine)} · model <b>${esc(c.model)}</b> · ${date(c.run_at)}</div>
+      <div class="row section">${yes(c.cited)} <span class="small">site cited</span> ${yes(c.mentioned)} <span class="small">brand mentioned</span></div>
+      ${c.error ? `<div class="banner err">${esc(c.error)}</div>` : ''}
+      ${c.search_queries.length ? `<p class="small"><b>Google searches Gemini ran:</b> ${c.search_queries.map((q) => `<span class="pill">${esc(q)}</span>`).join(' ')}</p>` : ''}
+      <div class="card section"><h3>Answer</h3><div style="white-space:pre-wrap">${esc(c.answer || '—')}</div></div>
+      <div class="card section"><h3>Sources cited (${c.sources.length})</h3>${c.sources.map((x, i) => `<div class="check"><span class="pill">${i + 1}</span><div><b>${esc(x.title || dom(x.uri))}</b>${x.uri ? `<div class="small"><a href="${esc(x.uri)}" target="_blank" rel="noopener">open source</a></div>` : ''}</div></div>`).join('') || '<p class="muted">No sources</p>'}</div>
+      ${(hist[p.id] || []).length > 1 ? `<div class="card section"><h3>History</h3>${table([{ key: 'run_at', label: 'Date', render: (h) => date(h.run_at) }, { key: 'model', label: 'Model' }, { key: 'cited', label: 'Cited', render: (h) => (h.error ? 'error' : yes(h.cited)) }, { key: 'mentioned', label: 'Mentioned', render: (h) => (h.error ? '' : yes(h.mentioned)) }, { key: 'n', label: 'Sources', num: 1, render: (h) => h.sources.length }], hist[p.id], { filter: false })}</div>` : ''}`);
+  }));
+  $('ai-run')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    const ids = data.prompts.map((p) => p.id);
+    try {
+      for (let i = 0; i < ids.length; i += 3) {
+        $('ai-prog').textContent = `Asking Gemini… ${Math.min(ids.length, i + 3)}/${ids.length}`;
+        await api(`/api/projects/${pid}/ai-prompts/check`, { method: 'POST', body: { ids: ids.slice(i, i + 3) } });
+      }
+      toast('AI visibility updated');
+    } catch (err) { toast(err.message, 7000); }
+    loadAiVisibility(pid, run, pages);
+  });
+}
+
 function geoSection(p) {
   if (!p.geo) return '';
   return `<div class="card section"><h3>🤖 AI search readiness — ${p.geo.score}/100</h3>${p.geo.checks.map((c) => `<div class="check"><span class="dot ${c.val >= 1 ? 'good' : c.val > 0 ? 'warn' : 'bad'}">${c.val >= 1 ? '✓' : c.val > 0 ? '!' : '✗'}</span><div><div>${esc(c.label)}</div><div class="small muted">${esc(c.detail)}</div></div></div>`).join('')}</div>`;
