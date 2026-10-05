@@ -386,7 +386,10 @@ async function renderProjectForm(pid) {
         <div id="prop-err" class="hint"></div>
         <label>Homepage URL</label><input id="f-site" value="${esc(p.site_url || '')}" placeholder="Auto from Search Console property">
         <div class="hint">Used for crawling and robots.txt / sitemap checks.</div>
-        <label>Pages to crawl per run</label><input id="f-max" type="number" min="5" max="1000" value="${p.max_pages || 25}">
+        <label>Pages to crawl per run <span class="muted">(default for new runs)</span></label><input id="f-max" type="number" min="5" max="1000" value="${p.max_pages || 25}">
+        <div class="hint"><b>What it means:</b> how many pages of your site the tool opens and checks on each run (titles, meta, H1, schema, content vs. keywords, speed, AI-search readiness…).
+          Money pages go first, then the pages with the most Search Console clicks & impressions. Pages beyond this number still count in GSC/GA numbers — they just aren't audited.<br>
+          <b>Suggestion:</b> 100 for a quick weekly check · 250–500 for a monthly deep audit · up to 1,000 for the whole site or all LOB pages. ≈ 1 minute per 100 pages; you can change it on each run.</div>
         <label>💰 Money pages <span class="muted">(always crawled first, highlighted, prioritised by the AI)</span></label>
         <textarea id="f-money" rows="5" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
         <div class="hint">One full URL per line (up to 300).</div>
@@ -496,10 +499,13 @@ async function renderRunner(pid) {
 
       <h3 style="margin-top:22px">🕷️ Crawl</h3>
       <div class="row" style="align-items:flex-end">
-        <div><label class="small" style="margin-top:0">Pages to crawl</label><input id="r-max" type="number" min="5" max="1000" value="${project.max_pages}" style="width:120px"></div>
+        <div><label class="small" style="margin-top:0">Pages to crawl</label><select id="r-maxsel" style="width:auto">
+          ${[[25, 'Top 25 — quick check (~30 sec)'], [50, 'Top 50 (~1 min)'], [100, 'Top 100 — weekly check (~1–2 min)'], [250, 'Top 250 — monthly audit (~3 min)'], [500, 'Top 500 — deep audit (~5–6 min)'], [750, 'Top 750 (~8 min)'], [1000, 'Max 1,000 — full / all LOB pages (~10–12 min)'], ['custom', 'Custom number…']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
+        <div id="r-max-wrap" class="hidden"><label class="small" style="margin-top:0">Custom</label><input id="r-max" type="number" min="5" max="1000" value="${project.max_pages}" style="width:110px"></div>
         <label class="row small" style="margin:0 0 10px;gap:6px;font-weight:400"><input type="checkbox" id="r-sitemap" style="width:auto"> Also crawl URLs from the sitemap</label>
       </div>
-      <div class="hint">💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
+      <div class="banner small" id="r-rec" style="margin:10px 0 6px"></div>
+      <div class="hint"><b>Pages to crawl</b> = how many pages get opened and audited (on-page, content vs. keywords, technical, AI-search). It doesn't limit the Search Console / GA numbers — those always cover the whole site or the chosen LOBs.<br>💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
 
       <h3 style="margin-top:22px">📦 Search Console data</h3>
       <div class="row"><select id="r-rows" style="width:auto">
@@ -547,6 +553,35 @@ async function renderRunner(pid) {
   };
   $('r-rows').onchange = () => { rowsNote(); storageNote(); };
   $('r-max').oninput = () => storageNote();
+  // dropdown ↔ number box, and a recommendation that follows scope + Search Console data choice
+  const setPages = (n) => { $('r-max').value = n; storageNote(); };
+  $('r-maxsel').onchange = () => {
+    const v = $('r-maxsel').value;
+    $('r-max-wrap').classList.toggle('hidden', v !== 'custom');
+    if (v !== 'custom') setPages(+v);
+  };
+  const presetFor = (n) => ([25, 50, 100, 250, 500, 750, 1000].includes(+n) ? String(n) : 'custom');
+  $('r-maxsel').value = presetFor(project.max_pages);
+  $('r-max-wrap').classList.toggle('hidden', $('r-maxsel').value !== 'custom');
+  const recommend = () => {
+    const scope = $('r-scope').value, rows = +$('r-rows').value;
+    let n, why;
+    if (scope) {
+      n = rows ? 1000 : 500;
+      why = `LOB scope only crawls pages matching your LOB paths, so a high limit simply means "all LOB pages" — it stops when there are no more.${rows ? '' : ' Pick a Full export below so every LOB URL is found.'}`;
+    } else if (rows >= 100000) { n = 500; why = 'With a full export you know every ranking page; 500 covers the pages that carry almost all traffic on a big site.'; }
+    else if (rows) { n = 250; why = 'Full export + 250 pages gives a solid monthly audit.'; }
+    else { n = 100; why = 'Standard data covers the top 1,000 pages; auditing the top 100 is a good weekly check.'; }
+    n = Math.max(n, Math.min(1000, money.length));
+    const opts = [...$('r-maxsel').options];
+    opts.forEach((o) => (o.textContent = o.textContent.replace(' ⭐ recommended', '')));
+    const o = opts.find((x) => +x.value === n); if (o) o.textContent += ' ⭐ recommended';
+    $('r-rec').innerHTML = `💡 <b>Suggested: ${fmt(n)} pages</b> for ${scope ? (scope === 'all' ? 'all LOB pages' : 'LOB ' + esc(scope.slice(4))) : 'the whole site'} with ${rows ? 'a full export' : 'standard data'}. ${why} <a href="#" id="r-userec">Use ${fmt(n)}</a>`;
+    $('r-userec').onclick = (e) => { e.preventDefault(); $('r-maxsel').value = String(n); $('r-max-wrap').classList.add('hidden'); setPages(n); };
+  };
+  $('r-scope').addEventListener('change', recommend);
+  $('r-rows').addEventListener('change', recommend);
+  recommend();
   let usage = null;
   const storageNote = () => {
     if (!usage) return;
