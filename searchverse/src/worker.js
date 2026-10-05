@@ -1057,8 +1057,8 @@ function gaFilter(organicOnly, patterns) {
       } else re = esc(raw);
       (neg ? exc : inc).push(re);
     }
-    if (inc.length) exprs.push({ filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEX', value: inc.map((r) => `(${r})`).join('|') } } });
-    if (exc.length) exprs.push({ notExpression: { filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEX', value: exc.map((r) => `(${r})`).join('|') } } } });
+    if (inc.length) exprs.push({ filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEXP', value: inc.map((r) => `(${r})`).join('|') } } });
+    if (exc.length) exprs.push({ notExpression: { filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEXP', value: exc.map((r) => `(${r})`).join('|') } } } });
   }
   if (!exprs.length) return undefined;
   return exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } };
