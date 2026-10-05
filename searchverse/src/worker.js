@@ -1315,6 +1315,11 @@ STRICT RULES:
 5. No competitor or backlink data is available: for external links/backlinks, state exactly what to audit (which pages, which tool/report) instead of inventing competitor numbers.
 6. Technical items must say who owns them (dev / seo / content) and what evidence triggered them (e.g. "JS-rendering risk on /x: 80 words in raw HTML, 45 scripts").
 7. Prioritise money pages and non-branded growth. Never invent data.
+8. Every action-plan item must be falsifiable: state the observation it rests on, what it depends on (another task or nothing),
+   how we would know it failed (a concrete check after N weeks), and the leading indicator to watch first (e.g. impressions for query X, CTR on URL Y).
+9. Current Google guidance (2026): FAQ rich results were retired in May 2026 (do not recommend FAQPage markup for rich snippets; Q&A content itself is still useful);
+   Google Search ignores llms.txt; Trust is the most important part of E-E-A-T; AI Overviews/AI Mode use normal Search crawling (Googlebot) and indexing,
+   so server-rendered, clearly structured, attributable content is what gets cited. Use "aiSearchGeo" data for AI-search recommendations.
 
 Return ONLY JSON in this exact shape:
 {
@@ -1325,11 +1330,13 @@ Return ONLY JSON in this exact shape:
   "what_didnt_work": [{"point": "", "evidence": "numbers", "likely_cause": "", "pages": [""]}],
   "how_to_improve": [{"point": "", "evidence": "", "pages": [""]}],
   "action_plan": [{"area": "workstream name you choose, e.g. On-page & titles, Schema, Topical authority / new blogs, Internal linking, Rendering (SSR/CSR), Indexation, CTR & snippets, Cannibalisation, Page experience, E-E-A-T, Backlinks — only areas the data justifies, most impactful first",
-    "items": [{"task": "the exact change (exact text, exact blog title + slug + target query, exact anchor → URL, exact schema type...)", "urls": [""], "evidence": "numbers that justify it", "owner": "dev|seo|content", "priority": "high|medium|low"}]}],
+    "items": [{"task": "the exact change (exact text, exact blog title + slug + target query, exact anchor → URL, exact schema type...)", "urls": [""], "evidence": "numbers that justify it", "owner": "dev|seo|content", "priority": "high|medium|low",
+      "observation": "the first-principle observation this rests on", "depends_on": "other task or 'none'", "failure_check": "how we'd know it failed, e.g. 'if CTR on X is still < 2% after 4 weeks'", "leading_indicator": "first metric that should move"}]}],
+  "ai_search_geo": [{"url": "", "issue": "", "change": "exact change: question H2 text, 40-60 word answer paragraph topic, author/date to add, table to add, crawler rule to fix…", "evidence": "", "failure_check": ""}],
   "cro": [{"url": "", "evidence": "GA numbers", "hypothesis": "", "change": "exact change + location", "metric": ""}],
   "quick_wins": [{"query": "", "url": "", "position": 0, "impressions": 0, "action": "exact change"}]
 }
-Limits: 3-5 items in each of the first four sections, 4-7 action_plan areas with 2-6 items each (use the internalLinkOpportunities, renderModes/csrPages and navigationFooter data where relevant), 3-6 cro, up to 8 quick wins.
+Limits: 3-5 items in each of the first four sections, 4-8 ai_search_geo items, 4-7 action_plan areas with 2-6 items each (use the internalLinkOpportunities, renderModes/csrPages and navigationFooter data where relevant), 3-6 cro, up to 8 quick wins.
 
 DATA:
 ${JSON.stringify(input).slice(0, maxChars)}`;

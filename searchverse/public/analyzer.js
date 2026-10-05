@@ -91,13 +91,19 @@ function extract(html, pageUrl) {
   const u = new URL(pageUrl);
 
   const schemaTypes = [];
+  const ld = { author: false, published: '', modified: '', sameAs: 0 };
   for (const s of $$('script[type="application/ld+json"]')) {
     try {
       const walk = (o) => {
         if (!o || typeof o !== 'object') return;
         if (Array.isArray(o)) return o.forEach(walk);
         if (o['@type']) schemaTypes.push(...[].concat(o['@type']));
+        if (o.author) ld.author = true;
+        if (o.datePublished) ld.published ||= String(o.datePublished);
+        if (o.dateModified) ld.modified ||= String(o.dateModified);
+        if (o.sameAs) ld.sameAs += [].concat(o.sameAs).length;
         if (o['@graph']) walk(o['@graph']);
+        for (const k of ['mainEntity', 'publisher', 'itemListElement']) if (o[k] && typeof o[k] === 'object') walk(o[k]);
       };
       walk(JSON.parse(s.textContent));
     } catch {
@@ -133,11 +139,32 @@ function extract(html, pageUrl) {
   const internalPaths = [...new Set(internal.map((l) => l.pathname.replace(/\/$/, '') || '/'))].slice(0, 400);
   const telLinks = $$('a[href^="tel:"]').length;
 
+  // ---- AI search / GEO & E-E-A-T signals (from the raw HTML) ----
+  const QWORDS = /^(what|how|why|when|which|who|where|can|is|are|does|do|should|will|kya|kaise|kyun)\b/i;
+  const headEls = $$('h2, h3');
+  const questionHeadings = headEls.filter((h) => { const t = h.textContent.trim(); return t.endsWith('?') || QWORDS.test(t); }).length;
+  let answerBlocks = 0;
+  for (const h of headEls) {
+    let n = h.nextElementSibling;
+    while (n && !/^(P|DIV|UL|OL)$/.test(n.tagName)) n = n.nextElementSibling;
+    const words = n ? (n.textContent || '').trim().split(/\s+/).filter(Boolean).length : 0;
+    if (words >= 25 && words <= 90) answerBlocks++;
+  }
+  const lists = $$('ul, ol').filter((el) => !el.closest('nav, header, footer') && el.children.length >= 2).length;
+  const tables = $$('table').length;
+  const metaDate = attr('meta[property="article:modified_time"]', 'content') || attr('meta[property="article:published_time"]', 'content') || $('time[datetime]')?.getAttribute('datetime') || '';
+  const lastDate = [ld.modified, ld.published, metaDate].filter(Boolean).map((d) => new Date(d)).filter((d) => !isNaN(d)).sort((a, b) => b - a)[0];
+  const hasAuthor = ld.author || !!$('meta[name="author" i], [rel="author"], [itemprop="author"], .author, .byline, [class*="author" i]');
+  const authLinks = links.filter((l) => !sameHost(l) && /\.(gov|edu)(\.|$)|wikipedia\.org|who\.int|trai\.gov|rbi\.org/i.test(l.hostname)).length;
+  const linkTexts = $$('a[href]').map((a) => (a.textContent + ' ' + a.getAttribute('href')).toLowerCase());
+  const trustLinks = { about: linkTexts.some((t) => /about/.test(t)), contact: linkTexts.some((t) => /contact|support|help/.test(t)), privacy: linkTexts.some((t) => /privacy/.test(t)) };
+
   const bodyEl = dom.body || dom.documentElement;
   bodyEl.querySelectorAll('script,style,noscript,svg,template,iframe').forEach((n) => n.remove());
   const main = bodyEl.querySelector('main, article, [role=main]') || bodyEl;
   const text = (main.textContent || '').replace(/\s+/g, ' ').trim();
   const bodyTokens = tokens(text);
+  const stats = (text.match(/\b\d[\d,.]*\s?(%|percent|mbps|gbps|gb|₹|rs\.?|inr|crore|lakh|million|users|customers)|₹\s?\d[\d,]*/gi) || []).length;
 
   const h1s = $$('h1').map((h) => h.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const subheads = $$('h2,h3,h4').map((h) => h.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -167,8 +194,18 @@ function extract(html, pageUrl) {
     footerLinks,
     scripts,
     emptyRoot,
+    stats,
     framework,
     internalPaths,
+    questionHeadings,
+    answerBlocks,
+    lists,
+    tables,
+    hasAuthor,
+    lastDate: lastDate ? lastDate.toISOString().slice(0, 10) : '',
+    authLinks,
+    sameAs: ld.sameAs,
+    trustLinks,
     wordCount: bodyTokens.length,
     bodyTokens,
     first100: bodyTokens.slice(0, 100).join(' '),
@@ -251,8 +288,10 @@ export function analyzePage(fetched, pageQueries = [], ga = null) {
   const depth = Math.min(1, d.wordCount / 800) * 100;
   const content = qScore === null ? depth * 0.8 : qScore * 0.75 + depth * 0.25;
 
+  const geo = geoChecks(d, jsRisk);
   const { bodyTokens, first100, subheads, ...meta } = d;
   return {
+    geo,
     _text: ' ' + bodyTokens.slice(0, 6000).join(' ') + ' ',
     url: fetched.url,
     finalUrl: fetched.finalUrl,
@@ -482,4 +521,62 @@ export function internalLinkPlan(pages, isBranded) {
   const weak = ok.map((p) => ({ url: p.url, inbound: inbound[pathOf(p.url)] || 0, impressions: p.gsc?.i || 0, money: !!p.money }))
     .filter((p) => p.inbound <= 2 && (p.impressions > 0 || p.money)).sort((a, b) => b.money - a.money || b.impressions - a.impressions).slice(0, 30);
   return { suggestions: picked, weakInbound: weak };
+}
+
+// ---------- AI search (GEO) readiness ----------
+// Free, rule-based checks on the raw HTML, following Google's AI-features guidance and common GEO practice:
+// content must be server-rendered, scannable (question headings, short answers, lists/tables), attributable
+// (author, dates, sources) and structured (schema). FAQ rich results were retired in May 2026, so FAQPage
+// markup is not scored as a rich-result win.
+export function geoChecks(d, jsRisk) {
+  const c = [];
+  const add = (id, label, weight, val, detail) => c.push({ id, label, weight, val, detail });
+  const ageDays = d.lastDate ? (Date.now() - new Date(d.lastDate)) / 86400000 : null;
+  add('g-ssr', 'Content readable without JavaScript', 15, jsRisk ? 0 : 1, jsRisk ? 'AI crawlers mostly read raw HTML — this page renders client-side' : `${d.wordCount} words in HTML`);
+  add('g-q', 'Question-style headings', 10, d.questionHeadings >= 2 ? 1 : d.questionHeadings === 1 ? 0.5 : 0, `${d.questionHeadings} of ${d.subheads.length} H2/H3 are questions`);
+  add('g-ans', 'Answer-ready paragraphs (25–90 words under a heading)', 15, d.answerBlocks >= 3 ? 1 : d.answerBlocks >= 1 ? 0.5 : 0, `${d.answerBlocks} answer blocks`);
+  add('g-struct', 'Lists or tables for scannable facts', 8, d.lists + d.tables >= 2 ? 1 : d.lists + d.tables ? 0.5 : 0, `${d.lists} lists · ${d.tables} tables`);
+  add('g-schema', 'Structured data (Article / Product / Organization / Breadcrumb…)', 10, d.schemaTypes.filter((t) => t !== '(invalid JSON-LD)').length ? 1 : 0, d.schemaTypes.join(', ') || 'None');
+  add('g-author', 'Author / byline (E-E-A-T)', 10, d.hasAuthor ? 1 : 0, d.hasAuthor ? 'Found' : 'No author signal');
+  add('g-date', 'Published / updated date', 10, d.lastDate ? 1 : 0, d.lastDate || 'No date found');
+  add('g-fresh', 'Updated in the last 12 months', 5, ageDays == null ? 0 : ageDays <= 365 ? 1 : ageDays <= 730 ? 0.5 : 0, ageDays == null ? 'Unknown' : `${Math.round(ageDays)} days old`);
+  add('g-stats', 'Specific facts & numbers (≥ 3)', 7, d.stats >= 3 ? 1 : d.stats ? 0.5 : 0, `${d.stats} data points`);
+  add('g-cite', 'Cites authoritative sources', 5, d.authLinks ? 1 : d.externalLinks ? 0.5 : 0, `${d.authLinks} authoritative · ${d.externalLinks} external links`);
+  add('g-h1', 'Clear title + single H1', 5, d.title && d.h1s.length === 1 ? 1 : d.title ? 0.5 : 0, d.h1s[0] || 'No H1');
+  const total = c.reduce((s, x) => s + x.weight, 0);
+  return { score: Math.round((c.reduce((s, x) => s + x.weight * x.val, 0) / total) * 100), checks: c };
+}
+
+// robots.txt rules for AI / search crawlers
+export const AI_BOTS = [
+  ['Googlebot', 'Google Search, AI Overviews & AI Mode'],
+  ['Google-Extended', 'Gemini training/grounding only — blocking it does NOT remove you from Search or AI Overviews'],
+  ['Bingbot', 'Bing + Copilot answers'],
+  ['OAI-SearchBot', 'ChatGPT search results (blocking hides you from ChatGPT search)'],
+  ['ChatGPT-User', 'ChatGPT fetching pages a user asks about'],
+  ['GPTBot', 'OpenAI model training'],
+  ['ClaudeBot', 'Anthropic model training'],
+  ['Claude-SearchBot', 'Claude search results'],
+  ['PerplexityBot', 'Perplexity answers'],
+  ['Applebot-Extended', 'Apple Intelligence training'],
+  ['CCBot', 'Common Crawl (used by many AI models)'],
+];
+export function robotsAccess(txt) {
+  const groups = [];
+  let cur = null, lastWasAgent = false;
+  for (const raw of String(txt || '').split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, '').trim();
+    const m = line.match(/^([a-z-]+)\s*:\s*(.*)$/i);
+    if (!m) continue;
+    const k = m[1].toLowerCase(), v = m[2].trim();
+    if (k === 'user-agent') { if (!lastWasAgent) groups.push((cur = { agents: [], rules: [] })); cur.agents.push(v.toLowerCase()); lastWasAgent = true; }
+    else { lastWasAgent = false; if (cur && (k === 'allow' || k === 'disallow')) cur.rules.push({ k, v }); }
+  }
+  return AI_BOTS.map(([bot, use]) => {
+    const g = groups.find((x) => x.agents.includes(bot.toLowerCase())) || groups.find((x) => x.agents.includes('*'));
+    const rules = g?.rules || [];
+    const full = rules.some((r) => r.k === 'disallow' && r.v === '/') && !rules.some((r) => r.k === 'allow' && (r.v === '/' || r.v === ''));
+    const some = rules.some((r) => r.k === 'disallow' && r.v && r.v !== '/');
+    return { bot, use, status: full ? 'Blocked' : 'Allowed', rule: (g ? (g.agents.includes('*') && !g.agents.includes(bot.toLowerCase()) ? 'via *' : 'own rules') : 'no rules') + (some && !full ? ' · some paths disallowed' : '') };
+  });
 }
