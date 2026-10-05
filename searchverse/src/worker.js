@@ -866,7 +866,7 @@ async function handleApi(req, env, url) {
         dateRanges: [{ startDate: String(b.startDate), endDate: String(b.endDate) }],
         dimensions: [{ name: 'landingPage' }],
         metrics: gaMetrics(meta.lead_event).map((name) => ({ name })),
-        dimensionFilter: gaFilter(b.organicOnly !== false, patterns),
+        dimensionFilter: gaFilter(true, patterns), // always Organic Search only
         orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
         limit: Math.min(25000, Number(b.limit) || 10000),
         offset: Math.max(0, Number(b.offset) || 0),
@@ -1195,6 +1195,7 @@ async function pullGa(token, project, run) {
       dateRanges: [cur, prev],
       dimensions: [{ name: 'sessionDefaultChannelGroup' }],
       metrics: ['sessions', 'totalUsers', 'keyEvents', 'engagementRate'].map((name) => ({ name })),
+      dimensionFilter: organic,
       limit: 30,
     }),
     gfetch(token, endpoint, {

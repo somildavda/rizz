@@ -1063,7 +1063,7 @@ const perfCache = {};
 async function renderUrls(pid, params) {
   const gran = params.gran === 'week' ? 'week' : 'month';
   const cmp = params.cmp === 'year' ? 'year' : 'prev';
-  const organic = params.all !== '1';
+  const organic = true; // GA4 is always Organic Search only
   const [{ project }, lob] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/lobs`)]);
   const periods = perfPeriods(gran);
   const per = periods.find((p) => p.key === params.p) || periods[gran === 'month' && periods[0].partial ? 1 : 0];
@@ -1086,7 +1086,6 @@ async function renderUrls(pid, params) {
         <select id="u-lob" style="width:auto"><option value="">All URLs</option>${lob.groups.length ? `<option value="all" ${scope === 'all' ? 'selected' : ''}>All LOB groups</option>` : ''}
           ${cats.map((c) => `<option value="cat:${esc(c)}" ${scope === 'cat:' + c ? 'selected' : ''}>LOB: ${esc(c)}</option>`).join('')}
           ${lob.groups.map((g) => `<option value="g:${g.id}" ${scope === 'g:' + g.id ? 'selected' : ''}>— ${esc(g.name)}</option>`).join('')}</select>
-        ${project.ga4_property ? `<label class="row small" style="gap:6px;margin:0;font-weight:400"><input type="checkbox" id="u-org" style="width:auto" ${organic ? 'checked' : ''}> GA4 organic only</label>` : ''}
         <button class="btn" id="u-csv">⬇ CSV</button>
       </div></div>
     ${project.brand_terms ? '' : `<div class="banner">Tip: add your <b>brand terms</b> (e.g. <code>airtel</code>) in ${isAdmin() ? `<a href="#/p/${pid}/edit">project settings</a>` : 'project settings (ask your admin)'} to split branded vs non-branded queries.</div>`}
@@ -1096,7 +1095,6 @@ async function renderUrls(pid, params) {
   document.getElementById('u-per').onchange = (e) => setQ('p', e.target.value);
   document.getElementById('u-cmp').onchange = (e) => setQ('cmp', e.target.value === 'year' ? 'year' : '');
   document.getElementById('u-lob').onchange = (e) => setQ('lob', e.target.value);
-  document.getElementById('u-org')?.addEventListener('change', (e) => setQ('all', e.target.checked ? '' : '1'));
 
   const key = JSON.stringify([pid, per.start, per.end, prev, groupIds, organic]);
   let d = perfCache[key];
@@ -1159,7 +1157,7 @@ async function renderUrls(pid, params) {
   document.getElementById('u-body').outerHTML = `<div class="grid kpis section">
       ${tile('Clicks', sum('c'), sum('pc'))}${tile('Impressions', sum('i'), sum('pi'))}
       ${project.brand_terms ? tile('Non-branded clicks', bs.nonBranded.c, pbs.nonBranded.c) + tile('Branded clicks', bs.branded.c, pbs.branded.c) : ''}
-      ${hasGa ? tile(organic ? 'Organic sessions' : 'Sessions', totS, ptotS) + tile('New users', sum('nu'), sum('pnu')) + tile('Returning users', sum('ru'), sum('pru')) + tile('Bounce rate', totS ? totB / totS : 0, ptotS ? ptotB / ptotS : 0, (v) => pct(v), { invert: true, isPct: true }) + tile('Page views', sum('pv'), sum('ppv')) + tile('Key events', sum('ke'), sum('pke')) : ''}
+      ${hasGa ? tile('Organic sessions', totS, ptotS) + tile('New users', sum('nu'), sum('pnu')) + tile('Returning users', sum('ru'), sum('pru')) + tile('Bounce rate', totS ? totB / totS : 0, ptotS ? ptotB / ptotS : 0, (v) => pct(v), { invert: true, isPct: true }) + tile('Page views', sum('pv'), sum('ppv')) + tile('Key events', sum('ke'), sum('pke')) : ''}
       ${hasLead ? tile(`Leads (${esc(project.lead_event)})`, sum('ld'), sum('pld')) : ''}
     </div>
     ${project.brand_terms ? `<div class="small muted" style="margin-top:6px">Branded = queries containing ${esc(project.brand_terms)} · non-branded share of clicks: <b>${pct(bs.nonBranded.c / Math.max(1, bs.nonBranded.c + bs.branded.c))}</b>${groupIds.length ? ' · query split is for the selected LOB URLs' : ''}</div>` : ''}
@@ -1179,7 +1177,7 @@ async function renderUrls(pid, params) {
       ] : []),
       ...(hasLead ? [{ key: 'ld', label: 'Leads', num: 1, render: (x) => cell(x.ld, x.pld) }] : []),
     ], list, { limit: 1000, onRow: (x) => urlQueries(pid, project, x, per, prev, isBranded) })}
-    <p class="hint">${fmt(list.length)} URLs. Click a URL to see all its queries (branded vs non-branded). GSC URLs are matched to GA4 landing pages by path. ${hasGa ? 'Returning users = total users − new users.' : ''}</p></div>`;
+    <p class="hint">${fmt(list.length)} URLs. Click a URL to see all its queries (branded vs non-branded). GSC URLs are matched to GA4 organic landing pages by path (GA4 = Organic Search only). ${hasGa ? 'Returning users = total users − new users.' : ''}</p></div>`;
 
   document.getElementById('u-csv').onclick = () => {
     const qv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -1528,7 +1526,7 @@ function viewGa(run) {
   const rows = ga.landing.filter((l) => !match || match(origin + l.path.split('?')[0])).map((l) => ({ ...l, p: prev[l.path] || null }));
   const hp = !!ga.prevLanding;
   return `<div class="card"><h2>Organic sessions: current vs comparison</h2>${lineChart([{ name: 'Sessions', values: gcur.map((d) => d.s), color: 'var(--good)', axis: true }, { name: 'Comparison period', values: gprev.map((d) => d.s), color: 'var(--muted)', dash: true }], { labels: gcur.map((d) => d.d.slice(5)) })}</div>
-    <div class="card section"><h2>Channels</h2>${table([{ key: 'name', label: 'Channel' }, { key: 's', label: 'Sessions', num: 1, render: (r) => dcell(r.cur?.sessions, r.prev?.sessions), sort: (r) => r.cur?.sessions || 0 }, { key: 'u', label: 'Users', num: 1, render: (r) => dcell(r.cur?.users, r.prev?.users), sort: (r) => r.cur?.users || 0 }, { key: 'e', label: 'Engagement', num: 1, render: (r) => dcell(r.cur?.engagementRate, r.prev?.engagementRate, (v) => pct(v), { isPct: true }), sort: (r) => r.cur?.engagementRate || 0 }, { key: 'k', label: 'Key events', num: 1, render: (r) => dcell(r.cur?.keyEvents, r.prev?.keyEvents), sort: (r) => r.cur?.keyEvents || 0 }], ga.channels, { filter: false })}</div>
+    <div class="card section"><h2>Organic Search summary</h2>${table([{ key: 'name', label: 'Channel' }, { key: 's', label: 'Sessions', num: 1, render: (r) => dcell(r.cur?.sessions, r.prev?.sessions), sort: (r) => r.cur?.sessions || 0 }, { key: 'u', label: 'Users', num: 1, render: (r) => dcell(r.cur?.users, r.prev?.users), sort: (r) => r.cur?.users || 0 }, { key: 'e', label: 'Engagement', num: 1, render: (r) => dcell(r.cur?.engagementRate, r.prev?.engagementRate, (v) => pct(v), { isPct: true }), sort: (r) => r.cur?.engagementRate || 0 }, { key: 'k', label: 'Key events', num: 1, render: (r) => dcell(r.cur?.keyEvents, r.prev?.keyEvents), sort: (r) => r.cur?.keyEvents || 0 }], ga.channels.filter((c) => c.name === 'Organic Search'), { filter: false })}</div>
     <div class="card section"><h2>Organic landing pages${s.scope ? ' · ' + esc(s.scope) : ''}</h2>${table([
       { key: 'path', label: 'Landing page', render: (r) => `<span class="url" style="display:inline-block">${esc(r.path)}</span>` },
       { key: 'sessions', label: 'Sessions', num: 1, render: (r) => dcell(r.sessions, hp ? r.p?.sessions ?? 0 : null) },
