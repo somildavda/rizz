@@ -23,6 +23,13 @@ if [ ! -f "$PASS_FILE" ]; then
 fi
 printf '%s' "$(cat "$PASS_FILE")" | npx wrangler secret put ACCESS_TOKEN
 
+GEMINI_FILE="$HOME/seo-insights/.gemini-set"
+if [ ! -f "$GEMINI_FILE" ]; then
+  echo
+  echo "Paste your free Gemini API key (from https://aistudio.google.com/apikey), or press Enter to skip:"
+  read -rs GKEY
+  if [ -n "$GKEY" ]; then printf '%s' "$GKEY" | npx wrangler secret put GEMINI_API_KEY && touch "$GEMINI_FILE"; fi
+fi
+
 echo
 echo "Passcode: $(cat "$PASS_FILE")   (saved in $PASS_FILE)"
-echo "Optional, for written client summaries: npx wrangler secret put ANTHROPIC_API_KEY"

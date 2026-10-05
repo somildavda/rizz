@@ -3,10 +3,12 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [vars]
+GEMINI_MODEL = "gemini-2.5-flash"
 CLAUDE_MODEL = "claude-opus-5-5"
 # GSC_SITE_URL = "sc-domain:example.com"
 
 # Secrets (set with `wrangler secret put <NAME>`):
-#   ANTHROPIC_API_KEY   - required for the written client summary
+#   GEMINI_API_KEY      - free key from aistudio.google.com, powers the AI insights
+#   ANTHROPIC_API_KEY   - optional alternative to Gemini
 #   GSC_SERVICE_ACCOUNT - optional, full JSON key of a Google service account
 #   ACCESS_TOKEN        - optional, simple password protecting the tool

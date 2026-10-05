@@ -39,13 +39,9 @@ async function queryPages(token, site, start, end, dimensions = ['page']) {
   return json.rows || [];
 }
 
-// Last `days` days vs the period before it, merged per page.
-export async function fetchGsc(env, site, days = 28) {
+// The selected week vs the week before it, merged per page.
+export async function fetchGsc(env, site, { start, end, prevStart, prevEnd }) {
   const token = await accessToken(env.GSC_SERVICE_ACCOUNT, 'https://www.googleapis.com/auth/webmasters.readonly');
-  const end = new Date(Date.now() - 3 * 864e5); // GSC data lags ~2-3 days
-  const start = new Date(end - (days - 1) * 864e5);
-  const prevEnd = new Date(start - 864e5);
-  const prevStart = new Date(prevEnd - (days - 1) * 864e5);
   const [cur, prev, pq] = await Promise.all([
     queryPages(token, site, start, end),
     queryPages(token, site, prevStart, prevEnd),

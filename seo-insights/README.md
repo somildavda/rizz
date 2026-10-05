@@ -1,5 +1,7 @@
 # SEO Insights (separate Cloudflare Worker)
 
+Pick a week, connect your Google Sheet or Search Console, and get that week's data compared with the week before, plus AI insights and recommendations from the free Gemini API.
+
 Turns page-path SEO data into a plain-language client update plus data tables for the team.
 It deploys as its **own** Worker (`seo-insights`) and is not connected to the Rizz site.
 
@@ -31,7 +33,11 @@ Local test: `node test.mjs` (uses `sample.csv`).
 
 ## Try it on your Mac first (dev link)
 ```
-echo 'ACCESS_TOKEN=demo' > .dev.vars      # add ANTHROPIC_API_KEY=... on a new line for AI features
+printf 'ACCESS_TOKEN=demo\nGEMINI_API_KEY=your-key\n' > .dev.vars
 npx wrangler dev
 ```
 Open http://localhost:8787 and use the passcode `demo`.
+
+## Weekly sheets
+Add a `Date` (or `Week`) column next to Page, Clicks, Impressions, Position (and optionally Query).
+The tool keeps the rows from the week you pick and compares them with the week before.

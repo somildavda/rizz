@@ -36,7 +36,9 @@ button.ghost{background:none;color:var(--acc);border:1px solid var(--line)}
 <label>…or paste CSV. Columns: Page, Clicks, Impressions, CTR, Position. Optional: Query, Prev Clicks, Prev Position, Conversions</label><textarea id="csv"></textarea></div>
 <div data-s="sheet" class="hide"><label>Published CSV link (File → Share → Publish to web → CSV)</label><input id="csvUrl">
 <label>…or private Sheet ID (shared with the service account)</label><input id="sheetId"><label>Range</label><input id="range" value="A:Z"></div>
-<div data-s="gsc" class="hide"><label>Property (e.g. sc-domain:example.com)</label><input id="site"><label>Days per period</label><input id="days" type="number" value="28"></div>
+<div data-s="gsc" class="hide"><label>Property (e.g. sc-domain:example.com)</label><input id="site"></div>
+<label>Week</label><select id="week"></select>
+<small style="color:var(--mute)">Compared with the week before. For a sheet, add a Date or Week column so it can pick the week; without one, the whole sheet is used.</small>
 <label>Context for the write-up (launches, migrations, seasonality…)</label><input id="notes">
 <div class="row"><button id="go">Generate insights</button><button class="ghost" id="save">Save client</button></div>
 </div>
@@ -54,7 +56,11 @@ button.ghost{background:none;color:var(--acc);border:1px solid var(--line)}
 <script>
 const $=id=>document.getElementById(id);
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-const FIELDS=['client','source','csvUrl','sheetId','range','site','days','notes'];
+const FIELDS=['client','source','csvUrl','sheetId','range','site','notes'];
+(()=>{const d=new Date();d.setUTCHours(0,0,0,0);d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)-7);
+ const o=['<option value="">Whole sheet / all data</option>'];for(let i=0;i<12;i++){const s=new Date(d-i*7*864e5),e=new Date(+s+6*864e5);
+ const f=x=>x.toLocaleDateString(undefined,{day:'numeric',month:'short',timeZone:'UTC'});o.push('<option value="'+s.toISOString().slice(0,10)+'"'+(i===0?' selected':'')+'>'+f(s)+' – '+f(e)+(i===0?' (last week)':'')+'</option>')}
+ $('week').innerHTML=o.join('')})();
 let current=null,last=null;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function showSource(){document.querySelectorAll('[data-s]').forEach(d=>d.classList.toggle('hide',d.dataset.s!==$('source').value))}
@@ -77,7 +83,7 @@ $('clients').onclick=e=>{
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;$('ask').click()});
 renderClients();renderHistory();
 };
-$('newClient').onclick=()=>{FIELDS.forEach(f=>$(f).value=f==='source'?'csv':f==='range'?'A:Z':f==='days'?28:'');$('csv').value='';current=null;showSource();renderClients();renderHistory();$('client').focus()};
+$('newClient').onclick=()=>{FIELDS.forEach(f=>$(f).value=f==='source'?'csv':f==='range'?'A:Z':'');$('csv').value='';current=null;showSource();renderClients();renderHistory();$('client').focus()};
 $('save').onclick=()=>{
   const c=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));if(!c.client)return alert('Add a client name first');
   const cs=store.get('clients',[]).filter(x=>x.client!==c.client);cs.push(c);cs.sort((a,b)=>a.client.localeCompare(b.client));
@@ -104,16 +110,16 @@ const TABLES=[['Quick wins: ranking 4–20','strikingDistance',['page','impressi
 const tbl=(rows,cols)=>'<div class="tw"><table><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+fmt(c,r[c])+'</td>').join('')+'</tr>').join('')+'</table></div>';
 function show(r){
   last=r;const f=r.findings;$('out').classList.remove('hide');
-  $('report').innerHTML='<h1>'+esc(r.client||'SEO report')+' <small style="font-size:13px;color:var(--mute)">'+new Date(r.id).toLocaleDateString()+'</small></h1>'+
-   (r.summary?marked.parse(r.summary):'<p><i>Add ANTHROPIC_API_KEY to get the written client summary.</i></p>')+'<h2>Data tables</h2>'+
+  $('report').innerHTML='<h1>'+esc(r.client||'SEO report')+' <small style="font-size:13px;color:var(--mute)">'+(r.period?esc(r.period):new Date(r.id).toLocaleDateString())+'</small></h1>'+
+   (r.summary?marked.parse(r.summary):'<p><i>'+esc(r.aiError||'Add GEMINI_API_KEY (free) to get AI insights and recommendations.')+'</i></p>')+'<h2>Data tables</h2>'+
    TABLES.filter(([, k])=>f[k]&&f[k].length).map(([t,k,c])=>'<h3>'+t+'</h3>'+tbl(f[k],c)).join('');
 }
 $('go').onclick=async()=>{
   const out=$('out');out.classList.remove('hide');$('report').textContent='Analysing…';
-  const body=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));body.csv=$('csv').value;body.days=+body.days||28;
+  const body=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));body.csv=$('csv').value;body.week=$('week').value;
   const res=await fetch('/api/analyze',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
   const d=await res.json();if(d.error){$('report').textContent=d.error;return}
-  const r={id:Date.now(),client:body.client,findings:d.findings,summary:d.summary};
+  const r={id:Date.now(),client:body.client,period:d.period,findings:d.findings,summary:d.summary,aiError:d.aiError};
   const h=store.get('history',[]);h.unshift(r);store.set('history',h.slice(0,50));renderHistory();show(r);
 };
 $('print').onclick=()=>window.print();

@@ -1,4 +1,4 @@
-export const SYSTEM_PROMPT = `You are a senior SEO consultant writing an update for a client (a business owner, not an SEO specialist).
+export const SYSTEM_PROMPT = `You are a senior SEO consultant writing a weekly update for a client (a business owner, not an SEO specialist).
 
 Voice and style rules:
 - Write like a person who knows the site well, not like a report generator.
@@ -14,15 +14,15 @@ Output Markdown with these sections:
 3-4 sentences a busy client can read in 20 seconds.
 ## What's working
 ## What needs attention
-## Quick wins we're doing next
-Numbered, each item names the page, the action and the expected effect.
+## Recommendations for this week
+Numbered, 5-8 items in priority order. Each names the page or search, the exact action, and the expected effect.
 ## Bigger opportunities
 ## Internal notes (not for client)
 Bullet points with the technical detail and the exact numbers for the SEO team.`;
 
 export function userPrompt(findings, ctx) {
   return `Client: ${ctx.client || 'the client'}
-Period: ${ctx.period || 'last 28 days vs the 28 days before'}
+Period: ${ctx.period || 'the period in the data'}
 Extra context from the account manager: ${ctx.notes || 'none'}
 
 Findings (computed from page-level Search Console / analytics data, JSON):
