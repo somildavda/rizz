@@ -145,28 +145,11 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
   <p class="note">Google doesn't report how much free quota is left. Your exact limits and remaining quota are at <a href="https://aistudio.google.com/usage" target="_blank">AI Studio → Usage</a>. The free tier allows a set number of requests per minute and per day; when one runs out, Gemini returns a "quota exceeded" error and resets the next day.</p>
  </div>
 
- <div class="card"><div class="step"><span class="num">2</span><h2 style="margin:0">Google: Search Console &amp; Sheets</h2></div>
-  <div id="gConnected" class="hide"><p>✅ Signed in as <b id="gEmail"></b></p><div class="status" id="gSites"></div>
-   <form method="post" action="/auth/google/disconnect" class="row"><button class="ghost">Disconnect Google</button></form></div>
-  <form id="gForm" method="post" action="/auth/google">
-   <p class="sub">Sign in once and the tool can read every Search Console site and Google Sheet your account can see.</p>
-   <div class="status" id="gErr" style="color:var(--bad)"></div>
-   <p class="hide" id="gSaved">✅ Google app saved. Just click the button.</p>
-   <div class="grid2" id="gCreds"><div><label>OAuth Client ID</label><input name="cid" id="gCid" placeholder="…apps.googleusercontent.com" autocomplete="off"></div>
-    <div><label>Client secret</label><input name="secret" id="gSecret" type="password" autocomplete="off"></div></div>
-   <div class="row"><button class="big" id="gBtn">Sign in with Google</button></div>
-   <details style="margin-top:14px" open><summary><b>One-time setup: get the Client ID (about 5 minutes)</b></summary><ol style="line-height:1.8">
-    <li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank">Google Cloud → New project</a>, name it <b>searchverse-insights</b> → <b>Create</b>.</li>
-    <li>Click <b>Enable</b> on the <a href="https://console.cloud.google.com/apis/library/searchconsole.googleapis.com" target="_blank">Search Console API</a> and on the <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com" target="_blank">Google Sheets API</a>.</li>
-    <li>Open <a href="https://console.cloud.google.com/auth/branding" target="_blank">Google Auth Platform</a> → <b>Get started</b>: app name <b>Searchverse Insights</b>, your email, audience <b>External</b> → finish. Then go to <b>Audience</b> → <b>Publish app</b>, so Google doesn't sign you out every 7 days.</li>
-    <li>Open <a href="https://console.cloud.google.com/auth/clients/create" target="_blank">Clients → Create client</a> → <b>Web application</b>. Under <b>Authorized redirect URIs</b> add <code id="gRedirect"></code> → <b>Create</b>.</li>
-    <li>Copy the <b>Client ID</b> and <b>Client secret</b> into the boxes above and click <b>Sign in with Google</b>. When Google says the app isn't verified, click <b>Advanced → Go to Searchverse Insights</b>. It's your own app.</li>
-   </ol></details>
-  </form>
-  <form method="post" action="/auth/google/reset" class="row" onsubmit="return confirm('Remove the saved Client ID, secret and Google sign-in?')"><button class="ghost">🔄 Start over (clear Google setup)</button></form>
-  <details class="note" style="margin-top:14px"><summary>Advanced: use a service account key file instead</summary>
-   <input type="file" id="kGscFile" accept=".json,application/json" style="margin-top:8px"><div id="gscInfo" style="margin-top:6px"></div>
-   <p>Create a service account in Google Cloud, download its JSON key, upload it here, then add its email as a user in Search Console.</p></details>
+<div class="card"><div class="step"><span class="num">2</span><h2 style="margin:0">Your account</h2></div>
+  <p>Signed in with Google as <b id="gEmail"></b>. <a href="/logout">Sign out</a></p>
+  <div class="status" id="gSites"></div>
+  <div id="accessBox" class="hide"><h3>Who can sign in</h3><p class="note">One Google email per line. You are the owner.</p>
+   <textarea id="allowed" style="min-height:80px"></textarea><div class="row"><button class="ghost" id="saveAccess">Save access list</button><span class="note" id="accessMsg"></span></div></div>
  </div>
 
  <div class="card"><h2>Privacy</h2><p class="note" style="margin:0">Your Gemini key, Google sign-in, clients and reports are saved on this tool's private Cloudflare storage, behind your passcode. <button class="ghost" id="clearKeys" style="margin-left:8px;padding:5px 10px">Remove saved keys</button></p></div>
@@ -226,18 +209,13 @@ async function loadSites(){if(!hasGoogle())return null;const d=await post('/api/
  if(d.sites&&d.sites.length){const cur=$('site').value;$('siteSel').innerHTML='<option value="">Choose a website…</option>'+d.sites.map(x=>'<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>').join('')}
  else if(d.sites){$('siteSel').innerHTML='<option value="">No Search Console sites on this Google account</option>'}
  return d}
-$('gForm').onsubmit=e=>{if(!gInfo.configured&&(!$('gCid').value.trim()||!$('gSecret').value.trim())){e.preventDefault();alert('Paste the Client ID and Client secret first. The setup steps are just below.');return}store.set('gcid',$('gCid').value.trim())};
 
 /* settings */
 let pendingGsc=null;
 function fillSettings(){const k=keys();$('kGemini').value=k.gemini||'';
- $('gRedirect').textContent=gInfo.redirectUri||location.origin+'/auth/callback';$('gCid').value=store.get('gcid','');
- $('gConnected').classList.toggle('hide',!gInfo.connected);$('gForm').classList.toggle('hide',!!gInfo.connected);$('gEmail').textContent=gInfo.email||'your Google account';
- $('gCreds').classList.toggle('hide',!!gInfo.configured);$('gSaved').classList.toggle('hide',!gInfo.configured);
- $('gscInfo').innerHTML=k.gsc?'Loaded key for <b>'+esc(JSON.parse(k.gsc).client_email)+'</b>':''}
-$('kGscFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();
- try{const j=JSON.parse(t);if(!j.client_email||!j.private_key)throw 0;const k=keys();k.gsc=t;store.set('keys',k);$('gscInfo').innerHTML='Saved. Add <b>'+esc(j.client_email)+'</b> as a user in Search Console.';renderStatus();loadSites()}
- catch{$('gscInfo').textContent='That is not a service account key file.'}};
+ $('gEmail').textContent=gInfo.email||'';$('accessBox').classList.toggle('hide',!gInfo.owner);if(gInfo.allowed)$('allowed').value=gInfo.allowed.join(String.fromCharCode(10))}
+$('saveAccess').onclick=async()=>{const d=await post('/api/access',{emails:$('allowed').value.split(String.fromCharCode(10)).join(' ').split(/[ ,;]+/)});
+ $('accessMsg').textContent=d.error?'❌ '+d.error:'Saved ✓';if(d.allowed)$('allowed').value=d.allowed.join(String.fromCharCode(10))};
 async function testGoogle(){if(!hasGoogle())return;$('gSites').textContent='Loading your sites…';const d=await loadSites();
  $('gSites').innerHTML=d.error?'❌ '+esc(d.error):d.sites.length?'✅ '+d.sites.length+' Search Console sites: '+d.sites.map(esc).join(', '):'⚠️ This Google account has no Search Console sites.'}
 $('saveKeys').onclick=async()=>{const k=keys();k.gemini=$('kGemini').value.trim();store.set('keys',k);
@@ -315,19 +293,41 @@ document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.d
 
 /* start */
 renderClients();renderHistory();renderStatus();loadData();
-const gErr=new URLSearchParams(location.search).get('google_error');
-loadGoogle().then(()=>{if(gErr){history.replaceState(null,'','/');go('settings');$('gErr').textContent='❌ '+gErr}loadSites().catch(()=>{});
- const justSignedIn=location.search.includes('google=connected');if(justSignedIn)history.replaceState(null,'','/');
- if(justSignedIn){go('settings');testGoogle()}
- if(!hasGoogle())setSource('sheet')});
+loadGoogle().then(()=>{fillSettings();setSource('gsc');testGoogle()});
 </script></body></html>`;
 
-export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+const escHtml = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Login page: a Google button, or the one-time setup form when no Google app is saved yet.
+export const LOGIN = (configured, error, redirectUri) => `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Searchverse Insights</title>
 <style>${STYLE}
-body{min-height:100vh;display:grid;place-items:center}
-form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;width:min(340px,90vw)}
-h2{margin:0 0 4px}h2 span{color:var(--acc)}p{color:var(--mute);margin:0 0 8px;font-size:14px}
-input{width:100%;padding:11px;margin:12px 0;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
-button{width:100%;padding:11px;border:0;border-radius:8px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer}.err{color:var(--bad)}</style></head>
-<body><form method="post" action="/login"><h2>Searchverse <span>Insights</span></h2><p>Weekly SEO reports with AI recommendations</p><!--err--><input name="pass" type="password" placeholder="Passcode" autofocus><button>Enter</button></form></body></html>`;
+body{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:32px;width:min(460px,100%)}
+h2{margin:0 0 4px;font-size:24px}h2 span{color:var(--acc)}p{color:var(--mute);margin:0 0 18px}
+.g{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:13px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:600 16px system-ui;text-decoration:none}
+.g:hover{border-color:var(--acc)}
+.err{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent);padding:10px 12px;border-radius:8px;font-size:14px;margin-bottom:16px}
+label{display:block;font-size:13px;color:var(--mute);margin:12px 0 5px}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+button{width:100%;margin-top:16px;padding:12px;border:0;border-radius:10px;background:var(--acc);color:#fff;font:600 15px system-ui;cursor:pointer}
+ol{font-size:14px;line-height:1.7;padding-left:18px;color:var(--ink)}code{font-size:12px;background:var(--bg);border:1px solid var(--line);padding:1px 4px;border-radius:4px;word-break:break-all}
+details{margin-top:18px;font-size:14px}summary{cursor:pointer;color:var(--mute)}</style></head><body><div class="box">
+<h2>Searchverse <span>Insights</span></h2><p>Weekly SEO reports from Search Console, with AI recommendations.</p>
+${error ? `<div class="err">${escHtml(error)}</div>` : ''}
+${configured ? `<a class="g" href="/auth/google"><svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Sign in with Google</a>
+<details><summary>Redo setup (wrong Client ID or secret)</summary>${setupForm(redirectUri)}</details>`
+  : `<p><b>One-time setup.</b> Create a Google sign-in for this tool (about 5 minutes):</p>${setupForm(redirectUri)}`}
+</div></body></html>`;
+
+const setupForm = (redirectUri) => `<ol>
+<li>Open <a href="https://console.cloud.google.com/projectcreate" target="_blank">Google Cloud → New project</a> → name <b>searchverse-insights</b> → Create.</li>
+<li>Click <b>Enable</b> on the <a href="https://console.cloud.google.com/apis/library/searchconsole.googleapis.com" target="_blank">Search Console API</a> and the <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com" target="_blank">Google Sheets API</a>.</li>
+<li><a href="https://console.cloud.google.com/auth/branding" target="_blank">Google Auth Platform</a> → Get started → name <b>Searchverse Insights</b>, your email, <b>External</b> → finish. Then <b>Audience → Publish app</b>.</li>
+<li><a href="https://console.cloud.google.com/auth/clients/create" target="_blank">Clients → Create client</a> → <b>Web application</b> → Authorized redirect URIs → add<br><code>${escHtml(redirectUri)}</code> → Create.</li>
+<li>Use the <b>copy icons</b> in the popup to copy the Client ID and secret into the boxes below.</li></ol>
+<form method="post" action="/setup">
+<label>Client ID</label><input name="cid" placeholder="….apps.googleusercontent.com" required autocomplete="off">
+<label>Client secret</label><input name="secret" placeholder="GOCSPX-…" required autocomplete="off">
+<label>Setup passcode (from your Terminal: <code>cat ~/seo-insights/.passcode</code>)</label><input name="pass" type="password" required>
+<button>Save and sign in with Google</button></form>`;
