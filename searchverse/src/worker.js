@@ -346,6 +346,24 @@ function hostAllowed(project, target) {
 function ymd(d) {
   return d.toISOString().slice(0, 10);
 }
+// Custom range: compare with the previous period of equal length, or the same dates one year earlier.
+function customPeriods(start, end, compare) {
+  const re = /^\d{4}-\d{2}-\d{2}$/;
+  if (!re.test(start) || !re.test(end) || start > end) throw new HttpError(400, 'Pick a valid start and end date');
+  const s = new Date(start + 'T00:00:00Z'), e = new Date(end + 'T00:00:00Z');
+  const oldest = new Date(now() - 486 * DAY);
+  if (s < oldest) throw new HttpError(400, 'Search Console only keeps about 16 months of data');
+  if (e > new Date(now() - DAY)) throw new HttpError(400, 'End date must be before today');
+  const len = Math.round((e - s) / DAY) + 1;
+  if (len > 366) throw new HttpError(400, 'Pick a range of at most 12 months');
+  if (compare === 'year') {
+    const back = (d) => { const x = new Date(d); x.setUTCFullYear(x.getUTCFullYear() - 1); return ymd(x); };
+    return { start, end, pstart: back(s), pend: back(e), compare: 'year' };
+  }
+  const pend = new Date(s.getTime() - DAY);
+  return { start, end, pstart: ymd(new Date(pend.getTime() - (len - 1) * DAY)), pend: ymd(pend), compare: 'previous' };
+}
+
 function periods(days = 28) {
   const end = new Date(now() - 3 * DAY); // GSC data lags ~2-3 days
   const start = new Date(end.getTime() - (days - 1) * DAY);
@@ -456,6 +474,7 @@ async function handleApi(req, env, url) {
     )
       .bind(pid, user.email, p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, now())
       .run();
+    await saveMoneyPages(env, pid, p.money_pages);
     return json({ id: pid });
   }
   if ((m = path.match(/^\/api\/projects\/(\w+)$/))) {
@@ -465,7 +484,8 @@ async function handleApi(req, env, url) {
       const conn = project.connection_id
         ? await DB.prepare('SELECT google_email FROM connections WHERE id = ?').bind(project.connection_id).first()
         : null;
-      return json({ project: { ...project, members, connection_email: conn?.google_email || null } });
+      const meta = await DB.prepare("SELECT value FROM project_meta WHERE project_id = ? AND key = 'money_pages'").bind(project.id).first();
+      return json({ project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta?.value || '' } });
     }
     requireAdmin(user);
     if (method === 'PUT') {
@@ -475,6 +495,7 @@ async function handleApi(req, env, url) {
       )
         .bind(p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, project.id)
         .run();
+      await saveMoneyPages(env, project.id, p.money_pages);
       return json({ ok: true });
     }
     if (method === 'DELETE') {
@@ -482,6 +503,10 @@ async function handleApi(req, env, url) {
         DB.prepare('DELETE FROM pages WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').bind(project.id),
         DB.prepare('DELETE FROM runs WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM project_members WHERE project_id = ?').bind(project.id),
+        DB.prepare('DELETE FROM project_meta WHERE project_id = ?').bind(project.id),
+        DB.prepare('DELETE FROM run_blobs WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)').bind(project.id),
+        DB.prepare('DELETE FROM lob_groups WHERE project_id = ?').bind(project.id),
+        DB.prepare('DELETE FROM lob_monthly WHERE project_id = ?').bind(project.id),
         DB.prepare('DELETE FROM projects WHERE id = ?').bind(project.id),
       ]);
       return json({ ok: true });
@@ -680,8 +705,9 @@ async function handleApi(req, env, url) {
       requireRun(project);
       if (!project.connection_id) throw new HttpError(400, 'This project has no Google account connected');
       const b = await body(req).catch(() => ({}));
-      const days = [7, 28, 90].includes(Number(b.days)) ? Number(b.days) : 28;
-      const pr = periods(days);
+      const pr = b.start && b.end
+        ? customPeriods(String(b.start), String(b.end), b.compare)
+        : periods([7, 28, 90].includes(Number(b.days)) ? Number(b.days) : 28);
       const rid = id();
       await DB.prepare(
         `INSERT INTO runs (id, project_id, created_by, created_at, status, start_date, end_date, prev_start, prev_end)
@@ -717,7 +743,11 @@ async function handleApi(req, env, url) {
     }
     if (method === 'DELETE') {
       requireAdmin(user);
-      await DB.batch([DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(run.id), DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id)]);
+      await DB.batch([
+        DB.prepare('DELETE FROM pages WHERE run_id = ?').bind(run.id),
+        DB.prepare('DELETE FROM run_blobs WHERE run_id = ?').bind(run.id),
+        DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id),
+      ]);
       return json({ ok: true });
     }
   }
@@ -729,6 +759,50 @@ async function handleApi(req, env, url) {
     const gsc = await pullGsc(token, project, run);
     await DB.prepare('UPDATE runs SET gsc_json = ? WHERE id = ?').bind(JSON.stringify(gsc), run.id).run();
     return json({ gsc });
+  }
+
+  // Full Search Console export: the browser pages through results (25k rows per call);
+  // the Worker only forwards the request so it stays within free-plan CPU limits.
+  if ((m = path.match(/^\/api\/runs\/(\w+)\/gsc-rows$/)) && method === 'POST') {
+    const { project } = await getRun(env, m[1], user.email);
+    requireRun(project);
+    const b = await body(req);
+    const dims = (b.dimensions || []).filter((d) => ['query', 'page', 'date', 'device', 'country'].includes(d));
+    const token = await accessToken(env, project.connection_id);
+    const res = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          startDate: String(b.startDate),
+          endDate: String(b.endDate),
+          dimensions: dims,
+          type: 'web',
+          rowLimit: Math.min(25000, Number(b.rowLimit) || 25000),
+          startRow: Math.max(0, Number(b.startRow) || 0),
+        }),
+      }
+    );
+    return new Response(res.body, { status: res.ok ? 200 : 502, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+  }
+  if ((m = path.match(/^\/api\/runs\/(\w+)\/blob$/))) {
+    const { run, project } = await getRun(env, m[1], user.email);
+    const kind = String(url.searchParams.get('kind') || '').replace(/[^\w-]/g, '').slice(0, 40);
+    if (!kind) throw new HttpError(400, 'kind required');
+    if (method === 'POST') {
+      requireRun(project);
+      const chunk = Math.max(0, Math.min(500, Number(url.searchParams.get('chunk')) || 0));
+      const text = await req.text();
+      if (text.length > 1_800_000) throw new HttpError(413, 'Chunk too large');
+      await DB.prepare('INSERT OR REPLACE INTO run_blobs (run_id, kind, chunk, data) VALUES (?, ?, ?, ?)').bind(run.id, kind, chunk, text).run();
+      return json({ ok: true });
+    }
+    const { results } = await DB.prepare('SELECT data FROM run_blobs WHERE run_id = ? AND kind = ? ORDER BY chunk').bind(run.id, kind).all();
+    if (!results.length) throw new HttpError(404, 'Not stored for this run');
+    // each chunk is a JSON array; join them into one array without parsing
+    const parts = results.map((r) => r.data.trim().replace(/^\[|\]$/g, '')).filter(Boolean);
+    return new Response('[' + parts.join(',') + ']', { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   }
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/ga$/)) && method === 'POST') {
@@ -827,6 +901,10 @@ function lobFilters(patterns) {
   return f;
 }
 
+async function saveMoneyPages(env, projectId, value) {
+  await env.DB.prepare("INSERT OR REPLACE INTO project_meta (project_id, key, value) VALUES (?, 'money_pages', ?)").bind(projectId, value || '').run();
+}
+
 async function ensureUser(env, email, invitedBy) {
   await env.DB.prepare(
     "INSERT INTO users (email, name, role, invited_by, created_at) VALUES (?, ?, 'member', ?, ?) ON CONFLICT(email) DO NOTHING"
@@ -872,7 +950,13 @@ async function validateProject(env, user, b) {
     ga4_property: b.ga4_property || null,
     ga4_name: b.ga4_name || null,
     connection_id: conn.id,
-    max_pages: Math.min(100, Math.max(5, Number(b.max_pages) || 25)),
+    max_pages: Math.min(1000, Math.max(5, Number(b.max_pages) || 25)),
+    money_pages: String(b.money_pages || '')
+      .split(/\s+/)
+      .map((u) => u.trim())
+      .filter((u) => /^https?:\/\//i.test(u))
+      .slice(0, 300)
+      .join('\n'),
   };
 }
 
@@ -885,11 +969,11 @@ async function pullGsc(token, project, run) {
   const cur = [run.start_date, run.end_date];
   const prev = [run.prev_start, run.prev_end];
   const [daily, queries, prevQueries, pages, prevPages, pageQueries, devices, countries] = await Promise.all([
-    q(run.prev_start, run.end_date, ['date'], 500),
+    q(run.prev_start, run.end_date, ['date'], 1000),
     q(...cur, ['query'], 1000),
     q(...prev, ['query'], 1000),
-    q(...cur, ['page'], 500),
-    q(...prev, ['page'], 500),
+    q(...cur, ['page'], 1000),
+    q(...prev, ['page'], 1000),
     q(...cur, ['page', 'query'], 5000),
     q(...cur, ['device'], 10),
     q(...cur, ['country'], 10),
@@ -939,7 +1023,7 @@ async function pullGa(token, project, run) {
       dimensions: [{ name: 'date' }],
       metrics: [{ name: 'sessions' }],
       dimensionFilter: organic,
-      limit: 400,
+      limit: 1000,
     }),
   ]);
   const channelRows = {};
@@ -1028,7 +1112,7 @@ async function fetchPage(project, raw) {
 function seoPrompt(project, input, maxChars) {
   const prompt = `You are a senior technical SEO and content strategist at an SEO agency. Analyse the data for the website "${project.name}" (${project.site_url}).
 The data comes from Google Search Console, GA4 (organic sessions) and an on-page crawl of the top pages, with rule-based scores already computed.
-Give specific, data-backed, prioritised recommendations. Reference actual queries, URLs and numbers. Avoid generic advice.
+Give specific, data-backed, prioritised recommendations. Pages marked "money": true are the business-critical money pages — always cover them first in page_recommendations and priorities. Reference actual queries, URLs and numbers. Avoid generic advice.
 For title/meta suggestions, include the page's most important query naturally; titles <= 60 chars, meta descriptions 140-155 chars.
 
 Return ONLY JSON in this exact shape:

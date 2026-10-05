@@ -113,3 +113,20 @@ CREATE TABLE IF NOT EXISTS lob_monthly (
   updated_at INTEGER,
   PRIMARY KEY (project_id, group_id, month)
 );
+
+-- Extra per-project settings (e.g. money_pages)
+CREATE TABLE IF NOT EXISTS project_meta (
+  project_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT,
+  PRIMARY KEY (project_id, key)
+);
+
+-- Large run exports (full GSC query/page lists), stored in chunks
+CREATE TABLE IF NOT EXISTS run_blobs (
+  run_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  chunk INTEGER NOT NULL,
+  data TEXT,
+  PRIMARY KEY (run_id, kind, chunk)
+);

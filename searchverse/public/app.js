@@ -331,7 +331,10 @@ async function renderProjectForm(pid) {
         <div id="prop-err" class="hint"></div>
         <label>Homepage URL</label><input id="f-site" value="${esc(p.site_url || '')}" placeholder="Auto from Search Console property">
         <div class="hint">Used for crawling and robots.txt / sitemap checks.</div>
-        <label>Pages to crawl per run</label><input id="f-max" type="number" min="5" max="100" value="${p.max_pages || 25}">
+        <label>Pages to crawl per run</label><input id="f-max" type="number" min="5" max="1000" value="${p.max_pages || 25}">
+        <label>💰 Money pages <span class="muted">(always crawled first, highlighted, prioritised by the AI)</span></label>
+        <textarea id="f-money" rows="5" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
+        <div class="hint">One full URL per line (up to 300).</div>
         <div class="hint">Top pages by clicks & impressions from Search Console (5–100).</div>
         <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save" ${isOwner ? '' : 'disabled'}>${pid ? 'Save changes' : 'Create project'}</button>
         ${pid && isOwner ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
@@ -362,7 +365,7 @@ async function renderProjectForm(pid) {
     const b = {
       name: document.getElementById('f-name').value, connection_id: document.getElementById('f-conn').value,
       gsc_property: document.getElementById('f-gsc').value, ga4_property: ga.value, ga4_name: ga.value ? ga.selectedOptions[0].textContent : '',
-      site_url: document.getElementById('f-site').value, max_pages: document.getElementById('f-max').value,
+      site_url: document.getElementById('f-site').value, max_pages: document.getElementById('f-max').value, money_pages: document.getElementById('f-money').value,
     };
     try {
       if (pid) { await api('/api/projects/' + pid, { method: 'PUT', body: b }); location.hash = '#/p/' + pid; }
@@ -380,37 +383,164 @@ async function renderProjectForm(pid) {
 }
 
 // ---------- runner ----------
+const isoDay = (d) => d.toISOString().slice(0, 10);
+function presetRange(key) {
+  const today = new Date();
+  const lastData = new Date(Date.now() - 3 * 86400000); // GSC lags ~2-3 days
+  const back = (n) => new Date(lastData.getTime() - (n - 1) * 86400000);
+  const mStart = (y, m) => new Date(Date.UTC(y, m, 1));
+  const mEnd = (y, m) => new Date(Date.UTC(y, m + 1, 0));
+  const y = today.getUTCFullYear(), m = today.getUTCMonth();
+  switch (key) {
+    case '7': return [back(7), lastData];
+    case '90': return [back(90), lastData];
+    case 'lm': return [mStart(y, m - 1), mEnd(y, m - 1)];
+    case 'l3m': return [mStart(y, m - 3), mEnd(y, m - 1)];
+    case 'l6m': return [mStart(y, m - 6), mEnd(y, m - 1)];
+    case 'l12m': return [mStart(y, m - 12), mEnd(y, m - 1)];
+    default: return [back(28), lastData];
+  }
+}
+
 async function renderRunner(pid) {
   const { project } = await api('/api/projects/' + pid);
   if (!canRun(project)) { app.innerHTML = '<div class="banner err">You have view-only access to this project.</div>'; return; }
+  const money = (project.money_pages || '').split('\n').filter(Boolean);
+  const [s0, e0] = presetRange('28');
   app.innerHTML = `<div class="row spread"><div><h1>Run analysis</h1><div class="muted">${esc(project.name)} · ${esc(project.gsc_property)}</div></div><a class="btn" href="#/p/${pid}">Back</a></div>
     <div class="card section" id="setup">
+      <h3>📅 Date range</h3>
       <div class="row" style="align-items:flex-end">
-        <div><label style="margin-top:0">Date range</label><select id="r-days"><option value="28" selected>Last 28 days vs previous</option><option value="7">Last 7 days vs previous</option><option value="90">Last 90 days vs previous</option></select></div>
-        <div><label style="margin-top:0">Pages to crawl</label><input id="r-max" type="number" min="5" max="100" value="${project.max_pages}" style="width:110px"></div>
-        <button class="btn primary" id="r-go">▶ Start analysis</button>
+        <div><label class="small" style="margin-top:0">Preset</label><select id="r-preset" style="width:auto">
+          <option value="28">Last 28 days</option><option value="7">Last 7 days</option><option value="90">Last 90 days</option>
+          <option value="lm">Last month</option><option value="l3m">Last 3 months</option><option value="l6m">Last 6 months</option><option value="l12m">Last 12 months</option>
+          <option value="custom">Custom…</option></select></div>
+        <div><label class="small" style="margin-top:0">From</label><input type="date" id="r-start" value="${isoDay(s0)}" style="width:auto"></div>
+        <div><label class="small" style="margin-top:0">To</label><input type="date" id="r-end" value="${isoDay(e0)}" style="width:auto"></div>
+        <div><label class="small" style="margin-top:0">Compare with</label><select id="r-compare" style="width:auto"><option value="previous">Previous period</option><option value="year">Same period last year</option></select></div>
       </div>
-      <p class="hint">Pulls Search Console${project.ga4_property ? ' + GA4' : ''}, crawls your top pages, scores them and asks Gemini for recommendations. Takes 1–3 minutes — keep this tab open.</p>
+      <div class="hint" id="r-cmp-text"></div>
+
+      <h3 style="margin-top:22px">🕷️ Crawl</h3>
+      <div class="row" style="align-items:flex-end">
+        <div><label class="small" style="margin-top:0">Pages to crawl</label><input id="r-max" type="number" min="5" max="1000" value="${project.max_pages}" style="width:120px"></div>
+        <label class="row small" style="margin:0 0 10px;gap:6px;font-weight:400"><input type="checkbox" id="r-sitemap" style="width:auto"> Also crawl URLs from the sitemap</label>
+      </div>
+      <div class="hint">💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Up to 1,000 pages (≈ 1 min per 100 pages).</div>
+
+      <h3 style="margin-top:22px">📦 Search Console data</h3>
+      <div class="row"><select id="r-rows" style="width:auto">
+        <option value="0">Standard — top 1,000 queries & pages (fast)</option>
+        <option value="25000">Full export — up to 25,000 rows</option>
+        <option value="100000">Full export — up to 100,000 rows</option>
+        <option value="250000">Full export — up to 250,000 rows (slow)</option></select></div>
+      <div class="hint">Full export pulls every query, every page and every page × query pair (25,000 rows per request), uses them for the scores and opportunities, and saves them with the run for the Queries tab & CSV.</div>
+
+      <div class="row" style="margin-top:22px"><button class="btn primary lg" id="r-go">▶ Start analysis</button>
+        <span class="small muted">Keep this tab open while it runs.</span></div>
     </div>
     <div class="card section hidden" id="prog"><h2 id="p-step">Starting…</h2><div class="progress"><div id="p-bar" style="width:2%"></div></div><div class="log" id="p-log"></div></div>`;
-  document.getElementById('r-go').onclick = () => runAnalysis(project, +document.getElementById('r-days').value, +document.getElementById('r-max').value);
+  const $ = (id) => document.getElementById(id);
+  const cmpText = () => {
+    const s = new Date($('r-start').value), e = new Date($('r-end').value);
+    if (isNaN(s) || isNaN(e) || s > e) { $('r-cmp-text').textContent = 'Pick a valid range'; return; }
+    const len = Math.round((e - s) / 86400000) + 1;
+    let ps, pe;
+    if ($('r-compare').value === 'year') { ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1); pe = new Date(e); pe.setUTCFullYear(pe.getUTCFullYear() - 1); }
+    else { pe = new Date(s.getTime() - 86400000); ps = new Date(pe.getTime() - (len - 1) * 86400000); }
+    $('r-cmp-text').textContent = `${len} days: ${isoDay(s)} → ${isoDay(e)}, compared with ${isoDay(ps)} → ${isoDay(pe)}. Search Console keeps ~16 months and lags 2–3 days.`;
+  };
+  $('r-preset').onchange = () => {
+    if ($('r-preset').value !== 'custom') { const [s, e] = presetRange($('r-preset').value); $('r-start').value = isoDay(s); $('r-end').value = isoDay(e); }
+    cmpText();
+  };
+  ['r-start', 'r-end'].forEach((id) => ($(id).onchange = () => { $('r-preset').value = 'custom'; cmpText(); }));
+  $('r-compare').onchange = cmpText;
+  cmpText();
+  $('r-go').onclick = () => runAnalysis(project, {
+    start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value,
+    maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
+  });
 }
 
-async function runAnalysis(project, days, maxPages) {
+// Pages through Search Console results 25k rows at a time (via the Worker) and returns compact rows.
+async function gscAll(runId, start, end, dimensions, cap, onProgress) {
+  const rows = [];
+  for (let startRow = 0; startRow < cap; startRow += 25000) {
+    const res = await fetch(`/api/runs/${runId}/gsc-rows`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ startDate: start, endDate: end, dimensions, rowLimit: Math.min(25000, cap - startRow), startRow }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error?.message || data.error || 'Search Console export failed');
+    const batch = data.rows || [];
+    for (const r of batch) rows.push([...r.keys, r.clicks, r.impressions, +r.ctr.toFixed(4), +r.position.toFixed(1)]);
+    onProgress?.(rows.length);
+    if (batch.length < 25000) break;
+  }
+  return rows;
+}
+
+async function saveBlob(runId, kind, rows) {
+  // ~1 MB chunks so each fits a database row
+  let chunk = 0, buf = [], size = 0;
+  const flush = async () => {
+    if (!buf.length) return;
+    const res = await fetch(`/api/runs/${runId}/blob?kind=${kind}&chunk=${chunk++}`, { method: 'POST', body: JSON.stringify(buf) });
+    if (!res.ok) throw new Error('Saving export failed');
+    buf = []; size = 0;
+  };
+  for (const r of rows) { const s = JSON.stringify(r).length; if (size + s > 900000) await flush(); buf.push(r); size += s + 1; }
+  await flush();
+}
+
+async function sitemapUrls(fetchUrl, firstUrl, limit) {
+  const out = new Set();
+  const queue = [firstUrl];
+  let fetched = 0;
+  while (queue.length && out.size < limit && fetched < 12) {
+    const f = await fetchUrl(queue.shift());
+    fetched++;
+    const xml = f.html || '';
+    const locs = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((x) => x[1].replace(/&amp;/g, '&'));
+    if (/<sitemapindex/i.test(xml)) queue.push(...locs);
+    else for (const l of locs) { if (out.size >= limit) break; out.add(l); }
+  }
+  return [...out];
+}
+
+async function runAnalysis(project, opt) {
   document.getElementById('setup').classList.add('hidden');
   document.getElementById('prog').classList.remove('hidden');
   const logEl = document.getElementById('p-log');
   const log = (m, cls = '') => { logEl.insertAdjacentHTML('beforeend', `<div class="${cls}">${esc(m)}</div>`); logEl.scrollTop = 1e9; };
   const step = (m, p) => { document.getElementById('p-step').textContent = m; document.getElementById('p-bar').style.width = p + '%'; log('› ' + m); };
+  const maxPages = opt.maxPages;
   let run;
   try {
-    step('Creating run', 3);
-    run = (await api(`/api/projects/${project.id}/runs`, { method: 'POST', body: { days } })).run;
+    step('Creating run', 2);
+    run = (await api(`/api/projects/${project.id}/runs`, { method: 'POST', body: { start: opt.start, end: opt.end, compare: opt.compare } })).run;
     log(`Period ${run.start} → ${run.end} (compared with ${run.pstart} → ${run.pend})`);
 
-    step('Fetching Search Console data', 8);
+    step('Fetching Search Console data', 5);
     const { gsc } = await api(`/api/runs/${run.id}/gsc`, { method: 'POST' });
-    log(`${fmt(gsc.totals.clicks)} clicks, ${fmt(gsc.totals.impressions)} impressions, ${gsc.queries.length} queries, ${gsc.pages.length} pages`);
+    log(`${fmt(gsc.totals.clicks)} clicks, ${fmt(gsc.totals.impressions)} impressions`);
+
+    let full = null;
+    if (opt.rows) {
+      full = {};
+      for (const [kind, dims] of [['queries', ['query']], ['pages', ['page']], ['pagequeries', ['page', 'query']]]) {
+        step(`Full export: ${kind === 'pagequeries' ? 'page × query pairs' : 'all ' + kind}`, 8);
+        full[kind] = await gscAll(run.id, run.start, run.end, dims, opt.rows, (n) => (document.getElementById('p-step').textContent = `Full export: ${kind} — ${fmt(n)} rows`));
+        log(`${fmt(full[kind].length)} ${kind} rows`);
+      }
+      step('Saving full export', 12);
+      for (const k of Object.keys(full)) await saveBlob(run.id, k, full[k]);
+      // use the complete lists for the analysis
+      gsc.queries = full.queries.map(([q, c, i, ctr, p]) => ({ q, c, i, ctr, p }));
+      gsc.pages = full.pages.map(([u, c, i, ctr, p]) => ({ u, c, i, ctr, p }));
+      gsc.pageQueries = full.pagequeries.map(([u, q, c, i, ctr, p]) => ({ u, q, c, i, ctr, p }));
+    }
 
     let ga = null;
     if (project.ga4_property) {
@@ -419,18 +549,28 @@ async function runAnalysis(project, days, maxPages) {
       catch (e) { log('GA4 skipped: ' + e.message, 'no'); }
     }
 
-    // pick pages: homepage + top by clicks, then by impressions
-    const urls = [project.site_url];
-    const add = (u) => { if (!urls.includes(u) && urls.length < maxPages) urls.push(u); };
-    [...gsc.pages].sort((a, b) => b.c - a.c).slice(0, Math.ceil(maxPages * 0.6)).forEach((p) => add(p.u));
-    [...gsc.pages].sort((a, b) => b.i - a.i).forEach((p) => add(p.u));
-
     const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
-    step('Checking robots.txt & sitemap', 18);
+    step('Checking robots.txt & sitemap', 16);
     const origin = new URL(project.site_url).origin;
     const robots = await fetchUrl(origin + '/robots.txt');
     const smUrl = (robots.html || '').match(/^\s*sitemap:\s*(\S+)/im)?.[1] || origin + '/sitemap.xml';
     const sitemap = await fetchUrl(smUrl);
+
+    // pick pages: money pages → homepage → top by clicks → top by impressions → sitemap
+    const moneySet = new Set(opt.money);
+    const urls = [];
+    const add = (u) => { if (u && !urls.includes(u) && urls.length < Math.max(maxPages, opt.money.length)) urls.push(u); };
+    opt.money.forEach(add);
+    add(project.site_url);
+    [...gsc.pages].sort((a, b) => b.c - a.c).slice(0, Math.ceil(maxPages * 0.6)).forEach((p) => add(p.u));
+    [...gsc.pages].sort((a, b) => b.i - a.i).forEach((p) => add(p.u));
+    if (opt.sitemap && urls.length < maxPages) {
+      step('Reading sitemap', 18);
+      const sm = await sitemapUrls(fetchUrl, smUrl, maxPages * 3);
+      sm.forEach(add);
+      log(`${fmt(sm.length)} URLs found in sitemap`);
+    }
+    log(`Crawling ${urls.length} pages (${opt.money.length} money pages first)`);
 
     const pqByPage = {};
     for (const r of gsc.pageQueries) (pqByPage[r.u] ||= []).push(r);
@@ -439,6 +579,7 @@ async function runAnalysis(project, days, maxPages) {
     for (const l of ga?.landing || []) gaByPath[l.path.split('?')[0]] = l;
 
     const pages = [];
+    const total = urls.length;
     let done = 0;
     const worker = async () => {
       while (urls.length) {
@@ -447,21 +588,23 @@ async function runAnalysis(project, days, maxPages) {
         let path = '/'; try { path = new URL(u).pathname; } catch {}
         const res = analyzePage(f, pqByPage[u] || [], gaByPath[path] || null);
         res.gsc = gscPage[u] || null;
+        if (moneySet.has(u)) res.money = true;
         pages.push(res);
         done++;
-        step(`Crawling pages (${done}/${done + urls.length})`, 20 + (done / (done + urls.length)) * 55);
-        log(`${f.status} ${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}`, f.status === 200 ? '' : 'no');
+        step(`Crawling pages (${done}/${total})`, 20 + (done / total) * 55);
+        log(`${f.status} ${moneySet.has(u) ? '💰 ' : ''}${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}`, f.status === 200 ? '' : 'no');
       }
     };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: 6 }, worker));
 
     step('Scoring & finding opportunities', 78);
     const site = siteChecks(pages, robots, sitemap, project.site_url);
     const scores = overallScores(pages, site);
     const opps = opportunities(gsc, ga, pages);
     const organic = ga?.channels.find((c) => c.name === 'Organic Search');
+    const days = Math.round((new Date(run.end) - new Date(run.start)) / 86400000) + 1;
     const summary = {
-      days, scores, site, opps,
+      days, compare: run.compare || 'previous', scores, site, opps,
       kpis: {
         clicks: gsc.totals.clicks, impressions: gsc.totals.impressions, ctr: gsc.totals.ctr, position: gsc.totals.position,
         prev: gsc.prevTotals, sessions: organic?.cur?.sessions ?? null, prevSessions: organic?.prev?.sessions ?? null,
@@ -469,6 +612,8 @@ async function runAnalysis(project, days, maxPages) {
         engagementRate: organic?.cur?.engagementRate ?? null,
       },
       pagesCrawled: pages.length,
+      moneyPages: opt.money.length,
+      full: full ? { queries: full.queries.length, pages: full.pages.length, pagequeries: full.pagequeries.length } : null,
     };
 
     step('Saving results', 82);
@@ -476,7 +621,7 @@ async function runAnalysis(project, days, maxPages) {
     await api(`/api/runs/${run.id}/finish`, { method: 'POST', body: { score: scores.overall, summary } });
     log(`Overall score ${scores.overall} (on-page ${scores.onpage}, content ${scores.content}, technical ${scores.technical})`);
 
-    step('Asking Gemini for recommendations', 88);
+    step('Asking AI for recommendations', 88);
     try { await requestAi(run.id, { project, gsc, ga, pages, summary }); log('AI recommendations ready'); }
     catch (e) { log('AI step failed: ' + e.message + ' — you can retry from the Insights tab.', 'no'); }
 
@@ -495,7 +640,8 @@ function aiInput({ project, gsc, ga, pages, summary }) {
   const k = summary.kpis;
   return {
     site: project.site_url,
-    period: `last ${summary.days} days vs previous ${summary.days}`,
+    period: `${summary.days} days, ${summary.compare === 'year' ? 'compared with the same period last year' : 'compared with the previous period'}`,
+    moneyPages: pages.filter((p) => p.money).map((p) => ({ url: p.url, onpage: p.onpage_score, content: p.content_score, clicks: p.gsc?.c, impressions: p.gsc?.i, pos: p.gsc?.p })),
     kpis: { clicks: k.clicks, prevClicks: k.prev?.clicks, impressions: k.impressions, prevImpressions: k.prev?.impressions, ctr: +(k.ctr * 100).toFixed(2), avgPosition: +k.position.toFixed(1), organicSessions: k.sessions, prevOrganicSessions: k.prevSessions, keyEvents: k.keyEvents },
     scores: summary.scores,
     siteChecks: summary.site.checks.filter((c) => c.val < 1).map((c) => `${c.label}: ${c.detail}`),
@@ -508,7 +654,8 @@ function aiInput({ project, gsc, ga, pages, summary }) {
     risingQueries: summary.opps.risingQueries.slice(0, 8).map((q) => [q.q, q.c, q.prevC]),
     lowEngagementLanding: summary.opps.lowEngagement.slice(0, 6),
     devices: gsc.devices,
-    pages: pages.slice(0, 30).map((p) => ({
+    pages: [...pages].sort((a, b) => (b.money ? 1 : 0) - (a.money ? 1 : 0)).slice(0, 30).map((p) => ({
+      money: !!p.money,
       url: p.url, status: p.status, onpage: p.onpage_score, content: p.content_score, clicks: p.gsc?.c, impressions: p.gsc?.i, pos: p.gsc?.p,
       title: p.meta?.title, description: p.meta?.description, h1: p.meta?.h1s?.[0], words: p.meta?.wordCount, schema: p.meta?.schemaTypes,
       failed: p.checks.filter((c) => c.val < 1).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).slice(0, 10),
@@ -709,7 +856,7 @@ function renderRun(project, { run, pages }, runs, head) {
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const tabs = ['Insights', 'Opportunities', 'Pages', 'Queries', 'Technical', 'Traffic', 'History'];
   app.innerHTML = head + `
-    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · ${s.pagesCrawled} pages crawled · run by ${esc(run.created_by)}</div>
+    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
       <div class="score">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
       <div class="score">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
@@ -730,7 +877,7 @@ function renderRun(project, { run, pages }, runs, head) {
     Insights: () => viewInsights(project, run, pages),
     Opportunities: () => viewOpps(s.opps, pages, project, run),
     Pages: () => viewPages(pages, project, run),
-    Queries: () => viewQueries(gsc),
+    Queries: () => viewQueries(gsc, run),
     Technical: () => viewTechnical(s.site, pages),
     Traffic: () => viewTraffic(gsc, ga, run),
     History: () => viewHistory(runs, project),
@@ -813,7 +960,7 @@ function viewOpps(o, pages) {
 
 function viewPages(pages, project, run) {
   return `<div class="card">${table([
-    { key: 'url', label: 'Page', render: (p) => `<span class="url">${esc(shortUrl(p.url))}</span>` },
+    { key: 'url', label: 'Page', render: (p) => `${p.money ? '<span class="pill warn" title="Money page">💰 money</span> ' : ''}<span class="url" style="display:inline-block;vertical-align:middle">${esc(shortUrl(p.url))}</span>`, text: (p) => (p.money ? 'money ' : '') + p.url, sort: (p) => (p.money ? 'a' : 'b') + p.url },
     { key: 'onpage_score', label: 'On-page', num: 1, render: (p) => `<span class="pill ${pillFor(p.onpage_score)}">${p.onpage_score}</span>` },
     { key: 'content_score', label: 'Content', num: 1, render: (p) => `<span class="pill ${pillFor(p.content_score)}">${p.content_score}</span>` },
     { key: 'c', label: 'Clicks', num: 1, render: (p) => fmt(p.gsc?.c), sort: (p) => p.gsc?.c || 0 },
@@ -821,7 +968,7 @@ function viewPages(pages, project, run) {
     { key: 'pos', label: 'Pos', num: 1, render: (p) => fmt(p.gsc?.p, 1), sort: (p) => p.gsc?.p || 999 },
     { key: 'sessions', label: 'Org. sessions', num: 1, render: (p) => fmt(p.ga?.sessions), sort: (p) => p.ga?.sessions || 0 },
     { key: 'issues', label: 'Issues', num: 1, render: (p) => p.checks.filter((c) => c.val < 1).length, sort: (p) => p.checks.filter((c) => c.val < 1).length },
-  ], pages, { onRow: (p) => pageDetail(p, run) })}<p class="hint">Click a page for the full audit and query coverage.</p></div>`;
+  ], pages, { onRow: (p) => pageDetail(p, run), limit: 1000 })}<p class="hint">Click a page for the full audit and query coverage. Type <b>money</b> in the filter to see only money pages.</p></div>`;
 }
 
 function pageDetail(p, run) {
@@ -829,7 +976,7 @@ function pageDetail(p, run) {
   const rec = (run.ai?.page_recommendations || []).find((r) => r.url === p.url);
   const cats = {};
   for (const c of p.checks) (cats[c.cat] ||= []).push(c);
-  openDrawer(`<h2 style="word-break:break-all"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></h2>
+  openDrawer(`${p.money ? '<span class="pill warn">💰 Money page</span>' : ''}<h2 style="word-break:break-all"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></h2>
     <div class="row" style="gap:20px;margin:12px 0">
       <div class="score">${ring(p.onpage_score)}<b>On-page</b></div><div class="score">${ring(p.content_score)}<b>Content</b></div>
       <div class="small muted">${p.gsc ? `${fmt(p.gsc.c)} clicks · ${fmt(p.gsc.i)} impr · pos ${p.gsc.p}<br>` : ''}${p.ga ? `${fmt(p.ga.sessions)} organic sessions · ${pct(p.ga.engagementRate)} engaged · ${fmt(p.ga.keyEvents)} key events<br>` : ''}${m.wordCount != null ? `${fmt(m.wordCount)} words · HTTP ${p.status} · ${p.ms} ms` : `HTTP ${p.status}`}</div>
@@ -850,16 +997,56 @@ function pageDetail(p, run) {
     <div class="card section"><h3>On-page audit</h3>${Object.entries(cats).map(([cat, cs]) => `<div class="muted small" style="margin-top:10px;font-weight:600">${cat}</div>${cs.map((c) => `<div class="check"><span class="dot ${c.val >= 1 ? 'good' : c.val > 0 ? 'warn' : 'bad'}">${c.val >= 1 ? '✓' : c.val > 0 ? '!' : '✗'}</span><div><div>${esc(c.label)}</div>${c.detail ? `<div class="small muted" style="word-break:break-word">${esc(c.detail)}</div>` : ''}</div></div>`).join('')}`).join('')}</div>`);
 }
 
-function viewQueries(gsc) {
-  const prev = Object.fromEntries(gsc.prevQueries.map((q) => [q.q, q]));
-  const rows = gsc.queries.map((q) => ({ ...q, prevC: prev[q.q]?.c ?? null, prevP: prev[q.q]?.p ?? null }));
-  return `<div class="card">${table([
+function queriesTable(rows) {
+  return table([
     { key: 'q', label: 'Query' },
     { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} ${delta(r.c, r.prevC)}` },
     { key: 'i', label: 'Impressions', num: 1, render: (r) => fmt(r.i) },
     { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
     { key: 'p', label: 'Position', num: 1, render: (r) => `${r.p}${r.prevP ? ` <span class="muted small">(${r.prevP})</span>` : ''}` },
-  ], rows, { limit: 500 })}</div>`;
+  ], rows, { limit: 1000 });
+}
+
+function viewQueries(gsc, run) {
+  const prev = Object.fromEntries(gsc.prevQueries.map((q) => [q.q, q]));
+  const full = run.summary?.full;
+  setTimeout(() => {
+    const box = document.getElementById('q-box');
+    document.querySelectorAll('[data-blob]').forEach((b) => (b.onclick = async () => {
+      const kind = b.dataset.blob;
+      b.disabled = true; b.textContent = 'Loading…';
+      try {
+        const res = await fetch(`/api/runs/${run.id}/blob?kind=${kind}`);
+        if (!res.ok) throw new Error('Not available');
+        const rows = await res.json();
+        if (b.dataset.csv) {
+          const head = kind === 'pagequeries' ? ['page', 'query'] : [kind === 'pages' ? 'page' : 'query'];
+          const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+          const csv = [[...head, 'clicks', 'impressions', 'ctr', 'position'].join(','), ...rows.map((r) => r.map(q).join(','))].join('\n');
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+          a.download = `${kind}-${run.start_date}-${run.end_date}.csv`;
+          a.click();
+        } else {
+          box.innerHTML = queriesTable(rows.map(([q, c, i, ctr, p]) => ({ q, c, i, ctr, p, prevC: prev[q]?.c ?? null, prevP: prev[q]?.p ?? null })));
+        }
+        b.textContent = '✓ Done';
+      } catch (e) { toast(e.message); b.disabled = false; b.textContent = 'Retry'; }
+    }));
+  });
+  const rows = gsc.queries.map((q) => ({ ...q, prevC: prev[q.q]?.c ?? null, prevP: prev[q.q]?.p ?? null }));
+  return `<div class="card">${full ? `<div class="row" style="margin-bottom:12px"><span class="pill info">Full export saved</span>
+      <button class="btn sm primary" data-blob="queries">Show all ${fmt(full.queries)} queries</button>
+      <button class="btn sm" data-blob="queries" data-csv="1">⬇ Queries CSV</button>
+      <button class="btn sm" data-blob="pages" data-csv="1">⬇ Pages CSV (${fmt(full.pages)})</button>
+      <button class="btn sm" data-blob="pagequeries" data-csv="1">⬇ Page × query CSV (${fmt(full.pagequeries)})</button></div>` : ''}
+    <div id="q-box">${table([
+    { key: 'q', label: 'Query' },
+    { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} ${delta(r.c, r.prevC)}` },
+    { key: 'i', label: 'Impressions', num: 1, render: (r) => fmt(r.i) },
+    { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
+    { key: 'p', label: 'Position', num: 1, render: (r) => `${r.p}${r.prevP ? ` <span class="muted small">(${r.prevP})</span>` : ''}` },
+  ], rows, { limit: 1000 })}</div></div>`;
 }
 
 function viewTechnical(site, pages) {
