@@ -2,6 +2,10 @@ name = "searchverse-insights"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
+# Saved settings, Google sign-in, clients and reports. Wrangler creates the namespace on first deploy.
+[[kv_namespaces]]
+binding = "SETTINGS"
+
 [vars]
 GEMINI_MODEL = "gemini-3.8-flash"
 CLAUDE_MODEL = "claude-opus-5-5"

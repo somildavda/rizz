@@ -51,14 +51,31 @@ async function unseal(env, str) {
 
 const setCookie = (name, value, maxAge) => `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
+// --- Server-side storage (KV binding SETTINGS): keys, Google sign-in, clients and reports.
+// Without the binding everything falls back to cookies and the browser.
+async function kvGet(env, key, fallback) {
+  if (!env.SETTINGS) return fallback;
+  try { return JSON.parse(await env.SETTINGS.get(key)) ?? fallback; } catch { return fallback; }
+}
+async function kvPut(env, key, value) {
+  if (env.SETTINGS) await env.SETTINGS.put(key, JSON.stringify(value));
+}
+
+const back = (msg) => new Response(null, { status: 302, headers: { location: '/?google_error=' + encodeURIComponent(msg) } });
+
 // Sign in with Google: /auth/google (start), /auth/callback (finish), /auth/google/disconnect.
 async function googleRoutes(request, env, url) {
   const redirectUri = url.origin + '/auth/callback';
-  if (url.pathname === '/auth/google' && request.method === 'POST') {
-    const f = await request.formData();
-    const cid = String(f.get('cid') || '').trim();
-    const secret = String(f.get('secret') || '').trim();
-    if (!cid || !secret) return html('Missing Client ID or Client secret. <a href="/">Back</a>', 400);
+  if (url.pathname === '/auth/google') {
+    const saved = await kvGet(env, 'settings', {});
+    let cid = saved.cid, secret = saved.secret;
+    if (request.method === 'POST') {
+      const f = await request.formData();
+      cid = String(f.get('cid') || '').trim() || cid;
+      secret = String(f.get('secret') || '').trim() || secret;
+      if (cid && secret) await kvPut(env, 'settings', { ...saved, cid, secret });
+    }
+    if (!cid || !secret) return back('Add the Client ID and Client secret first.');
     const state = crypto.randomUUID();
     const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     auth.search = new URLSearchParams({
@@ -73,8 +90,10 @@ async function googleRoutes(request, env, url) {
   if (url.pathname === '/auth/callback') {
     const pending = await unseal(env, cookie(request, 'g_pending') || '');
     const err = url.searchParams.get('error');
-    if (err || !pending || pending.state !== url.searchParams.get('state'))
-      return html(`Google sign-in failed: ${err || 'session expired, try again'}. <a href="/">Back</a>`, 400);
+    if (err) return back(err === 'access_denied'
+      ? 'Google said access denied. In Google Cloud → Audience, click "Publish app" (or add your email as a test user), then try again.'
+      : 'Google returned: ' + err);
+    if (!pending || pending.state !== url.searchParams.get('state')) return back('The sign-in took too long or the cookie was blocked. Please try again.');
     const res = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -84,17 +103,28 @@ async function googleRoutes(request, env, url) {
       }),
     });
     const tok = await res.json();
-    if (!tok.refresh_token)
-      return html(`Google sign-in failed: ${tok.error_description || tok.error || 'no refresh token'}. <a href="/">Back</a>`, 400);
+    if (!tok.refresh_token) {
+      const why = tok.error_description || tok.error || 'Google sent no refresh token';
+      return back(/redirect_uri/i.test(why)
+        ? 'Redirect URI mismatch. In Google Cloud → Clients, add exactly ' + redirectUri + ' under Authorized redirect URIs.'
+        : /invalid_client|unauthorized/i.test(why) ? 'The Client ID or Client secret is wrong. Copy both again from Google Cloud → Clients.' : why);
+    }
     let email = '';
     try { email = JSON.parse(new TextDecoder().decode(unb64u(tok.id_token.split('.')[1]))).email; } catch {}
+    const conn = { cid: pending.cid, secret: pending.secret, rt: tok.refresh_token, email };
+    const saved = await kvGet(env, 'settings', {});
+    await kvPut(env, 'settings', { ...saved, cid: conn.cid, secret: conn.secret, google: conn });
     const headers = new Headers({ location: '/?google=connected' });
-    headers.append('set-cookie', setCookie('g_conn', await seal(env, { cid: pending.cid, secret: pending.secret, rt: tok.refresh_token, email }), 31536000));
+    headers.append('set-cookie', setCookie('g_conn', await seal(env, conn), 31536000));
     headers.append('set-cookie', setCookie('g_pending', '', 0));
     return new Response(null, { status: 302, headers });
   }
-  if (url.pathname === '/auth/google/disconnect' && request.method === 'POST')
+  if (url.pathname === '/auth/google/disconnect' && request.method === 'POST') {
+    const saved = await kvGet(env, 'settings', {});
+    delete saved.google;
+    await kvPut(env, 'settings', saved);
     return new Response(null, { status: 303, headers: { location: '/', 'set-cookie': setCookie('g_conn', '', 0) } });
+  }
   return null;
 }
 
@@ -244,19 +274,45 @@ export default {
 
     const g = await googleRoutes(request, env, url);
     if (g) return g;
-    const google = await unseal(env, cookie(request, 'g_conn') || '');
-    if (google) env = { ...env, GOOGLE_OAUTH: google };
-    if (url.pathname === '/api/google')
-      return json({ connected: !!google, email: google?.email || null, redirectUri: url.origin + '/auth/callback' });
+    // Saved settings (server) first, then this browser's cookie, then Worker secrets.
+    const saved = await kvGet(env, 'settings', {});
+    const google = saved.google || (await unseal(env, cookie(request, 'g_conn') || ''));
+    env = { ...env };
+    if (google) env.GOOGLE_OAUTH = google;
+    if (saved.gemini) env.GEMINI_API_KEY = saved.gemini;
 
-    // Keys saved on the Settings page arrive with each request and override Worker secrets.
+    if (url.pathname === '/api/google')
+      return json({
+        connected: !!google, email: google?.email || null, redirectUri: url.origin + '/auth/callback',
+        configured: !!(saved.cid && saved.secret), gemini: !!env.GEMINI_API_KEY, serverStorage: !!env.SETTINGS,
+      });
+
+    // Keys sent from the Settings page override the saved ones for this request.
     let body = {};
     if (request.method === 'POST' && url.pathname.startsWith('/api/')) {
       body = await request.json().catch(() => ({}));
-      env = { ...env };
       if (body.keys?.gemini) env.GEMINI_API_KEY = body.keys.gemini;
       if (body.keys?.gsc) env.GSC_SERVICE_ACCOUNT = body.keys.gsc;
       delete body.keys;
+    }
+
+    // Save the Gemini key on the server so every browser can use it.
+    if (url.pathname === '/api/settings' && request.method === 'POST') {
+      if (!env.SETTINGS) return json({ saved: false });
+      const next = { ...saved };
+      if ('gemini' in body) next.gemini = String(body.gemini || '').trim();
+      await kvPut(env, 'settings', next);
+      return json({ saved: true });
+    }
+
+    // Clients and report history, shared across browsers.
+    if (url.pathname === '/api/data') {
+      if (request.method === 'POST') {
+        if (Array.isArray(body.clients)) await kvPut(env, 'clients', body.clients);
+        if (Array.isArray(body.history)) await kvPut(env, 'history', body.history.slice(0, 100));
+        return json({ saved: !!env.SETTINGS });
+      }
+      return json({ serverStorage: !!env.SETTINGS, clients: await kvGet(env, 'clients', null), history: await kvGet(env, 'history', null) });
     }
 
     if (url.pathname === '/api/sites' && request.method === 'POST') {

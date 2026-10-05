@@ -132,7 +132,7 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
   <div class="card"><h2>Saved clients</h2><div class="list" id="clients"></div></div>
   <div class="card"><h2>Past reports</h2><div class="list" id="history"></div></div>
  </div>
- <p class="note">Clients and reports are saved in this browser.</p>
+ <p class="note">Clients and reports are saved on the server, so they show up in every browser.</p>
 </section>
 
 <!-- SETTINGS -->
@@ -148,7 +148,9 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
    <form method="post" action="/auth/google/disconnect" class="row"><button class="ghost">Disconnect Google</button></form></div>
   <form id="gForm" method="post" action="/auth/google">
    <p class="sub">Sign in once and the tool can read every Search Console site and Google Sheet your account can see.</p>
-   <div class="grid2"><div><label>OAuth Client ID</label><input name="cid" id="gCid" placeholder="…apps.googleusercontent.com" autocomplete="off"></div>
+   <div class="status" id="gErr" style="color:var(--bad)"></div>
+   <p class="hide" id="gSaved">✅ Google app saved. Just click the button. <a href="#" id="gEdit">Change Client ID</a></p>
+   <div class="grid2" id="gCreds"><div><label>OAuth Client ID</label><input name="cid" id="gCid" placeholder="…apps.googleusercontent.com" autocomplete="off"></div>
     <div><label>Client secret</label><input name="secret" id="gSecret" type="password" autocomplete="off"></div></div>
    <div class="row"><button class="big" id="gBtn">Sign in with Google</button></div>
    <details style="margin-top:14px" open><summary><b>One-time setup: get the Client ID (about 5 minutes)</b></summary><ol style="line-height:1.8">
@@ -164,7 +166,7 @@ code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding
    <p>Create a service account in Google Cloud, download its JSON key, upload it here, then add its email as a user in Search Console.</p></details>
  </div>
 
- <div class="card"><h2>Privacy</h2><p class="note" style="margin:0">The Gemini key, clients and reports are stored in this browser only. The Google sign-in is kept in an encrypted cookie. <button class="ghost" id="clearKeys" style="margin-left:8px;padding:5px 10px">Remove saved keys</button></p></div>
+ <div class="card"><h2>Privacy</h2><p class="note" style="margin:0">Your Gemini key, Google sign-in, clients and reports are saved on this tool's private Cloudflare storage, behind your passcode. <button class="ghost" id="clearKeys" style="margin-left:8px;padding:5px 10px">Remove saved keys</button></p></div>
 </section>
 </main>
 
@@ -174,9 +176,16 @@ const NL=String.fromCharCode(10);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
 const keys=()=>store.get('keys',{});
+let serverData=false;
+const sync=()=>{if(serverData)post('/api/data',{clients:store.get('clients',[]),history:store.get('history',[])}).catch(()=>{})};
+const saveList=(k,v)=>{store.set(k,v);sync()};
+async function loadData(){try{const d=await (await fetch('/api/data')).json();serverData=!!d.serverStorage;if(!serverData)return;
+ if(d.clients||d.history){if(d.clients)store.set('clients',d.clients);if(d.history)store.set('history',d.history)}else sync();
+ renderClients();renderHistory()}catch{}}
 const post=(u,b)=>fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.assign({keys:keys()},b))}).then(r=>r.json());
 let last=null,gInfo={connected:false};
 const hasGoogle=()=>gInfo.connected||!!keys().gsc;
+const hasGemini=()=>!!keys().gemini||!!gInfo.gemini;
 
 /* tabs */
 function go(t){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
@@ -186,9 +195,9 @@ document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g
 
 /* status */
 function renderStatus(){const k=keys();
- $('chipAI').className='chip'+(k.gemini?' ok':'');$('chipAI').textContent=(k.gemini?'✓ ':'')+'Gemini AI';
+ $('chipAI').className='chip'+(hasGemini()?' ok':'');$('chipAI').textContent=(hasGemini()?'✓ ':'')+'Gemini AI';
  $('chipG').className='chip'+(hasGoogle()?' ok':'');$('chipG').textContent=(hasGoogle()?'✓ ':'')+'Google';
- $('setupNudge').classList.toggle('hide',!!(k.gemini&&hasGoogle()))}
+ $('setupNudge').classList.toggle('hide',!!(hasGemini()&&hasGoogle()))}
 
 /* source picker */
 function setSource(v){$('source').value=v;document.querySelectorAll('#srcSeg button').forEach(b=>b.classList.toggle('on',b.dataset.src===v));
@@ -210,20 +219,23 @@ async function loadSites(){if(!hasGoogle())return null;const d=await post('/api/
  if(d.sites&&d.sites.length){const cur=$('site').value;$('siteSel').innerHTML='<option value="">Choose a website…</option>'+d.sites.map(x=>'<option'+(x===cur?' selected':'')+'>'+esc(x)+'</option>').join('')}
  else if(d.sites){$('siteSel').innerHTML='<option value="">No Search Console sites on this Google account</option>'}
  return d}
-$('gForm').onsubmit=e=>{if(!$('gCid').value.trim()||!$('gSecret').value.trim()){e.preventDefault();alert('Paste the Client ID and Client secret first. The setup steps are just below.');return}store.set('gcid',$('gCid').value.trim())};
+$('gEdit').onclick=e=>{e.preventDefault();$('gCreds').classList.remove('hide');$('gSaved').classList.add('hide')};
+$('gForm').onsubmit=e=>{if(!gInfo.configured&&(!$('gCid').value.trim()||!$('gSecret').value.trim())){e.preventDefault();alert('Paste the Client ID and Client secret first. The setup steps are just below.');return}store.set('gcid',$('gCid').value.trim())};
 
 /* settings */
 let pendingGsc=null;
 function fillSettings(){const k=keys();$('kGemini').value=k.gemini||'';
  $('gRedirect').textContent=gInfo.redirectUri||location.origin+'/auth/callback';$('gCid').value=store.get('gcid','');
  $('gConnected').classList.toggle('hide',!gInfo.connected);$('gForm').classList.toggle('hide',!!gInfo.connected);$('gEmail').textContent=gInfo.email||'your Google account';
+ $('gCreds').classList.toggle('hide',!!gInfo.configured);$('gSaved').classList.toggle('hide',!gInfo.configured);
  $('gscInfo').innerHTML=k.gsc?'Loaded key for <b>'+esc(JSON.parse(k.gsc).client_email)+'</b>':''}
 $('kGscFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;const t=await f.text();
  try{const j=JSON.parse(t);if(!j.client_email||!j.private_key)throw 0;const k=keys();k.gsc=t;store.set('keys',k);$('gscInfo').innerHTML='Saved. Add <b>'+esc(j.client_email)+'</b> as a user in Search Console.';renderStatus();loadSites()}
  catch{$('gscInfo').textContent='That is not a service account key file.'}};
 async function testGoogle(){if(!hasGoogle())return;$('gSites').textContent='Loading your sites…';const d=await loadSites();
  $('gSites').innerHTML=d.error?'❌ '+esc(d.error):d.sites.length?'✅ '+d.sites.length+' Search Console sites: '+d.sites.map(esc).join(', '):'⚠️ This Google account has no Search Console sites.'}
-$('saveKeys').onclick=async()=>{const k=keys();k.gemini=$('kGemini').value.trim();store.set('keys',k);renderStatus();
+$('saveKeys').onclick=async()=>{const k=keys();k.gemini=$('kGemini').value.trim();store.set('keys',k);
+ await post('/api/settings',{gemini:k.gemini}).catch(()=>{});await loadGoogle();
  if(!k.gemini){$('testOut').textContent='Removed.';return}
  $('testOut').textContent='Testing…';const d=await post('/api/ask',{question:'Reply with just: OK',findings:{}});
  $('testOut').innerHTML=d.error?'❌ '+esc(d.error):'✅ Gemini works'};
@@ -236,11 +248,11 @@ function renderClients(){const cs=store.get('clients',[]);
  $('clients').innerHTML=cs.length?cs.map((c,i)=>'<div class="item"><div><b>'+esc(c.client)+'</b><br><small>'+esc(c.site||c.csvUrl||'CSV')+'</small></div><div><button class="ghost" data-load="'+i+'">Open</button> <button class="ghost" data-del="'+i+'">✕</button></div></div>').join(''):'<div class="empty">No saved clients yet. Fill in a report and click <b>Save client</b>.</div>'}
 function loadClient(c){FIELDS.forEach(f=>{if($(f))$(f).value=c[f]??''});setSource(c.source||'gsc');if(c.site)$('siteSel').value=c.site}
 $('clients').onclick=e=>{const cs=store.get('clients',[]);const l=e.target.dataset.load,d=e.target.dataset.del;
- if(d!==undefined){if(confirm('Remove this client?')){cs.splice(+d,1);store.set('clients',cs);renderClients()}}
+ if(d!==undefined){if(confirm('Remove this client?')){cs.splice(+d,1);saveList('clients',cs);renderClients()}}
  if(l!==undefined){loadClient(cs[+l]);go('report')}};
 $('client').onchange=()=>{const c=store.get('clients',[]).find(x=>x.client===$('client').value);if(c)loadClient(c)};
 $('save').onclick=()=>{const c=Object.fromEntries(FIELDS.map(f=>[f,$(f).value]));if(!c.client)return alert('Add a client name first');
- const cs=store.get('clients',[]).filter(x=>x.client!==c.client);cs.push(c);cs.sort((a,b)=>a.client.localeCompare(b.client));store.set('clients',cs);renderClients();
+ const cs=store.get('clients',[]).filter(x=>x.client!==c.client);cs.push(c);cs.sort((a,b)=>a.client.localeCompare(b.client));saveList('clients',cs);renderClients();
  $('goMsg').textContent='Saved ✓';setTimeout(()=>$('goMsg').textContent='',1500)};
 function renderHistory(){const h=store.get('history',[]);
  $('history').innerHTML=h.length?h.slice(0,30).map(r=>'<div class="item"><div><b>'+esc(r.client||'Untitled')+'</b><br><small>'+esc(r.period||new Date(r.id).toLocaleDateString())+'</small></div><button class="ghost" data-id="'+r.id+'">Open</button></div>').join(''):'<div class="empty">Reports you generate appear here.</div>'}
@@ -274,7 +286,7 @@ $('go').onclick=async()=>{const body=Object.fromEntries(FIELDS.map(f=>[f,$(f).va
  try{const d=await post('/api/analyze',body);
   if(d.error){$('goMsg').innerHTML='❌ '+esc(d.error);return}
   const r={id:Date.now(),client:body.client,period:d.period,findings:d.findings,summary:d.summary,aiError:d.aiError};
-  const h=store.get('history',[]);h.unshift(r);store.set('history',h.slice(0,50));renderHistory();show(r)}
+  const h=store.get('history',[]);h.unshift(r);saveList('history',h.slice(0,50));renderHistory();show(r)}
  catch(e){$('goMsg').textContent='❌ '+e.message}
  finally{$('go').disabled=false;$('go').textContent='Generate report'}};
 $('print').onclick=()=>{document.querySelectorAll('details.tbl').forEach(d=>d.open=true);window.print()};
@@ -287,7 +299,7 @@ $('dl').onclick=()=>{if(!last)return;const q=v=>'"'+String(Array.isArray(v)?v.ma
 
 /* AI analyst */
 $('ask').onclick=async()=>{const q=$('q').value.trim();if(!q)return;if(!last){$('answers').innerHTML='<div class="empty">Generate a report on the Weekly report tab first.</div>';return}
- if(!keys().gemini){go('settings');return}
+ if(!hasGemini()){go('settings');return}
  const box=$('answers');if(box.querySelector('.empty'))box.innerHTML='';
  const el=document.createElement('div');el.className='answer';el.innerHTML='<b>'+esc(q)+'</b><p class="note">Thinking…</p>';box.prepend(el);$('q').value='';
  const d=await post('/api/ask',{question:q,client:last.client,findings:last.findings,summary:last.summary});
@@ -296,8 +308,9 @@ $('q').onkeydown=e=>{if(e.key==='Enter')$('ask').click()};
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('q').value=b.dataset.q;$('ask').click()});
 
 /* start */
-renderClients();renderHistory();renderStatus();
-loadGoogle().then(()=>{loadSites().catch(()=>{});
+renderClients();renderHistory();renderStatus();loadData();
+const gErr=new URLSearchParams(location.search).get('google_error');
+loadGoogle().then(()=>{if(gErr){history.replaceState(null,'','/');go('settings');$('gErr').textContent='❌ '+gErr}loadSites().catch(()=>{});
  const justSignedIn=location.search.includes('google=connected');if(justSignedIn)history.replaceState(null,'','/');
  if(justSignedIn){go('settings');testGoogle()}
  if(!hasGoogle())setSource('sheet')});
