@@ -1,0 +1,21 @@
+name = "seo-insights"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "seo-insights"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+# Who may sign in. Comma separated emails and/or "@domain.com" entries.
+# Leave empty to allow any Google account. People you add as project members can always sign in.
+ALLOWED_EMAILS = ""
+GEMINI_MODEL = "gemini-2.5-flash"
+
+# Secrets (set with `npx wrangler secret put NAME`):
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_SECRET, GEMINI_API_KEY (optional; users can add their own)
