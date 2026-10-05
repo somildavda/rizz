@@ -505,17 +505,39 @@ async function gscAll(runId, start, end, dimensions, cap, onProgress) {
   return rows;
 }
 
+// Exports are gzip-compressed in the browser and saved in chunks well under the database's 2 MB row limit
+// (byte-sized, so non-English queries — 3 bytes per character — can't overflow a chunk).
+const enc = new TextEncoder();
+async function gzipB64(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+async function gunzipB64(b64) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
 async function saveBlob(runId, kind, rows) {
-  // ~1 MB chunks so each fits a database row
   let chunk = 0, buf = [], size = 0;
   const flush = async () => {
     if (!buf.length) return;
-    const res = await fetch(`/api/runs/${runId}/blob?kind=${kind}&chunk=${chunk++}`, { method: 'POST', body: JSON.stringify(buf) });
-    if (!res.ok) throw new Error('Saving export failed');
+    const body = 'gz:' + (await gzipB64(JSON.stringify(buf)));
+    const res = await fetch(`/api/runs/${runId}/blob?kind=${kind}&chunk=${chunk++}`, { method: 'POST', body });
+    if (!res.ok) throw new Error(`Saving ${kind} export failed (${(await res.json().catch(() => ({}))).error || res.status})`);
     buf = []; size = 0;
   };
-  for (const r of rows) { const s = JSON.stringify(r).length; if (size + s > 900000) await flush(); buf.push(r); size += s + 1; }
+  for (const r of rows) { const s = enc.encode(JSON.stringify(r)).length + 1; if (size + s > 3_000_000) await flush(); buf.push(r); size += s; }
   await flush();
+}
+async function loadBlob(runId, kind) {
+  const res = await fetch(`/api/runs/${runId}/blob?kind=${kind}`);
+  if (!res.ok) throw new Error('Export not stored for this run');
+  const d = await res.json();
+  if (!d.gz) return d;
+  const parts = await Promise.all(d.gz.map(async (b) => JSON.parse(await gunzipB64(b))));
+  return parts.flat();
 }
 
 async function sitemapUrls(fetchUrl, firstUrl, limit) {
@@ -559,7 +581,10 @@ async function runAnalysis(project, opt) {
         log(`${fmt(full[kind].length)} ${kind} rows`);
       }
       step('Saving full export', 12);
-      for (const k of Object.keys(full)) await saveBlob(run.id, k, full[k]);
+      for (const k of Object.keys(full)) {
+        try { await saveBlob(run.id, k, full[k]); }
+        catch (e) { log(`${e.message} — analysis continues, but this export won't be downloadable later`, 'no'); full.unsaved = true; }
+      }
       // use the complete lists for the analysis
       gsc.queries = full.queries.map(([q, c, i, ctr, p]) => ({ q, c, i, ctr, p }));
       gsc.pages = full.pages.map(([u, c, i, ctr, p]) => ({ u, c, i, ctr, p }));
@@ -689,7 +714,7 @@ async function runAnalysis(project, opt) {
       prevBrand: project.brand_terms ? prevBrand : null,
       movers, navGaps: nav, links, renderModes,
       scopeGroups: inScope ? opt.scopeGroups.map((g) => ({ name: g.name, patterns: g.patterns })) : null,
-      full: full ? { queries: full.queries.length, pages: full.pages.length, pagequeries: full.pagequeries.length } : null,
+      full: full && !full.unsaved ? { queries: full.queries.length, pages: full.pages.length, pagequeries: full.pagequeries.length } : null,
     };
 
     step('Saving results', 82);
@@ -1569,9 +1594,7 @@ function viewQueries(gsc, run) {
       const kind = b.dataset.blob;
       b.disabled = true; b.textContent = 'Loading…';
       try {
-        const res = await fetch(`/api/runs/${run.id}/blob?kind=${kind}`);
-        if (!res.ok) throw new Error('Not available');
-        const rows = await res.json();
+        const rows = await loadBlob(run.id, kind);
         if (b.dataset.csv) {
           const head = kind === 'pagequeries' ? ['page', 'query'] : [kind === 'pages' ? 'page' : 'query'];
           const q = (v) => `"${String(v).replace(/"/g, '""')}"`;

@@ -867,7 +867,8 @@ async function handleApi(req, env, url) {
     }
     const { results } = await DB.prepare('SELECT data FROM run_blobs WHERE run_id = ? AND kind = ? ORDER BY chunk').bind(run.id, kind).all();
     if (!results.length) throw new HttpError(404, 'Not stored for this run');
-    // each chunk is a JSON array; join them into one array without parsing
+    if (results[0].data.startsWith('gz:')) return json({ gz: results.map((r) => r.data.slice(3)) });
+    // older uncompressed chunks are JSON arrays; join them into one array without parsing
     const parts = results.map((r) => r.data.trim().replace(/^\[|\]$/g, '')).filter(Boolean);
     return new Response('[' + parts.join(',') + ']', { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   }
