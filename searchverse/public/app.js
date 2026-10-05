@@ -1,4 +1,4 @@
-import { analyzePage, opportunities, siteChecks, overallScores, missingSpots } from './analyzer.js';
+import { analyzePage, opportunities, siteChecks, overallScores, missingSpots, lobMatcher, brandTester, brandSplit } from './analyzer.js';
 
 const app = document.getElementById('app');
 const state = { me: null };
@@ -164,6 +164,7 @@ async function route() {
     if ((m = path.match(/^\/p\/(\w+)\/edit$/))) return await renderProjectForm(m[1]);
     if ((m = path.match(/^\/p\/(\w+)\/run$/))) return await renderRunner(m[1]);
     if ((m = path.match(/^\/p\/(\w+)\/lob$/))) return await renderLob(m[1], p);
+    if ((m = path.match(/^\/p\/(\w+)\/urls$/))) return await renderUrls(m[1], p);
     if ((m = path.match(/^\/p\/(\w+)$/))) return await renderProject(m[1], p.run);
     app.innerHTML = '<div class="center">Not found</div>';
   } catch (e) {
@@ -335,6 +336,12 @@ async function renderProjectForm(pid) {
         <label>💰 Money pages <span class="muted">(always crawled first, highlighted, prioritised by the AI)</span></label>
         <textarea id="f-money" rows="5" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
         <div class="hint">One full URL per line (up to 300).</div>
+        <label>🏷️ Brand terms <span class="muted">(queries containing these are "branded")</span></label>
+        <input id="f-brand" value="${esc(p.brand_terms || '')}" placeholder="airtel, xstream, airtel thanks">
+        <div class="hint">Comma separated. Spaces are ignored when matching, so "airtel" also matches "air tel".</div>
+        <label>🎯 Lead event in GA4 <span class="muted">(optional)</span></label>
+        <input id="f-lead" value="${esc(p.lead_event || '')}" placeholder="e.g. generate_lead or form_submit">
+        <div class="hint">The exact GA4 key event name that counts as a lead. Shown as a separate "Leads" column.</div>
         <div class="hint">Top pages by clicks & impressions from Search Console (5–100).</div>
         <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save" ${isOwner ? '' : 'disabled'}>${pid ? 'Save changes' : 'Create project'}</button>
         ${pid && isOwner ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
@@ -365,7 +372,7 @@ async function renderProjectForm(pid) {
     const b = {
       name: document.getElementById('f-name').value, connection_id: document.getElementById('f-conn').value,
       gsc_property: document.getElementById('f-gsc').value, ga4_property: ga.value, ga4_name: ga.value ? ga.selectedOptions[0].textContent : '',
-      site_url: document.getElementById('f-site').value, max_pages: document.getElementById('f-max').value, money_pages: document.getElementById('f-money').value,
+      site_url: document.getElementById('f-site').value, max_pages: document.getElementById('f-max').value, money_pages: document.getElementById('f-money').value, brand_terms: document.getElementById('f-brand').value, lead_event: document.getElementById('f-lead').value,
     };
     try {
       if (pid) { await api('/api/projects/' + pid, { method: 'PUT', body: b }); location.hash = '#/p/' + pid; }
@@ -406,6 +413,8 @@ async function renderRunner(pid) {
   const { project } = await api('/api/projects/' + pid);
   if (!canRun(project)) { app.innerHTML = '<div class="banner err">You have view-only access to this project.</div>'; return; }
   const money = (project.money_pages || '').split('\n').filter(Boolean);
+  const { groups: lobGroups } = await api(`/api/projects/${pid}/lobs`);
+  const lobCats = [...new Set(lobGroups.map((g) => g.category).filter(Boolean))];
   const [s0, e0] = presetRange('28');
   app.innerHTML = `<div class="row spread"><div><h1>Run analysis</h1><div class="muted">${esc(project.name)} · ${esc(project.gsc_property)}</div></div><a class="btn" href="#/p/${pid}">Back</a></div>
     <div class="card section" id="setup">
@@ -420,6 +429,12 @@ async function renderRunner(pid) {
         <div><label class="small" style="margin-top:0">Compare with</label><select id="r-compare" style="width:auto"><option value="previous">Previous period</option><option value="year">Same period last year</option></select></div>
       </div>
       <div class="hint" id="r-cmp-text"></div>
+
+      <h3 style="margin-top:22px">🎯 Scope</h3>
+      <select id="r-scope" style="width:auto"><option value="">Whole site</option>
+        ${lobGroups.length ? `<option value="all">Only my LOB pages (all ${lobGroups.length} groups)</option>` : ''}
+        ${lobCats.map((c) => `<option value="cat:${esc(c)}">Only LOB: ${esc(c)}</option>`).join('')}</select>
+      <div class="hint">${lobGroups.length ? 'LOB scope analyses, crawls and scores only URLs matching your LOB page paths (money pages are always included). Use the full export below so every LOB URL is covered.' : `Set up LOB groups in the <a href="#/p/${pid}/lob">LOB report</a> to analyse only those page paths.`}</div>
 
       <h3 style="margin-top:22px">🕷️ Crawl</h3>
       <div class="row" style="align-items:flex-end">
@@ -460,6 +475,8 @@ async function renderRunner(pid) {
   $('r-go').onclick = () => runAnalysis(project, {
     start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value,
     maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
+    scope: $('r-scope').value,
+    scopeGroups: $('r-scope').value === 'all' ? lobGroups : $('r-scope').value.startsWith('cat:') ? lobGroups.filter((g) => g.category === $('r-scope').value.slice(4)) : [],
   });
 }
 
@@ -549,6 +566,27 @@ async function runAnalysis(project, opt) {
       catch (e) { log('GA4 skipped: ' + e.message, 'no'); }
     }
 
+    // LOB scope: keep only URLs matching the chosen LOB groups
+    const inScope = opt.scopeGroups.length ? lobMatcher(opt.scopeGroups) : null;
+    if (inScope) {
+      const keep = (u) => !!inScope(u);
+      gsc.pages = gsc.pages.filter((p) => keep(p.u));
+      gsc.prevPages = gsc.prevPages.filter((p) => keep(p.u));
+      gsc.pageQueries = gsc.pageQueries.filter((r) => keep(r.u));
+      const qa = {};
+      for (const r of gsc.pageQueries) { const t = (qa[r.q] ||= { q: r.q, c: 0, i: 0, pw: 0 }); t.c += r.c; t.i += r.i; t.pw += r.p * r.i; }
+      gsc.queries = Object.values(qa).map((t) => ({ q: t.q, c: t.c, i: t.i, ctr: t.i ? +(t.c / t.i).toFixed(4) : 0, p: t.i ? +(t.pw / t.i).toFixed(1) : 0 })).sort((a, b) => b.c - a.c);
+      gsc.prevQueries = [];
+      const tot = (list) => { const c = list.reduce((s, r) => s + r.c, 0), i = list.reduce((s, r) => s + r.i, 0); return { clicks: c, impressions: i, ctr: i ? c / i : 0, position: i ? list.reduce((s, r) => s + r.p * r.i, 0) / i : 0 }; };
+      gsc.totals = tot(gsc.pages);
+      gsc.prevTotals = tot(gsc.prevPages);
+      const origin0 = new URL(project.site_url).origin;
+      if (ga) ga.landing = ga.landing.filter((l) => keep(origin0 + l.path));
+      log(`LOB scope: ${fmt(gsc.pages.length)} pages, ${fmt(gsc.queries.length)} queries, ${fmt(gsc.totals.clicks)} clicks${opt.rows ? '' : ' (top 1,000 pages only — use the full export for complete LOB numbers)'}`);
+    }
+    const isBranded = brandTester(project.brand_terms);
+    const brand = brandSplit(gsc.queries, isBranded);
+
     const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
     step('Checking robots.txt & sitemap', 16);
     const origin = new URL(project.site_url).origin;
@@ -559,7 +597,7 @@ async function runAnalysis(project, opt) {
     // pick pages: money pages → homepage → top by clicks → top by impressions → sitemap
     const moneySet = new Set(opt.money);
     const urls = [];
-    const add = (u) => { if (u && !urls.includes(u) && urls.length < Math.max(maxPages, opt.money.length)) urls.push(u); };
+    const add = (u) => { if (u && !urls.includes(u) && urls.length < Math.max(maxPages, opt.money.length) && (!inScope || moneySet.has(u) || inScope(u))) urls.push(u); };
     opt.money.forEach(add);
     add(project.site_url);
     [...gsc.pages].sort((a, b) => b.c - a.c).slice(0, Math.ceil(maxPages * 0.6)).forEach((p) => add(p.u));
@@ -601,7 +639,9 @@ async function runAnalysis(project, opt) {
     const site = siteChecks(pages, robots, sitemap, project.site_url);
     const scores = overallScores(pages, site);
     const opps = opportunities(gsc, ga, pages);
-    const organic = ga?.channels.find((c) => c.name === 'Organic Search');
+    const organic = inScope && ga
+      ? { cur: { sessions: ga.landing.reduce((s, l) => s + l.sessions, 0), keyEvents: ga.landing.reduce((s, l) => s + l.keyEvents, 0), engagementRate: null }, prev: null }
+      : ga?.channels.find((c) => c.name === 'Organic Search');
     const days = Math.round((new Date(run.end) - new Date(run.start)) / 86400000) + 1;
     const summary = {
       days, compare: run.compare || 'previous', scores, site, opps,
@@ -613,6 +653,8 @@ async function runAnalysis(project, opt) {
       },
       pagesCrawled: pages.length,
       moneyPages: opt.money.length,
+      scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : 'LOB: ' + opt.scope.slice(4)) : null,
+      brand: project.brand_terms ? { ...brand, terms: project.brand_terms } : null,
       full: full ? { queries: full.queries.length, pages: full.pages.length, pagequeries: full.pagequeries.length } : null,
     };
 
@@ -645,7 +687,10 @@ function aiInput({ project, gsc, ga, pages, summary }) {
     kpis: { clicks: k.clicks, prevClicks: k.prev?.clicks, impressions: k.impressions, prevImpressions: k.prev?.impressions, ctr: +(k.ctr * 100).toFixed(2), avgPosition: +k.position.toFixed(1), organicSessions: k.sessions, prevOrganicSessions: k.prevSessions, keyEvents: k.keyEvents },
     scores: summary.scores,
     siteChecks: summary.site.checks.filter((c) => c.val < 1).map((c) => `${c.label}: ${c.detail}`),
-    topQueries: gsc.queries.slice(0, 40).map((q) => [q.q, q.c, q.i, q.p]),
+    scope: summary.scope || 'whole site',
+    brandSplit: summary.brand ? { brandTerms: summary.brand.terms, brandedClicks: summary.brand.branded.c, brandedImpressions: summary.brand.branded.i, nonBrandedClicks: summary.brand.nonBranded.c, nonBrandedImpressions: summary.brand.nonBranded.i } : 'brand terms not set',
+    topNonBrandedQueries: gsc.queries.filter((q) => !brandTester(project.brand_terms)(q.q)).slice(0, 60).map((q) => [q.q, q.c, q.i, q.p]),
+    topBrandedQueries: project.brand_terms ? gsc.queries.filter((q) => brandTester(project.brand_terms)(q.q)).slice(0, 10).map((q) => [q.q, q.c, q.i, q.p]) : [],
     queryFormat: '[query, clicks, impressions, position]',
     quickWins: summary.opps.quickWins.slice(0, 12).map((q) => ({ q: q.q, i: q.i, pos: q.p, ctr: q.ctr, page: q.page })),
     lowCtr: summary.opps.lowCtr.slice(0, 8).map((q) => ({ q: q.q, pos: q.p, ctr: q.ctr, expected: q.expected, page: q.page })),
@@ -659,8 +704,10 @@ function aiInput({ project, gsc, ga, pages, summary }) {
       url: p.url, status: p.status, onpage: p.onpage_score, content: p.content_score, clicks: p.gsc?.c, impressions: p.gsc?.i, pos: p.gsc?.p,
       title: p.meta?.title, description: p.meta?.description, h1: p.meta?.h1s?.[0], words: p.meta?.wordCount, schema: p.meta?.schemaTypes,
       failed: p.checks.filter((c) => c.val < 1).map((c) => c.label + (c.detail ? ` (${c.detail})` : '')).slice(0, 10),
-      topQueries: (p.queries || []).slice(0, 6).map((q) => ({ q: q.query, i: q.impressions, pos: q.position, score: q.score, missingIn: missingSpots(q) })),
-      ga: p.ga ? { sessions: p.ga.sessions, engagementRate: p.ga.engagementRate, keyEvents: p.ga.keyEvents } : undefined,
+      topQueries: (p.queries || []).slice(0, 8).map((q) => ({ q: q.query, branded: brandTester(project.brand_terms)(q.query), i: q.impressions, clicks: q.clicks, pos: q.position, score: q.score, missingIn: missingSpots(q) })),
+      h2s: (p.meta?.subheads || []).slice(0, 10),
+      ctas: p.meta?.ctas, forms: p.meta?.forms, phoneLinks: p.meta?.telLinks,
+      ga: p.ga ? { sessions: p.ga.sessions, users: p.ga.users, engagementRate: p.ga.engagementRate, bounceRate: p.ga.bounceRate, avgDurationSec: p.ga.avgDuration, keyEvents: p.ga.keyEvents, keyEventsPerSession: p.ga.sessions ? +(p.ga.keyEvents / p.ga.sessions).toFixed(3) : 0 } : undefined,
     })),
   };
 }
@@ -672,11 +719,19 @@ async function requestAi(runId, ctx) {
 // ---------- LOB report ----------
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const compact = (n) => (n == null ? '' : n >= 1e6 ? fmt(n / 1e6, 2) + 'M' : n >= 1e3 ? fmt(n / 1e3, n >= 1e5 ? 1 : 2) + 'K' : fmt(n));
+// src: which stored table the metric comes from; sum: whether values add up across groups/periods
 const METRICS = {
-  clicks: { label: 'Clicks', get: (r) => r.clicks, fmt: compact, sum: true },
-  impressions: { label: 'Impressions', get: (r) => r.impressions, fmt: compact, sum: true },
-  ctr: { label: 'CTR', get: (r) => r.ctr, fmt: (v) => pct(v, 2), sum: false },
-  position: { label: 'Avg position', get: (r) => r.position, fmt: (v) => fmt(v, 1), sum: false, invert: true },
+  clicks: { label: 'Clicks', src: 'gsc', get: (r) => r.clicks, fmt: compact, sum: true },
+  impressions: { label: 'Impressions', src: 'gsc', get: (r) => r.impressions, fmt: compact, sum: true },
+  ctr: { label: 'CTR', src: 'gsc', get: (r) => r.ctr, fmt: (v) => pct(v, 2), sum: false },
+  position: { label: 'Avg position', src: 'gsc', get: (r) => r.position, fmt: (v) => fmt(v, 1), sum: false, invert: true },
+  sessions: { label: 'Organic sessions (GA4)', src: 'ga', get: (r) => r.sessions, fmt: compact, sum: true },
+  new_users: { label: 'New users (GA4)', src: 'ga', get: (r) => r.new_users, fmt: compact, sum: true },
+  returning: { label: 'Returning users (GA4)', src: 'ga', get: (r) => Math.max(0, r.total_users - r.new_users), fmt: compact, sum: true },
+  views: { label: 'Page views (GA4)', src: 'ga', get: (r) => r.views, fmt: compact, sum: true },
+  bounce: { label: 'Bounce rate (GA4)', src: 'ga', get: (r) => (r.sessions ? r.bounce_sessions / r.sessions : 0), fmt: (v) => pct(v, 1), sum: false, invert: true },
+  key_events: { label: 'Key events (GA4)', src: 'ga', get: (r) => r.key_events, fmt: compact, sum: true },
+  leads: { label: 'Leads (GA4)', src: 'ga', get: (r) => r.leads, fmt: compact, sum: true },
 };
 // Google-Sheets style red → yellow → green scale
 function heat(t) {
@@ -689,93 +744,124 @@ function combine(list) {
   const c = list.reduce((s, r) => s + (r.clicks || 0), 0), i = list.reduce((s, r) => s + (r.impressions || 0), 0);
   return { clicks: c, impressions: i, ctr: i ? c / i : 0, position: i ? list.reduce((s, r) => s + (r.position || 0) * (r.impressions || 0), 0) / i : 0 };
 }
+function combineGa(list) {
+  const out = { sessions: 0, new_users: 0, total_users: 0, views: 0, key_events: 0, leads: 0, bounce_sessions: 0 };
+  for (const r of list) for (const k in out) out[k] += r[k] || 0;
+  return out;
+}
+function weekRange(key) {
+  const [y, w] = key.split('-W').map(Number);
+  const jan4 = new Date(Date.UTC(y, 0, 4));
+  const mon = new Date(jan4.getTime() - ((jan4.getUTCDay() + 6) % 7) * 86400000 + (w - 1) * 7 * 86400000);
+  const sun = new Date(mon.getTime() + 6 * 86400000);
+  const f = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return `${f(mon)}–${f(sun)}`;
+}
 
 async function renderLob(pid, params) {
   const year = Number(params.year) || new Date().getFullYear();
-  const metric = METRICS[params.metric] ? params.metric : 'clicks';
+  const view = params.view === 'week' ? 'week' : 'month';
   const [{ project }, data] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/lobs?year=${year}`)]);
+  const metricKeys = Object.keys(METRICS).filter((k) => METRICS[k].src === 'gsc' || (data.hasGa && (k !== 'leads' || project.lead_event)));
+  const metric = metricKeys.includes(params.metric) ? params.metric : 'clicks';
   const M = METRICS[metric];
   const cats = [...new Set(data.groups.map((g) => g.category).filter(Boolean))];
   const cat = cats.includes(params.cat) ? params.cat : '';
   const groups = data.groups.filter((g) => !cat || g.category === cat);
+  const src = M.src === 'ga' ? data.ga.map((r) => ({ ...r, month: r.period })) : data.rows;
   const byKey = {};
-  for (const r of data.rows) byKey[r.group_id + '|' + r.month] = r;
-  const months = MONTHS.map((_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
-  const daysIn = (mo) => new Date(+mo.slice(0, 4), +mo.slice(5), 0).getDate();
-  const partial = (mo) => { const r = data.rows.find((x) => x.month === mo); return r && r.days < daysIn(mo); };
+  for (const r of src) byKey[r.group_id + '|' + r.month] = r;
+  const merge = M.src === 'ga' ? combineGa : combine;
+
+  let cols;
+  if (view === 'week') {
+    const weeks = [...new Set(data.rows.map((r) => r.month).filter((k) => k.includes('-W') && k.startsWith(year + '-')))].sort();
+    cols = weeks.slice(-13).map((k) => ({ key: k, label: k.slice(5), sub: weekRange(k), full: 7 }));
+  } else {
+    cols = MONTHS.map((m, i) => {
+      const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+      return { key, label: `${m} ${year}`, full: new Date(year, i + 1, 0).getDate() };
+    });
+  }
+  const partial = (c) => { const r = data.rows.find((x) => x.month === c.key); return r && r.days < c.full; };
   const setQ = (k, v) => { const q = { ...params, [k]: v }; if (!v) delete q[k]; delete q.error; location.hash = `#/p/${pid}/lob?` + new URLSearchParams(q); };
   const lastUpdated = Math.max(0, ...data.rows.map((r) => r.updated_at || 0));
 
-  const rowCells = (vals, { colored = true } = {}) => {
+  const rowCells = (vals) => {
     const nums = vals.filter((v) => v != null);
     const min = Math.min(...nums), max = Math.max(...nums);
     return vals.map((v) => {
       if (v == null) return '<td class="num lob-cell"></td>';
       let t = max > min ? (v - min) / (max - min) : 0.5;
       if (M.invert) t = 1 - t;
-      return `<td class="num lob-cell" ${colored ? `style="background:${heat(t)};color:#1a1a1a"` : ''}>${M.fmt(v)}</td>`;
+      return `<td class="num lob-cell" style="background:${heat(t)};color:#1a1a1a">${M.fmt(v)}</td>`;
     }).join('');
   };
-  const total = (list) => (M.sum ? list.reduce((s, r) => s + M.get(r), 0) : M.get(combine(list)));
+  const total = (list) => (M.sum ? list.reduce((s, r) => s + M.get(r), 0) : M.get(merge(list)));
   const lines = groups.map((g) => {
-    const recs = months.map((mo) => byKey[g.id + '|' + mo]);
-    const vals = recs.map((r) => (r ? M.get(r) : null));
+    const recs = cols.map((c) => byKey[g.id + '|' + c.key]);
     const have = recs.filter(Boolean);
-    return { g, vals, tot: have.length ? total(have) : null };
+    return { g, vals: recs.map((r) => (r ? M.get(r) : null)), tot: have.length ? total(have) : null };
   });
-  const totVals = months.map((mo) => { const recs = groups.map((g) => byKey[g.id + '|' + mo]).filter(Boolean); return recs.length ? M.get(combine(recs)) : null; });
-  const siteVals = months.map((mo) => (byKey['__site__|' + mo] ? M.get(byKey['__site__|' + mo]) : null));
-  const allTot = (() => { const recs = groups.flatMap((g) => months.map((mo) => byKey[g.id + '|' + mo]).filter(Boolean)); return recs.length ? M.get(combine(recs)) : null; })();
-  const siteRecs = months.map((mo) => byKey['__site__|' + mo]).filter(Boolean);
+  const totVals = cols.map((c) => { const recs = groups.map((g) => byKey[g.id + '|' + c.key]).filter(Boolean); return recs.length ? M.get(merge(recs)) : null; });
+  const siteVals = cols.map((c) => (byKey['__site__|' + c.key] ? M.get(byKey['__site__|' + c.key]) : null));
+  const allRecs = groups.flatMap((g) => cols.map((c) => byKey[g.id + '|' + c.key]).filter(Boolean));
+  const allTot = allRecs.length ? total(allRecs) : null;
+  const siteRecs = cols.map((c) => byKey['__site__|' + c.key]).filter(Boolean);
   const pathText = (p) => esc(p).replace(/\n/g, '<br>');
+  const lastVsPrev = (vals) => { const v = vals.filter((x) => x != null); return v.length >= 2 ? delta(v[v.length - 1], v[v.length - 2], { invert: M.invert }) : ''; };
 
   app.innerHTML = `<div class="row spread"><div><div class="small"><a href="#/p/${pid}">← ${esc(project.name)}</a></div><h1>LOB report</h1>
-      <div class="muted small">${esc(project.gsc_property)} · Search Console, web search${lastUpdated ? ' · data updated ' + date(lastUpdated) : ''}</div></div>
+      <div class="muted small">${esc(project.gsc_property)}${data.hasGa ? ' · GA4: ' + esc(project.ga4_name || '') + ' (organic)' : ''}${lastUpdated ? ' · updated ' + date(lastUpdated) : ''}</div></div>
       <div class="row">
+        <div class="seg"><button class="${view === 'month' ? 'on' : ''}" data-view="month">Monthly</button><button class="${view === 'week' ? 'on' : ''}" data-view="week">Weekly</button></div>
         <select id="lob-year" style="width:auto">${[0, 1, 2].map((d) => new Date().getFullYear() - d).map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>
-        <select id="lob-metric" style="width:auto">${Object.entries(METRICS).map(([k, v]) => `<option value="${k}" ${k === metric ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+        <select id="lob-metric" style="width:auto">${metricKeys.map((k) => `<option value="${k}" ${k === metric ? 'selected' : ''}>${METRICS[k].label}</option>`).join('')}</select>
         <button class="btn" id="lob-csv">⬇ CSV</button>
         ${data.isAdmin ? '<button class="btn" id="lob-edit">✏️ Edit groups</button>' : ''}
-        ${data.canRun && data.groups.length ? '<button class="btn primary" id="lob-refresh">⟳ Refresh from GSC</button>' : ''}
+        ${data.canRun && data.groups.length ? `<button class="btn primary" id="lob-refresh">⟳ Refresh ${data.hasGa ? 'GSC + GA4' : 'from GSC'}</button>` : ''}
       </div></div>
     ${cats.length ? `<div class="tabs">${['', ...cats].map((c) => `<button class="tab ${c === cat ? 'active' : ''}" data-cat="${esc(c)}">${c ? esc(c) : 'Overall'}</button>`).join('')}</div>` : '<div style="height:16px"></div>'}
     <div id="lob-progress" class="hidden card" style="margin-bottom:12px"><b id="lob-pstep">Refreshing…</b><div class="progress"><div id="lob-pbar" style="width:3%"></div></div></div>
     ${!data.groups.length ? `<div class="card center"><h2>No URL groups yet</h2><p class="muted">Add your LOBs (e.g. Broadband Blog → <code>/blog/broadband/</code>) to get a monthly report like your Sheet.</p>
         ${data.isAdmin ? '<button class="btn primary" id="lob-edit2">+ Add URL groups</button>' : '<p class="muted small">Ask your admin to set up the groups.</p>'}</div>`
     : `<div class="card" style="padding:0"><div class="table-wrap"><table class="lob">
-      <thead><tr><th>URLs grouped</th><th>Page path</th>${months.map((mo, i) => `<th class="num">${MONTHS[i]} ${year}${partial(mo) ? ' <span title="Month not complete yet">*</span>' : ''}</th>`).join('')}<th class="num">${M.sum ? 'Total' : 'Year'}</th></tr></thead>
-      <tbody>${lines.map((l) => `<tr><td><b>${esc(l.g.name)}</b>${!cat && l.g.category ? `<div class="small muted">${esc(l.g.category)}</div>` : ''}</td><td class="small muted lob-path">${pathText(l.g.patterns)}</td>${rowCells(l.vals)}<td class="num"><b>${l.tot == null ? '' : M.fmt(l.tot)}</b></td></tr>`).join('')}
-        <tr class="lob-total"><td colspan="2">Total (${cat || 'all groups'})</td>${totVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${allTot == null ? '' : M.fmt(allTot)}</td></tr>
-        ${!cat ? `<tr class="lob-site"><td colspan="2">Whole site (all URLs in GSC)</td>${siteVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${siteRecs.length ? M.fmt(M.sum ? siteRecs.reduce((s, r) => s + M.get(r), 0) : M.get(combine(siteRecs))) : ''}</td></tr>` : ''}
+      <thead><tr><th>URLs grouped</th><th>Page path</th>${cols.map((c) => `<th class="num" title="${esc(c.sub || '')}">${c.label}${partial(c) ? ' *' : ''}${c.sub ? `<div style="font-weight:400;font-size:10px">${c.sub}</div>` : ''}</th>`).join('')}<th class="num">${M.sum ? 'Total' : 'All'}</th><th class="num">Last vs prev</th></tr></thead>
+      <tbody>${lines.map((l) => `<tr><td><b>${esc(l.g.name)}</b>${!cat && l.g.category ? `<div class="small muted">${esc(l.g.category)}</div>` : ''}</td><td class="small muted lob-path">${pathText(l.g.patterns)}</td>${rowCells(l.vals)}<td class="num"><b>${l.tot == null ? '' : M.fmt(l.tot)}</b></td><td class="num">${lastVsPrev(l.vals)}</td></tr>`).join('')}
+        <tr class="lob-total"><td colspan="2">Total (${cat || 'all groups'})</td>${totVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${allTot == null ? '' : M.fmt(allTot)}</td><td></td></tr>
+        ${!cat ? `<tr class="lob-site"><td colspan="2">Whole site</td>${siteVals.map((v) => `<td class="num">${v == null ? '' : M.fmt(v)}</td>`).join('')}<td class="num">${siteRecs.length ? M.fmt(total(siteRecs)) : ''}</td><td class="num">${lastVsPrev(siteVals)}</td></tr>` : ''}
       </tbody></table></div></div>
-      <p class="hint">Colours compare months within each row (red = lowest, green = highest${M.invert ? '; for position lower is better' : ''}). * = month not complete yet. Totals add up the groups, so if one URL is in two groups it's counted twice — compare with the "Whole site" row.
-      ${data.rows.length ? '' : '<br><b>No data yet — click “Refresh from GSC”.</b>'} Search Console only keeps 16 months; every refresh is saved here, so older months stay available.</p>`}`;
+      <p class="hint">Colours compare ${view === 'week' ? 'weeks' : 'months'} within each row (red = lowest, green = highest${M.invert ? '; lower is better here' : ''}). * = not complete yet. "Last vs prev" compares the latest ${view} with the one before.
+      Totals add up the groups, so a URL in two groups is counted twice — compare with "Whole site". GA4 numbers are organic sessions by landing page.
+      ${data.rows.length ? '' : '<br><b>No data yet — click “Refresh”.</b>'} Every refresh is saved, so history beyond Search Console's 16 months stays here.</p>`}`;
 
   document.getElementById('lob-year').onchange = (e) => setQ('year', e.target.value);
   document.getElementById('lob-metric').onchange = (e) => setQ('metric', e.target.value === 'clicks' ? '' : e.target.value);
+  app.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => setQ('view', b.dataset.view === 'week' ? 'week' : '')));
   app.querySelectorAll('[data-cat]').forEach((b) => (b.onclick = () => setQ('cat', b.dataset.cat)));
   const edit = () => lobEditor(pid, data.groups);
   document.getElementById('lob-edit')?.addEventListener('click', edit);
   document.getElementById('lob-edit2')?.addEventListener('click', edit);
   document.getElementById('lob-csv').onclick = () => {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csv = [['Group', 'Category', 'Page path', ...MONTHS.map((mm) => `${mm} ${year}`), 'Total'].map(q).join(','),
+    const csv = [['Group', 'Category', 'Page path', ...cols.map((c) => c.label + (c.sub ? ` (${c.sub})` : '')), 'Total'].map(q).join(','),
       ...lines.map((l) => [l.g.name, l.g.category, l.g.patterns, ...l.vals.map((v) => v ?? ''), l.tot ?? ''].map(q).join(',')),
       ['Total', cat, '', ...totVals.map((v) => v ?? ''), allTot ?? ''].map(q).join(',')].join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `${project.name}-LOB-${metric}-${year}${cat ? '-' + cat : ''}.csv`;
+    a.download = `${project.name}-LOB-${metric}-${view}-${year}${cat ? '-' + cat : ''}.csv`;
     a.click();
   };
   document.getElementById('lob-refresh')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     document.getElementById('lob-progress').classList.remove('hidden');
     const ids = data.groups.map((g) => g.id);
+    const step = data.hasGa ? 5 : 8;
     try {
-      for (let i = 0; i < ids.length; i += 8) {
-        document.getElementById('lob-pstep').textContent = `Fetching groups ${i + 1}–${Math.min(ids.length, i + 8)} of ${ids.length} from Search Console…`;
+      for (let i = 0; i < ids.length; i += step) {
+        document.getElementById('lob-pstep').textContent = `Fetching groups ${i + 1}–${Math.min(ids.length, i + step)} of ${ids.length}…`;
         document.getElementById('lob-pbar').style.width = ((i + 1) / ids.length) * 100 + '%';
-        await api(`/api/projects/${pid}/lobs/refresh`, { method: 'POST', body: { year, groupIds: ids.slice(i, i + 8), includeSite: i === 0 } });
+        await api(`/api/projects/${pid}/lobs/refresh`, { method: 'POST', body: { year, groupIds: ids.slice(i, i + step), includeSite: i === 0 } });
       }
       toast('Updated');
       route();
@@ -785,6 +871,234 @@ async function renderLob(pid, params) {
       document.getElementById('lob-progress').classList.add('hidden');
     }
   });
+}
+
+// ---------- URL performance (GSC + GA4 per URL, weekly / monthly) ----------
+const GA_COLS = ['sessions', 'newUsers', 'totalUsers', 'bounceRate', 'views', 'keyEvents', 'leads'];
+const dayMs = 86400000;
+function perfPeriods(gran) {
+  const lastData = new Date(Date.now() - 3 * dayMs);
+  const out = [];
+  if (gran === 'week') {
+    const mon = new Date(Date.UTC(lastData.getUTCFullYear(), lastData.getUTCMonth(), lastData.getUTCDate()) - ((lastData.getUTCDay() + 6) % 7) * dayMs);
+    for (let i = 0; i < 12; i++) {
+      const s = new Date(mon.getTime() - i * 7 * dayMs), e = new Date(s.getTime() + 6 * dayMs);
+      const end = e > lastData ? lastData : e;
+      out.push({ key: isoDay(s), start: isoDay(s), end: isoDay(end), partial: e > lastData, label: `${s.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` });
+    }
+  } else {
+    for (let i = 0; i < 13; i++) {
+      const s = new Date(Date.UTC(lastData.getUTCFullYear(), lastData.getUTCMonth() - i, 1));
+      const e = new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth() + 1, 0));
+      const end = e > lastData ? lastData : e;
+      out.push({ key: isoDay(s).slice(0, 7), start: isoDay(s), end: isoDay(end), partial: e > lastData, label: s.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' }) });
+    }
+  }
+  return out;
+}
+function comparePeriod(p, gran, cmp) {
+  const s = new Date(p.start + 'T00:00:00Z'), e = new Date(p.end + 'T00:00:00Z');
+  const len = Math.round((e - s) / dayMs);
+  if (cmp === 'year') {
+    if (gran === 'week') return { start: isoDay(new Date(s - 364 * dayMs)), end: isoDay(new Date(e - 364 * dayMs)) };
+    const ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1);
+    return { start: isoDay(ps), end: isoDay(new Date(ps.getTime() + len * dayMs)) };
+  }
+  if (gran === 'week') return { start: isoDay(new Date(s - 7 * dayMs)), end: isoDay(new Date(e - 7 * dayMs)) };
+  const ps = new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth() - 1, 1));
+  const pe = p.partial ? new Date(ps.getTime() + len * dayMs) : new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 0));
+  return { start: isoDay(ps), end: isoDay(pe) };
+}
+
+async function projGsc(pid, body, cap = 100000) {
+  const rows = [];
+  for (let startRow = 0; startRow < cap; startRow += 25000) {
+    const res = await fetch(`/api/projects/${pid}/gsc-rows`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, rowLimit: 25000, startRow }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error?.message || d.error || 'Search Console request failed');
+    rows.push(...(d.rows || []));
+    if ((d.rows || []).length < 25000) break;
+  }
+  return rows;
+}
+async function projGa(pid, body) {
+  const rows = [];
+  for (let offset = 0; offset < 100000; offset += 25000) {
+    const res = await fetch(`/api/projects/${pid}/ga-rows`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, limit: 25000, offset }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error?.message || d.error || 'GA4 request failed');
+    rows.push(...(d.rows || []));
+    if ((d.rows || []).length < 25000) break;
+  }
+  return rows.map((r) => {
+    const v = r.metricValues.map((x) => Number(x.value || 0));
+    return { path: r.dimensionValues[0].value.split('?')[0], sessions: v[0], newUsers: v[1], totalUsers: v[2], bounceRate: v[3], views: v[4], keyEvents: v[5], leads: v[6] || 0 };
+  });
+}
+
+const perfCache = {};
+async function renderUrls(pid, params) {
+  const gran = params.gran === 'week' ? 'week' : 'month';
+  const cmp = params.cmp === 'year' ? 'year' : 'prev';
+  const organic = params.all !== '1';
+  const [{ project }, lob] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/lobs`)]);
+  const periods = perfPeriods(gran);
+  const per = periods.find((p) => p.key === params.p) || periods[gran === 'month' && periods[0].partial ? 1 : 0];
+  const prev = comparePeriod(per, gran, cmp);
+  const cats = [...new Set(lob.groups.map((g) => g.category).filter(Boolean))];
+  const scope = params.lob || '';
+  const scoped = scope.startsWith('cat:') ? lob.groups.filter((g) => g.category === scope.slice(4)) : scope.startsWith('g:') ? lob.groups.filter((g) => g.id === scope.slice(2)) : scope === 'all' ? lob.groups : [];
+  const groupIds = scoped.map((g) => g.id);
+  const matchAll = lobMatcher(lob.groups);
+  const matchScope = scoped.length ? lobMatcher(scoped) : null;
+  const isBranded = brandTester(project.brand_terms);
+  const setQ = (k, v) => { const q = { ...params, [k]: v }; if (!v) delete q[k]; delete q.error; location.hash = `#/p/${pid}/urls?` + new URLSearchParams(q); };
+
+  app.innerHTML = `<div class="row spread"><div><div class="small"><a href="#/p/${pid}">← ${esc(project.name)}</a></div><h1>URL performance</h1>
+      <div class="muted small">Search Console + GA4 per URL · ${esc(per.start)} → ${esc(per.end)}${per.partial ? ' (so far)' : ''} vs ${esc(prev.start)} → ${esc(prev.end)}</div></div>
+      <div class="row">
+        <div class="seg"><button class="${gran === 'month' ? 'on' : ''}" data-gran="month">Monthly</button><button class="${gran === 'week' ? 'on' : ''}" data-gran="week">Weekly</button></div>
+        <select id="u-per" style="width:auto">${periods.map((p) => `<option value="${p.key}" ${p.key === per.key ? 'selected' : ''}>${esc(p.label)}${p.partial ? ' (so far)' : ''}</option>`).join('')}</select>
+        <select id="u-cmp" style="width:auto"><option value="prev">vs previous ${gran}</option><option value="year" ${cmp === 'year' ? 'selected' : ''}>vs same ${gran} last year</option></select>
+        <select id="u-lob" style="width:auto"><option value="">All URLs</option>${lob.groups.length ? `<option value="all" ${scope === 'all' ? 'selected' : ''}>All LOB groups</option>` : ''}
+          ${cats.map((c) => `<option value="cat:${esc(c)}" ${scope === 'cat:' + c ? 'selected' : ''}>LOB: ${esc(c)}</option>`).join('')}
+          ${lob.groups.map((g) => `<option value="g:${g.id}" ${scope === 'g:' + g.id ? 'selected' : ''}>— ${esc(g.name)}</option>`).join('')}</select>
+        ${project.ga4_property ? `<label class="row small" style="gap:6px;margin:0;font-weight:400"><input type="checkbox" id="u-org" style="width:auto" ${organic ? 'checked' : ''}> GA4 organic only</label>` : ''}
+        <button class="btn" id="u-csv">⬇ CSV</button>
+      </div></div>
+    ${project.brand_terms ? '' : `<div class="banner">Tip: add your <b>brand terms</b> (e.g. <code>airtel</code>) in ${isAdmin() ? `<a href="#/p/${pid}/edit">project settings</a>` : 'project settings (ask your admin)'} to split branded vs non-branded queries.</div>`}
+    <div id="u-body" class="card section center muted">Loading Search Console${project.ga4_property ? ' and GA4' : ''} data…</div>`;
+
+  app.querySelectorAll('[data-gran]').forEach((b) => (b.onclick = () => { const q = { ...params, gran: b.dataset.gran }; delete q.p; location.hash = `#/p/${pid}/urls?` + new URLSearchParams(q); }));
+  document.getElementById('u-per').onchange = (e) => setQ('p', e.target.value);
+  document.getElementById('u-cmp').onchange = (e) => setQ('cmp', e.target.value === 'year' ? 'year' : '');
+  document.getElementById('u-lob').onchange = (e) => setQ('lob', e.target.value);
+  document.getElementById('u-org')?.addEventListener('change', (e) => setQ('all', e.target.checked ? '' : '1'));
+
+  const key = JSON.stringify([pid, per.start, per.end, prev, groupIds, organic]);
+  let d = perfCache[key];
+  try {
+    if (!d) {
+      const q = (r) => ({ startDate: r.start, endDate: r.end, groupIds });
+      const [gc, gp, qc, qp, ac, ap] = await Promise.all([
+        projGsc(pid, { ...q(per), dimensions: ['page'] }),
+        projGsc(pid, { ...q(prev), dimensions: ['page'] }),
+        projGsc(pid, { ...q(per), dimensions: ['query'] }, 50000),
+        projGsc(pid, { ...q(prev), dimensions: ['query'] }, 50000),
+        project.ga4_property ? projGa(pid, { ...q(per), organicOnly: organic }) : [],
+        project.ga4_property ? projGa(pid, { ...q(prev), organicOnly: organic }) : [],
+      ]);
+      d = perfCache[key] = { gc, gp, qc, qp, ac, ap };
+    }
+  } catch (e) {
+    document.getElementById('u-body').innerHTML = `<div class="banner err">${esc(e.message)}</div>`;
+    return;
+  }
+  const origin = new URL(project.site_url).origin;
+  const inScope = (url) => !matchScope || !!matchScope(url);
+  const rows = {};
+  const pathOf = (u) => { try { return new URL(u).pathname; } catch { return u; } };
+  const get = (p) => (rows[p] ||= { path: p, url: origin + p, c: 0, i: 0, pw: 0, pc: 0, pi: 0, ppw: 0, ga: null, pga: null, best: -1 });
+  for (const [list, pre] of [[d.gc, ''], [d.gp, 'p']]) {
+    for (const r of list) {
+      const u = r.keys[0];
+      if (!inScope(u)) continue;
+      const x = get(pathOf(u));
+      if (!pre && r.clicks > x.best) { x.best = r.clicks; x.url = u; }
+      x[pre + 'c'] += r.clicks; x[pre + 'i'] += r.impressions; x[pre + 'pw'] += r.position * r.impressions;
+    }
+  }
+  const addGa = (list, field) => {
+    for (const r of list) {
+      if (!inScope(origin + r.path)) continue;
+      const x = get(r.path);
+      const t = (x[field] ||= { sessions: 0, newUsers: 0, totalUsers: 0, bounced: 0, views: 0, keyEvents: 0, leads: 0 });
+      t.sessions += r.sessions; t.newUsers += r.newUsers; t.totalUsers += r.totalUsers; t.bounced += r.bounceRate * r.sessions; t.views += r.views; t.keyEvents += r.keyEvents; t.leads += r.leads;
+    }
+  };
+  addGa(d.ac, 'ga'); addGa(d.ap, 'pga');
+  const list = Object.values(rows).map((x) => ({
+    ...x, lob: matchAll(x.url)?.name || '', ctr: x.i ? x.c / x.i : 0, p: x.i ? x.pw / x.i : null, pctr: x.pi ? x.pc / x.pi : 0, pp: x.pi ? x.ppw / x.pi : null,
+    s: x.ga?.sessions || 0, ps: x.pga?.sessions || 0, nu: x.ga?.newUsers || 0, ru: x.ga ? Math.max(0, x.ga.totalUsers - x.ga.newUsers) : 0,
+    br: x.ga?.sessions ? x.ga.bounced / x.ga.sessions : null, pbr: x.pga?.sessions ? x.pga.bounced / x.pga.sessions : null,
+    pv: x.ga?.views || 0, ke: x.ga?.keyEvents || 0, pke: x.pga?.keyEvents || 0, ld: x.ga?.leads || 0, pld: x.pga?.leads || 0,
+    pnu: x.pga?.newUsers || 0, pru: x.pga ? Math.max(0, x.pga.totalUsers - x.pga.newUsers) : 0, ppv: x.pga?.views || 0,
+  })).filter((x) => x.c || x.i || x.s || x.pc || x.ps).sort((a, b) => b.c - a.c || b.s - a.s);
+
+  const sum = (k) => list.reduce((t, x) => t + (x[k] || 0), 0);
+  const scopedQ = (qs) => qs.map((r) => ({ q: r.keys[0], c: r.clicks, i: r.impressions }));
+  const bs = brandSplit(scopedQ(d.qc), isBranded), pbs = brandSplit(scopedQ(d.qp), isBranded);
+  const tile = (label, v, pv, f = fmt, opt = {}) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${f(v)}</div>${delta(v, pv, opt) || '<span class="delta muted">&nbsp;</span>'}</div>`;
+  const hasGa = !!project.ga4_property, hasLead = !!project.lead_event;
+  const totS = sum('s'), totB = list.reduce((t, x) => t + (x.ga?.bounced || 0), 0), ptotS = sum('ps'), ptotB = list.reduce((t, x) => t + (x.pga?.bounced || 0), 0);
+  const cell = (v, pv, f = fmt, opt) => `${f(v)}<div class="small">${delta(v, pv, opt)}</div>`;
+
+  document.getElementById('u-body').outerHTML = `<div class="grid kpis section">
+      ${tile('Clicks', sum('c'), sum('pc'))}${tile('Impressions', sum('i'), sum('pi'))}
+      ${project.brand_terms ? tile('Non-branded clicks', bs.nonBranded.c, pbs.nonBranded.c) + tile('Branded clicks', bs.branded.c, pbs.branded.c) : ''}
+      ${hasGa ? tile(organic ? 'Organic sessions' : 'Sessions', totS, ptotS) + tile('New users', sum('nu'), sum('pnu')) + tile('Returning users', sum('ru'), sum('pru')) + tile('Bounce rate', totS ? totB / totS : 0, ptotS ? ptotB / ptotS : 0, (v) => pct(v), { invert: true, isPct: true }) + tile('Page views', sum('pv'), sum('ppv')) + tile('Key events', sum('ke'), sum('pke')) : ''}
+      ${hasLead ? tile(`Leads (${esc(project.lead_event)})`, sum('ld'), sum('pld')) : ''}
+    </div>
+    ${project.brand_terms ? `<div class="small muted" style="margin-top:6px">Branded = queries containing ${esc(project.brand_terms)} · non-branded share of clicks: <b>${pct(bs.nonBranded.c / Math.max(1, bs.nonBranded.c + bs.branded.c))}</b>${groupIds.length ? ' · query split is for the selected LOB URLs' : ''}</div>` : ''}
+    <div class="card section">${table([
+      { key: 'path', label: 'URL', render: (x) => `<span class="url">${esc(x.path)}</span>${x.lob ? `<div class="small muted">${esc(x.lob)}</div>` : ''}`, text: (x) => x.path + ' ' + x.lob },
+      { key: 'c', label: 'Clicks', num: 1, render: (x) => cell(x.c, x.pc) },
+      { key: 'i', label: 'Impr.', num: 1, render: (x) => cell(x.i, x.pi) },
+      { key: 'ctr', label: 'CTR', num: 1, render: (x) => cell(x.ctr, x.pctr, (v) => pct(v), { isPct: true }) },
+      { key: 'p', label: 'Pos', num: 1, render: (x) => cell(x.p, x.pp, (v) => fmt(v, 1), { invert: true }), sort: (x) => x.p ?? 999 },
+      ...(hasGa ? [
+        { key: 's', label: 'Sessions', num: 1, render: (x) => cell(x.s, x.ps) },
+        { key: 'nu', label: 'New users', num: 1, render: (x) => cell(x.nu, x.pnu) },
+        { key: 'ru', label: 'Returning', num: 1, render: (x) => cell(x.ru, x.pru) },
+        { key: 'br', label: 'Bounce', num: 1, render: (x) => (x.br == null ? '–' : cell(x.br, x.pbr, (v) => pct(v), { invert: true, isPct: true })), sort: (x) => x.br ?? -1 },
+        { key: 'pv', label: 'Views', num: 1, render: (x) => cell(x.pv, x.ppv) },
+        { key: 'ke', label: 'Key events', num: 1, render: (x) => cell(x.ke, x.pke) },
+      ] : []),
+      ...(hasLead ? [{ key: 'ld', label: 'Leads', num: 1, render: (x) => cell(x.ld, x.pld) }] : []),
+    ], list, { limit: 1000, onRow: (x) => urlQueries(pid, project, x, per, prev, isBranded) })}
+    <p class="hint">${fmt(list.length)} URLs. Click a URL to see all its queries (branded vs non-branded). GSC URLs are matched to GA4 landing pages by path. ${hasGa ? 'Returning users = total users − new users.' : ''}</p></div>`;
+
+  document.getElementById('u-csv').onclick = () => {
+    const qv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = ['URL', 'LOB', 'Clicks', 'Prev clicks', 'Impressions', 'Prev impressions', 'CTR', 'Position', 'Prev position', ...(hasGa ? ['Sessions', 'Prev sessions', 'New users', 'Returning users', 'Bounce rate', 'Page views', 'Key events', 'Prev key events'] : []), ...(hasLead ? ['Leads', 'Prev leads'] : [])];
+    const lines = list.map((x) => [x.url, x.lob, x.c, x.pc, x.i, x.pi, x.ctr.toFixed(4), x.p?.toFixed(1), x.pp?.toFixed(1), ...(hasGa ? [x.s, x.ps, x.nu, x.ru, x.br?.toFixed(4), x.pv, x.ke, x.pke] : []), ...(hasLead ? [x.ld, x.pld] : [])]);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([[head, ...lines].map((l) => l.map(qv).join(',')).join('\n')], { type: 'text/csv' }));
+    a.download = `${project.name}-urls-${per.start}-${per.end}.csv`;
+    a.click();
+  };
+}
+
+async function urlQueries(pid, project, x, per, prev, isBranded) {
+  openDrawer(`<h2 style="word-break:break-all"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url)}</a></h2><p class="muted">Loading queries…</p>`);
+  try {
+    const [cur, old] = await Promise.all([
+      projGsc(pid, { startDate: per.start, endDate: per.end, dimensions: ['query'], page: x.url }, 25000),
+      projGsc(pid, { startDate: prev.start, endDate: prev.end, dimensions: ['query'], page: x.url }, 25000),
+    ]);
+    const p = Object.fromEntries(old.map((r) => [r.keys[0], r]));
+    const rows = cur.map((r) => ({ q: r.keys[0], c: r.clicks, i: r.impressions, ctr: r.ctr, pos: r.position, pc: p[r.keys[0]]?.clicks ?? null, ppos: p[r.keys[0]]?.position ?? null, b: isBranded(r.keys[0]) }));
+    const split = brandSplit(rows, (q) => isBranded(q));
+    const tot = split.branded.c + split.nonBranded.c;
+    openDrawer(`<h2 style="word-break:break-all"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url)}</a></h2>
+      <div class="muted small">${per.start} → ${per.end} vs ${prev.start} → ${prev.end}${x.lob ? ' · LOB: ' + esc(x.lob) : ''}</div>
+      <div class="grid kpis section">
+        <div class="card kpi"><div class="label">Queries</div><div class="value">${fmt(rows.length)}</div></div>
+        <div class="card kpi"><div class="label">Non-branded clicks</div><div class="value">${fmt(split.nonBranded.c)}</div><span class="small muted">${pct(split.nonBranded.c / Math.max(1, tot))} · ${fmt(split.nonBranded.n)} queries</span></div>
+        <div class="card kpi"><div class="label">Branded clicks</div><div class="value">${fmt(split.branded.c)}</div><span class="small muted">${pct(split.branded.c / Math.max(1, tot))} · ${fmt(split.branded.n)} queries</span></div>
+        ${x.ga ? `<div class="card kpi"><div class="label">Sessions</div><div class="value">${fmt(x.s)}</div><span class="small muted">bounce ${pct(x.br)} · ${fmt(x.ke)} key events</span></div>` : ''}
+      </div>
+      ${project.brand_terms ? '' : '<div class="banner">Add brand terms in project settings to tag branded queries.</div>'}
+      <div class="card section">${table([
+        { key: 'q', label: 'Query', render: (r) => `${esc(r.q)} ${r.b ? '<span class="pill info">Branded</span>' : '<span class="pill good">Non-branded</span>'}`, text: (r) => `${r.q} ${r.b ? 'branded' : 'non-branded'}` },
+        { key: 'c', label: 'Clicks', num: 1, render: (r) => `${fmt(r.c)} ${delta(r.c, r.pc)}` },
+        { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) },
+        { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
+        { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)}${r.ppos ? ` <span class="small muted">(${fmt(r.ppos, 1)})</span>` : ''}` },
+      ], rows, { limit: 2000 })}<p class="hint">Type <b>non-branded</b> or <b>branded</b> in the filter to see one group. Brackets show last period's position.</p></div>`);
+  } catch (e) {
+    openDrawer(`<div class="banner err">${esc(e.message)}</div>`);
+  }
 }
 
 function lobEditor(pid, groups) {
@@ -836,7 +1150,7 @@ async function renderProject(pid, runId) {
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
       <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${date(r.created_at)} · score ${r.score}</option>`).join('')}</select>` : ''}
-      <a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
+      <a class="btn" href="#/p/${pid}/urls">📈 URL performance</a><a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
     app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">${canRun(project) ? 'Run your first analysis to see scores, opportunities and AI recommendations.' : 'No analysis has been run yet. Ask someone with "Can run analysis" access to run one.'}</p>${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div>`;
     return;
@@ -856,7 +1170,7 @@ function renderRun(project, { run, pages }, runs, head) {
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const tabs = ['Insights', 'Opportunities', 'Pages', 'Queries', 'Technical', 'Traffic', 'History'];
   app.innerHTML = head + `
-    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''} · run by ${esc(run.created_by)}</div>
+    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
       <div class="score">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
       <div class="score">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
@@ -870,6 +1184,7 @@ function renderRun(project, { run, pages }, runs, head) {
       ${kpi('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }))}
       ${k.sessions != null ? kpi('Organic sessions', fmt(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
       ${k.keyEvents != null ? kpi('Organic key events', fmt(k.keyEvents), delta(k.keyEvents, k.prevKeyEvents)) : ''}
+      ${s.brand ? kpi('Non-branded clicks', fmt(s.brand.nonBranded.c), `<span class="small muted">${pct(s.brand.nonBranded.c / Math.max(1, s.brand.nonBranded.c + s.brand.branded.c))} of clicks</span>`) + kpi('Branded clicks', fmt(s.brand.branded.c), `<span class="small muted">${fmt(s.brand.branded.n)} queries</span>`) : ''}
     </div>
     <div class="tabs">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}">${t}</button>`).join('')}</div>
     <div id="tab"></div>`;
@@ -924,13 +1239,22 @@ function viewInsights(project, run, pages) {
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Executive summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>${(ai.risks || []).length ? `<h3>Risks</h3><ul>${ai.risks.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : ''}
       <div class="row spread small muted"><span>Generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
-    <div class="card section"><h2>Priority actions</h2>${list(ai.priorities, (p) => `<div class="reco"><div class="row spread"><h3>${esc(p.title)}</h3><span class="row" style="gap:6px">${impactPill(p.impact)}<span class="pill">${esc(p.effort || '')} effort</span></span></div>
-      <p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${(p.urls || []).filter(Boolean).length ? `<p class="small">${p.urls.filter(Boolean).map((u) => pageLink(u, pages)).join(' · ')}</p>` : ''}</div>`)}</div>
+    <div class="card section"><h2>Priority actions</h2>${list(ai.priorities, (p) => `<div class="reco"><div class="row spread"><h3>${esc(p.title)}</h3><span class="row" style="gap:6px">${p.type ? `<span class="pill info">${esc(p.type.toUpperCase())}</span>` : ''}${impactPill(p.impact)}<span class="pill">${esc(p.effort || '')} effort</span></span></div>
+      <p><b>Why:</b> ${esc(p.why)}</p><p><b>How:</b> ${esc(p.how)}</p>${p.expected_result ? `<p><b>Target:</b> ${esc(p.expected_result)}</p>` : ''}${(p.urls || []).filter(Boolean).length ? `<p class="small">${p.urls.filter(Boolean).map((u) => pageLink(u, pages)).join(' · ')}</p>` : ''}</div>`)}</div>
     <div class="grid g2 section">
       <div class="card"><h2>Quick wins</h2>${list(ai.quick_wins, (q) => `<div class="check"><div><b>${esc(q.query)}</b> <span class="pill">pos ${esc(q.position)}</span><div class="small">${esc(q.action)}</div>${q.url ? `<div class="small">${pageLink(q.url, pages)}</div>` : ''}</div></div>`)}</div>
-      <div class="card"><h2>Content ideas</h2>${list(ai.content_ideas, (c) => `<div class="check"><div><b>${esc(c.topic)}</b> <span class="pill info">${esc(c.type)}</span><div class="small muted">Target: ${esc(c.target_query)}</div><div class="small">${esc(c.rationale)}</div></div></div>`)}</div>
+      <div class="card ${(ai.content_ideas || []).length ? '' : 'hidden'}"><h2>Content ideas</h2>${list(ai.content_ideas, (c) => `<div class="check"><div><b>${esc(c.topic)}</b> <span class="pill info">${esc(c.type)}</span><div class="small muted">Target: ${esc(c.target_query)}</div><div class="small">${esc(c.rationale)}</div></div></div>`)}</div>
     </div>
-    <div class="card section"><h2>Page-level recommendations</h2>${list(ai.page_recommendations, (p) => `<div class="reco"><h3>${pageLink(p.url, pages)}</h3><p>${esc(p.problem)}</p>
+    ${(ai.seo || []).length ? `<div class="card section"><h2>🔎 SEO — page by page</h2>${list(ai.seo, (p) => `<div class="reco"><h3>${pageLink(p.url, pages)}</h3><p><b>${esc(p.issue)}</b></p>${p.evidence ? `<p class="small muted">${esc(p.evidence)}</p>` : ''}
+      ${p.title_suggestion ? `<p class="small"><b>New title:</b> ${esc(p.title_suggestion)}</p>` : ''}${p.meta_suggestion ? `<p class="small"><b>New meta:</b> ${esc(p.meta_suggestion)}</p>` : ''}${p.h1_suggestion ? `<p class="small"><b>New H1:</b> ${esc(p.h1_suggestion)}</p>` : ''}
+      ${(p.sections_to_add || []).length ? `<p class="small"><b>Add sections:</b></p><ul class="small">${p.sections_to_add.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      ${(p.internal_links || []).length && Array.isArray(p.internal_links) ? `<p class="small"><b>Internal links:</b></p><ul class="small">${p.internal_links.map((l) => `<li>${esc(l.from)} → <b>“${esc(l.anchor)}”</b> → ${esc(l.to)}</li>`).join('')}</ul>` : ''}</div>`)}</div>` : ''}
+    ${(ai.cro || []).length ? `<div class="card section"><h2>💸 CRO — conversion experiments</h2>${list(ai.cro, (c) => `<div class="reco" style="border-left-color:var(--good)"><div class="row spread"><h3>${pageLink(c.url, pages)}</h3>${impactPill(c.impact)}</div>
+      <p class="small muted">${esc(c.evidence)}</p><p><b>Hypothesis:</b> ${esc(c.hypothesis)}</p><p><b>Change:</b> ${esc(c.change)}</p><p class="small"><b>Measure:</b> ${esc(c.metric)}</p></div>`)}</div>` : ''}
+    ${(ai.content_clusters || []).length ? `<div class="card section"><h2>🧭 Content clusters</h2>${list(ai.content_clusters, (c) => `<div class="reco" style="border-left-color:var(--warn)"><h3>${esc(c.cluster)}</h3>
+      <p class="small"><b>Pillar:</b> ${esc(c.pillar)}</p><p class="small"><b>Target queries:</b> ${(c.target_queries || []).map(esc).join(' · ')}</p>
+      <div class="table-wrap"><table><thead><tr><th>Page</th><th>Status</th><th>Targets</th><th>Brief</th></tr></thead><tbody>${(c.supporting_pages || []).map((sp) => `<tr><td>${esc(sp.url)}</td><td><span class="pill ${sp.status === 'new' ? 'warn' : sp.status === 'update' ? 'info' : ''}">${esc(sp.status)}</span></td><td class="small">${(sp.target_queries || []).map(esc).join(', ')}</td><td class="small">${esc(sp.brief)}</td></tr>`).join('')}</tbody></table></div></div>`)}</div>` : ''}
+    <div class="card section ${(ai.page_recommendations || []).length ? '' : 'hidden'}"><h2>Page-level recommendations</h2>${list(ai.page_recommendations, (p) => `<div class="reco"><h3>${pageLink(p.url, pages)}</h3><p>${esc(p.problem)}</p>
       ${p.title_suggestion ? `<p class="small"><b>Title:</b> ${esc(p.title_suggestion)}</p>` : ''}${p.meta_suggestion ? `<p class="small"><b>Meta:</b> ${esc(p.meta_suggestion)}</p>` : ''}
       ${p.h1_suggestion ? `<p class="small"><b>H1:</b> ${esc(p.h1_suggestion)}</p>` : ''}${(p.content_gaps || []).length ? `<p class="small"><b>Cover:</b> ${p.content_gaps.map(esc).join(' · ')}</p>` : ''}
       ${p.internal_links ? `<p class="small"><b>Internal links:</b> ${esc(p.internal_links)}</p>` : ''}</div>`)}</div>

@@ -474,7 +474,7 @@ async function handleApi(req, env, url) {
     )
       .bind(pid, user.email, p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, now())
       .run();
-    await saveMoneyPages(env, pid, p.money_pages);
+    await saveMeta(env, pid, p);
     return json({ id: pid });
   }
   if ((m = path.match(/^\/api\/projects\/(\w+)$/))) {
@@ -484,8 +484,10 @@ async function handleApi(req, env, url) {
       const conn = project.connection_id
         ? await DB.prepare('SELECT google_email FROM connections WHERE id = ?').bind(project.connection_id).first()
         : null;
-      const meta = await DB.prepare("SELECT value FROM project_meta WHERE project_id = ? AND key = 'money_pages'").bind(project.id).first();
-      return json({ project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta?.value || '' } });
+      const meta = await getMeta(env, project.id);
+      return json({
+        project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta.money_pages || '', brand_terms: meta.brand_terms || '', lead_event: meta.lead_event || '' },
+      });
     }
     requireAdmin(user);
     if (method === 'PUT') {
@@ -495,7 +497,7 @@ async function handleApi(req, env, url) {
       )
         .bind(p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, project.id)
         .run();
-      await saveMoneyPages(env, project.id, p.money_pages);
+      await saveMeta(env, project.id, p);
       return json({ ok: true });
     }
     if (method === 'DELETE') {
@@ -593,7 +595,8 @@ async function handleApi(req, env, url) {
       )
         .bind(project.id, year + '-%')
         .all();
-      return json({ groups, rows, canRun: canRun(project), isAdmin: user.role === 'admin' });
+      const { results: ga } = await DB.prepare('SELECT * FROM lob_ga WHERE project_id = ? AND period LIKE ?').bind(project.id, year + '-%').all();
+      return json({ groups, rows, ga, hasGa: !!project.ga4_property, canRun: canRun(project), isAdmin: user.role === 'admin' });
     }
     if (method === 'PUT') {
       requireAdmin(user);
@@ -655,17 +658,43 @@ async function handleApi(req, env, url) {
       });
       const months = {};
       for (const r of res.rows || []) {
-        const mo = r.keys[0].slice(0, 7);
-        const t = (months[mo] ||= { c: 0, i: 0, pw: 0, d: 0 });
-        t.c += r.clicks;
-        t.i += r.impressions;
-        t.pw += r.position * r.impressions;
-        t.d++;
+        for (const key of [r.keys[0].slice(0, 7), isoWeek(r.keys[0])]) {
+          const t = (months[key] ||= { c: 0, i: 0, pw: 0, d: 0 });
+          t.c += r.clicks;
+          t.i += r.impressions;
+          t.pw += r.position * r.impressions;
+          t.d++;
+        }
       }
       return { id: g ? g.id : '__site__', months };
     };
+    const gaEndpoint = project.ga4_property ? `https://analyticsdata.googleapis.com/v1beta/${project.ga4_property}:runReport` : null;
+    const meta = await getMeta(env, project.id);
+    const fetchGa = async (g) => {
+      const res = await gfetch(token, gaEndpoint, {
+        dateRanges: [{ startDate: start, endDate: end }],
+        dimensions: [{ name: 'date' }],
+        metrics: gaMetrics(meta.lead_event).map((name) => ({ name })),
+        dimensionFilter: gaFilter(true, g ? g.patterns : null),
+        limit: 400,
+      });
+      const out = {};
+      for (const r of res.rows || []) {
+        const d = r.dimensionValues[0].value;
+        const day = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
+        const v = r.metricValues.map((x) => Number(x.value || 0));
+        for (const key of [day.slice(0, 7), isoWeek(day)]) {
+          const t = (out[key] ||= { s: 0, nu: 0, tu: 0, pv: 0, ke: 0, ld: 0, bs: 0, d: 0 });
+          t.s += v[0]; t.nu += v[1]; t.tu += v[2]; t.bs += v[3] * v[0]; t.pv += v[4]; t.ke += v[5]; t.ld += v[6] || 0; t.d++;
+        }
+      }
+      return { id: g ? g.id : '__site__', out };
+    };
     const targets = [...groups, ...(b.includeSite !== false ? [null] : [])];
-    const results = await Promise.all(targets.map(fetchGroup));
+    const [results, gaResults] = await Promise.all([
+      Promise.all(targets.map(fetchGroup)),
+      gaEndpoint ? Promise.all(targets.map((g) => fetchGa(g).catch(() => null))) : [],
+    ]);
     const stmts = [];
     for (const r of results) {
       for (const [mo, t] of Object.entries(r.months)) {
@@ -679,7 +708,17 @@ async function handleApi(req, env, url) {
         );
       }
     }
-    if (stmts.length) await DB.batch(stmts);
+    for (const r of gaResults.filter(Boolean)) {
+      for (const [k, t] of Object.entries(r.out)) {
+        stmts.push(
+          DB.prepare(
+            `INSERT OR REPLACE INTO lob_ga (project_id, group_id, period, sessions, new_users, total_users, views, key_events, leads, bounce_sessions, days, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          ).bind(project.id, r.id, k, t.s, t.nu, t.tu, t.pv, t.ke, t.ld, t.bs, t.d, now())
+        );
+      }
+    }
+    for (let i = 0; i < stmts.length; i += 400) await DB.batch(stmts.slice(i, i + 400));
     return json({ ok: true, updated: results.length, range: [start, end] });
   }
 
@@ -761,30 +800,53 @@ async function handleApi(req, env, url) {
     return json({ gsc });
   }
 
+  // Live rows for the URL performance view (any project member may view).
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/gsc-rows$/)) && method === 'POST') {
+    const project = await getProject(env, m[1], user.email);
+    const b = await body(req);
+    const filters = [];
+    if (b.page) filters.push({ dimension: 'page', operator: 'equals', expression: String(b.page) });
+    if (Array.isArray(b.groupIds) && b.groupIds.length) {
+      const { results } = await DB.prepare('SELECT id, patterns FROM lob_groups WHERE project_id = ?').bind(project.id).all();
+      const inc = results.filter((g) => b.groupIds.includes(g.id)).flatMap((g) => lobRules(g.patterns).inc);
+      if (inc.length) filters.push({ dimension: 'page', operator: 'includingRegex', expression: inc.map((r) => `(${r})`).join('|') });
+    }
+    return gscPassthrough(env, project, b, filters);
+  }
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/ga-rows$/)) && method === 'POST') {
+    const project = await getProject(env, m[1], user.email);
+    if (!project.ga4_property) return json({ rows: [] });
+    const b = await body(req);
+    let patterns = null;
+    if (Array.isArray(b.groupIds) && b.groupIds.length) {
+      const { results } = await DB.prepare('SELECT id, patterns FROM lob_groups WHERE project_id = ?').bind(project.id).all();
+      patterns = results.filter((g) => b.groupIds.includes(g.id)).map((g) => g.patterns).join('\n') || null;
+    }
+    const meta = await getMeta(env, project.id);
+    const token = await accessToken(env, project.connection_id);
+    const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/${project.ga4_property}:runReport`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        dateRanges: [{ startDate: String(b.startDate), endDate: String(b.endDate) }],
+        dimensions: [{ name: 'landingPage' }],
+        metrics: gaMetrics(meta.lead_event).map((name) => ({ name })),
+        dimensionFilter: gaFilter(b.organicOnly !== false, patterns),
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: Math.min(25000, Number(b.limit) || 10000),
+        offset: Math.max(0, Number(b.offset) || 0),
+      }),
+    });
+    return new Response(res.body, { status: res.ok ? 200 : 502, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+  }
+
   // Full Search Console export: the browser pages through results (25k rows per call);
   // the Worker only forwards the request so it stays within free-plan CPU limits.
   if ((m = path.match(/^\/api\/runs\/(\w+)\/gsc-rows$/)) && method === 'POST') {
     const { project } = await getRun(env, m[1], user.email);
     requireRun(project);
     const b = await body(req);
-    const dims = (b.dimensions || []).filter((d) => ['query', 'page', 'date', 'device', 'country'].includes(d));
-    const token = await accessToken(env, project.connection_id);
-    const res = await fetch(
-      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`,
-      {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          startDate: String(b.startDate),
-          endDate: String(b.endDate),
-          dimensions: dims,
-          type: 'web',
-          rowLimit: Math.min(25000, Number(b.rowLimit) || 25000),
-          startRow: Math.max(0, Number(b.startRow) || 0),
-        }),
-      }
-    );
-    return new Response(res.body, { status: res.ok ? 200 : 502, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    return gscPassthrough(env, project, b, []);
   }
   if ((m = path.match(/^\/api\/runs\/(\w+)\/blob$/))) {
     const { run, project } = await getRun(env, m[1], user.email);
@@ -901,8 +963,82 @@ function lobFilters(patterns) {
   return f;
 }
 
-async function saveMoneyPages(env, projectId, value) {
-  await env.DB.prepare("INSERT OR REPLACE INTO project_meta (project_id, key, value) VALUES (?, 'money_pages', ?)").bind(projectId, value || '').run();
+async function gscPassthrough(env, project, b, filters) {
+  const dims = (b.dimensions || []).filter((d) => ['query', 'page', 'date', 'device', 'country'].includes(d));
+  const token = await accessToken(env, project.connection_id);
+  const res = await fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      startDate: String(b.startDate),
+      endDate: String(b.endDate),
+      dimensions: dims,
+      type: 'web',
+      rowLimit: Math.min(25000, Number(b.rowLimit) || 25000),
+      startRow: Math.max(0, Number(b.startRow) || 0),
+      ...(filters.length ? { dimensionFilterGroups: [{ groupType: 'and', filters }] } : {}),
+    }),
+  });
+  return new Response(res.body, { status: res.ok ? 200 : 502, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+}
+
+// ISO week key like 2026-W41 for a YYYY-MM-DD date
+function isoWeek(day) {
+  const d = new Date(day + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const week = Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// GA4 metrics, in a fixed order the browser relies on
+function gaMetrics(leadEvent) {
+  const list = ['sessions', 'newUsers', 'totalUsers', 'bounceRate', 'screenPageViews', 'keyEvents'];
+  if (leadEvent) list.push(`keyEvents:${leadEvent}`);
+  return list;
+}
+
+// GA4 filter: organic channel and/or LOB landing-page rules (paths, since GA has no host in landingPage)
+function gaFilter(organicOnly, patterns) {
+  const exprs = [];
+  if (organicOnly) exprs.push({ filter: { fieldName: 'sessionDefaultChannelGroup', stringFilter: { matchType: 'EXACT', value: 'Organic Search' } } });
+  if (patterns) {
+    const inc = [];
+    const exc = [];
+    for (let raw of String(patterns).split(/[\n,]+/)) {
+      raw = raw.trim();
+      if (!raw) continue;
+      const neg = raw.startsWith('!');
+      if (neg) raw = raw.slice(1).trim();
+      const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let re;
+      if (raw.startsWith('regex:')) re = raw.slice(6).trim().replace(/^\^?https?:(\\)?\/(\\)?\/[^/]+/, '^');
+      else if (/^https?:\/\//i.test(raw)) {
+        try {
+          re = '^' + esc(new URL(raw).pathname) + '$';
+        } catch {
+          continue;
+        }
+      } else re = esc(raw);
+      (neg ? exc : inc).push(re);
+    }
+    if (inc.length) exprs.push({ filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEX', value: inc.map((r) => `(${r})`).join('|') } } });
+    if (exc.length) exprs.push({ notExpression: { filter: { fieldName: 'landingPage', stringFilter: { matchType: 'PARTIAL_REGEX', value: exc.map((r) => `(${r})`).join('|') } } } });
+  }
+  if (!exprs.length) return undefined;
+  return exprs.length === 1 ? exprs[0] : { andGroup: { expressions: exprs } };
+}
+
+async function getMeta(env, projectId) {
+  const { results } = await env.DB.prepare('SELECT key, value FROM project_meta WHERE project_id = ?').bind(projectId).all();
+  return Object.fromEntries(results.map((r) => [r.key, r.value]));
+}
+
+async function saveMeta(env, projectId, p) {
+  await env.DB.batch(
+    ['money_pages', 'brand_terms', 'lead_event'].map((k) =>
+      env.DB.prepare('INSERT OR REPLACE INTO project_meta (project_id, key, value) VALUES (?, ?, ?)').bind(projectId, k, p[k] || '')
+    )
+  );
 }
 
 async function ensureUser(env, email, invitedBy) {
@@ -957,6 +1093,8 @@ async function validateProject(env, user, b) {
       .filter((u) => /^https?:\/\//i.test(u))
       .slice(0, 300)
       .join('\n'),
+    brand_terms: String(b.brand_terms || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean).slice(0, 30).join(', '),
+    lead_event: String(b.lead_event || '').trim().replace(/[^\w]/g, '').slice(0, 40),
   };
 }
 
@@ -1110,27 +1248,36 @@ async function fetchPage(project, raw) {
 // ---------- Gemini ----------
 
 function seoPrompt(project, input, maxChars) {
-  const prompt = `You are a senior technical SEO and content strategist at an SEO agency. Analyse the data for the website "${project.name}" (${project.site_url}).
-The data comes from Google Search Console, GA4 (organic sessions) and an on-page crawl of the top pages, with rule-based scores already computed.
-Give specific, data-backed, prioritised recommendations. Pages marked "money": true are the business-critical money pages — always cover them first in page_recommendations and priorities. Reference actual queries, URLs and numbers. Avoid generic advice.
-For title/meta suggestions, include the page's most important query naturally; titles <= 60 chars, meta descriptions 140-155 chars.
+  return `You are a senior SEO + CRO consultant writing for an in-house team at "${project.name}" (${project.site_url}).
+Data below: Google Search Console (clicks, impressions, CTR, position, queries split into BRANDED vs NON-BRANDED), GA4 organic landing-page data
+(sessions, new/returning users, bounce rate, page views, key events/leads), and an on-page crawl with rule-based scores. "money": true marks business-critical pages.
+If "scope" is set, the analysis covers only those line-of-business (LOB) URL groups — keep every recommendation inside that scope.
+
+STRICT RULES — recommendations that break these are useless:
+1. Every item must name the exact URL(s) and quote the numbers that justify it (e.g. "/plans/broadband: 120k impressions, pos 7.4, CTR 1.2%").
+2. Give the concrete change, not a category: write the actual new title / meta / H1 / section heading / FAQ question / CTA text / internal-link anchor + target URL.
+3. Banned phrases unless followed by the specific change: "optimize", "improve", "enhance", "consider", "leverage", "ensure", "focus on", "high-quality content".
+4. Prioritise NON-BRANDED growth for SEO; use branded data only to judge demand and CTR health.
+5. CRO items must use GA numbers (bounce rate, engagement, key events per session, leads) and state the hypothesis + exact test (what to change, where on the page, success metric).
+6. Content clusters must be built from the actual non-branded queries in the data: name the pillar URL (existing or new), list the supporting pages (existing URLs or new slugs) and the exact queries each one targets.
+7. Money pages first. Never invent data; if something isn't in the data, say what to check instead.
 
 Return ONLY JSON in this exact shape:
 {
-  "summary": "3-5 sentence executive summary of performance and the biggest levers",
+  "summary": "4-6 sentences: what moved, why (with numbers), and the 3 biggest levers",
   "health": "good" | "needs_work" | "poor",
-  "priorities": [{"title": "", "why": "data-backed reason", "how": "concrete steps", "impact": "high|medium|low", "effort": "high|medium|low", "urls": [""]}],
-  "page_recommendations": [{"url": "", "problem": "", "title_suggestion": "", "meta_suggestion": "", "h1_suggestion": "", "content_gaps": ["missing subtopic / query to cover"], "internal_links": "suggestion"}],
-  "quick_wins": [{"query": "", "url": "", "position": 0, "action": ""}],
-  "content_ideas": [{"topic": "", "target_query": "", "type": "new page|expand existing|FAQ|guide", "rationale": ""}],
+  "priorities": [{"title": "", "why": "numbers-backed reason", "how": "step-by-step concrete change", "impact": "high|medium|low", "effort": "high|medium|low", "type": "seo|cro|content|technical", "urls": [""], "expected_result": "measurable target, e.g. CTR 1.2% → 3% on query X"}],
+  "seo": [{"url": "", "issue": "", "evidence": "numbers", "title_suggestion": "", "meta_suggestion": "", "h1_suggestion": "", "sections_to_add": ["exact H2s/FAQ questions"], "internal_links": [{"from": "url", "anchor": "", "to": "url"}]}],
+  "cro": [{"url": "", "evidence": "GA/GSC numbers", "hypothesis": "", "change": "exact change and where on the page", "metric": "success metric", "impact": "high|medium|low"}],
+  "content_clusters": [{"cluster": "", "pillar": "url or new slug", "target_queries": ["non-branded queries from the data"], "supporting_pages": [{"url": "existing url or new slug", "status": "existing|new|update", "target_queries": [""], "brief": "what the page must cover"}]}],
+  "quick_wins": [{"query": "", "url": "", "position": 0, "impressions": 0, "action": "exact change"}],
   "technical": [{"issue": "", "fix": "", "urls": [""]}],
-  "risks": ["declines, cannibalisation or anything worrying"]
+  "risks": ["specific declines / cannibalisation with numbers"]
 }
-Limit: 6-8 priorities, up to 10 page_recommendations (worst/most valuable pages first), up to 10 quick_wins, 5 content_ideas.
+Limits: 6-8 priorities, up to 10 seo items, 5-8 cro items, 3-5 content clusters, up to 10 quick wins.
 
 DATA:
 ${JSON.stringify(input).slice(0, maxChars)}`;
-  return prompt;
 }
 
 function parseAiJson(text) {
@@ -1199,7 +1346,7 @@ async function askAI(env, key, project, input) {
           { role: 'system', content: 'You are a senior SEO consultant. Reply with valid JSON only.' },
           { role: 'user', content: seoPrompt(project, input, 45000) },
         ],
-        max_tokens: 4096,
+        max_tokens: 6000,
         temperature: 0.4,
       });
       const out = typeof r.response === 'object' ? r.response : parseAiJson(r.response);

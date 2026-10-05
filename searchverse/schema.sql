@@ -130,3 +130,20 @@ CREATE TABLE IF NOT EXISTS run_blobs (
   data TEXT,
   PRIMARY KEY (run_id, kind, chunk)
 );
+
+-- GA4 numbers per LOB group and period ('YYYY-MM' months, 'YYYY-Www' ISO weeks)
+CREATE TABLE IF NOT EXISTS lob_ga (
+  project_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  period TEXT NOT NULL,
+  sessions REAL,
+  new_users REAL,
+  total_users REAL,
+  views REAL,
+  key_events REAL,
+  leads REAL,
+  bounce_sessions REAL,
+  days INTEGER,
+  updated_at INTEGER,
+  PRIMARY KEY (project_id, group_id, period)
+);

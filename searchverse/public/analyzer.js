@@ -116,6 +116,12 @@ function extract(html, pageUrl) {
   const internal = links.filter(sameHost);
   const imgs = $$('img');
 
+  // conversion elements (for CRO)
+  const ctas = [...new Set($$('button, input[type=submit], a[class*="btn" i], a[class*="cta" i], a[class*="button" i]')
+    .map((el) => (el.textContent || el.value || '').replace(/\s+/g, ' ').trim()).filter((t) => t && t.length < 40))].slice(0, 10);
+  const forms = $$('form').length;
+  const telLinks = $$('a[href^="tel:"]').length;
+
   const bodyEl = dom.body || dom.documentElement;
   bodyEl.querySelectorAll('script,style,noscript,svg,template,iframe').forEach((n) => n.remove());
   const main = bodyEl.querySelector('main, article, [role=main]') || bodyEl;
@@ -143,6 +149,9 @@ function extract(html, pageUrl) {
     internalLinks: new Set(internal.map((l) => l.origin + l.pathname)).size,
     externalLinks: links.length - internal.length,
     schemaTypes: [...new Set(schemaTypes)],
+    ctas,
+    forms,
+    telLinks,
     wordCount: bodyTokens.length,
     bodyTokens,
     first100: bodyTokens.slice(0, 100).join(' '),
@@ -374,4 +383,49 @@ export function overallScores(pages, site) {
   const technical = site.score;
   const overall = Math.round(onpage * 0.4 + content * 0.4 + technical * 0.2);
   return { overall, onpage, content, technical };
+}
+
+// ---------- LOB matching & brand detection (shared by views) ----------
+
+// Same rules as the server: contains (default), full URL = exact, regex:..., !exclude
+export function lobMatcher(groups) {
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const compiled = groups.map((g) => {
+    const inc = [], exc = [];
+    for (let raw of String(g.patterns || '').split(/[\n,]+/)) {
+      raw = raw.trim();
+      if (!raw) continue;
+      const neg = raw.startsWith('!');
+      if (neg) raw = raw.slice(1).trim();
+      let re;
+      try {
+        re = new RegExp(raw.startsWith('regex:') ? raw.slice(6).trim() : /^https?:\/\//i.test(raw) ? '^' + esc(raw) + '$' : esc(raw));
+      } catch { continue; }
+      (neg ? exc : inc).push(re);
+    }
+    return { g, inc, exc };
+  });
+  return (url) => {
+    for (const c of compiled) if (c.inc.some((r) => r.test(url)) && !c.exc.some((r) => r.test(url))) return c.g;
+    return null;
+  };
+}
+
+// A query is branded if it contains any brand term (spaces/punctuation ignored, so "air tel" matches "airtel").
+export function brandTester(terms) {
+  const list = String(terms || '').split(',').map((t) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+  return (q) => {
+    if (!list.length) return false;
+    const n = String(q).toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    return list.some((t) => n.includes(t));
+  };
+}
+
+export function brandSplit(queries, isBranded) {
+  const out = { branded: { c: 0, i: 0, n: 0 }, nonBranded: { c: 0, i: 0, n: 0 } };
+  for (const q of queries) {
+    const t = isBranded(q.q) ? out.branded : out.nonBranded;
+    t.c += q.c; t.i += q.i; t.n++;
+  }
+  return out;
 }

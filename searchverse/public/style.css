@@ -142,3 +142,7 @@ table.lob th { background: #e53935; color: #fff; text-align: center; }
 textarea { width: 100%; font: inherit; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; }
 details summary { cursor: pointer; }
 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; background: var(--surface); color: var(--muted); padding: 8px 14px; font: inherit; font-weight: 500; cursor: pointer; }
+.seg button.on { background: var(--primary); color: #fff; }
