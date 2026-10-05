@@ -181,21 +181,30 @@ async function callAI(env, system, content, max_tokens = 4000) {
 }
 
 async function callGemini(env, system, content, maxOutputTokens) {
-  const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: content }] }],
-      generationConfig: { maxOutputTokens: Math.max(maxOutputTokens, 8000), temperature: 0.4 },
-    }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error('Gemini: ' + data.error.message);
-  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-  if (!text) throw new Error('Gemini returned no text (' + (data.candidates?.[0]?.finishReason || 'unknown') + ')');
-  return text;
+  // Google retires model names over time, so fall back to the "latest" aliases when one is unavailable.
+  const models = [...new Set([env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-pro-latest'])];
+  let lastError;
+  for (const model of models) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: content }] }],
+        generationConfig: { maxOutputTokens: Math.max(maxOutputTokens, 8000), temperature: 0.4 },
+      }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      lastError = 'Gemini: ' + data.error.message;
+      if (res.status === 404 || /no longer available|not found|not supported/i.test(data.error.message)) continue;
+      throw new Error(lastError);
+    }
+    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+    if (!text) throw new Error('Gemini returned no text (' + (data.candidates?.[0]?.finishReason || 'unknown') + ')');
+    return text;
+  }
+  throw new Error(lastError);
 }
 
 async function callClaude(env, system, content, max_tokens = 4000) {

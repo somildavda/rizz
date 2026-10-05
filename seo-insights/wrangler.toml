@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [vars]
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.8-flash"
 CLAUDE_MODEL = "claude-opus-5-5"
 # GSC_SITE_URL = "sc-domain:example.com"
 
