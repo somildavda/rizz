@@ -337,7 +337,12 @@ async function getRun(env, runId, email) {
   return { run, project };
 }
 
-const canRun = (project) => project.my_role === 'admin' || project.my_role === 'editor';
+const canRun = (project) => ['admin', 'manager', 'editor'].includes(project.my_role);
+const canManage = (project) => project.my_role === 'admin' || project.my_role === 'manager';
+function requireManage(project) {
+  if (!canManage(project)) throw new HttpError(403, 'Only admins and project managers can do this');
+}
+const memberRole = (r) => (r === 'manager' ? 'manager' : r === 'viewer' ? 'viewer' : 'editor');
 function requireRun(project) {
   if (!canRun(project)) throw new HttpError(403, 'You have view-only access to this project');
 }
@@ -598,6 +603,16 @@ async function handleApi(req, env, url) {
         project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta.money_pages || '', brand_terms: meta.brand_terms || '', lead_event: meta.lead_event || '' },
       });
     }
+    if (method === 'PUT' && user.role !== 'admin') {
+      // project managers: name, crawl default, money pages, brand terms, lead event (not the Google account / properties)
+      requireManage(project);
+      const b = await body(req);
+      const name = String(b.name || '').trim() || project.name;
+      const money = String(b.money_pages || '').split(/\s+/).map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 300).join('\n');
+      await DB.prepare('UPDATE projects SET name = ?, max_pages = ? WHERE id = ?').bind(name.slice(0, 120), Math.min(1000, Math.max(5, Number(b.max_pages) || 25)), project.id).run();
+      await saveMeta(env, project.id, { money_pages: money, brand_terms: String(b.brand_terms || '').slice(0, 1000), lead_event: String(b.lead_event || '').trim().slice(0, 100) });
+      return json({ ok: true });
+    }
     requireAdmin(user);
     if (method === 'PUT') {
       const p = await validateProject(env, user, await body(req));
@@ -628,16 +643,21 @@ async function handleApi(req, env, url) {
   }
   if ((m = path.match(/^\/api\/projects\/(\w+)\/members$/))) {
     const project = await getProject(env, m[1], user.email);
-    requireAdmin(user);
+    requireManage(project);
     const b = await body(req);
     const email = String(b.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email');
+    const role = memberRole(b.role);
+    const existing = await DB.prepare('SELECT role FROM project_members WHERE project_id = ? AND email = ?').bind(project.id, email).first();
+    const target = await DB.prepare('SELECT role FROM users WHERE email = ?').bind(email).first();
+    if (user.role !== 'admin' && (role === 'manager' || existing?.role === 'manager' || target?.role === 'admin'))
+      throw new HttpError(403, 'Only admins can add, change or remove managers and admins');
     if (method === 'POST') {
       await ensureUser(env, email, user.email);
       await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)')
-        .bind(project.id, email, b.role === 'viewer' ? 'viewer' : 'editor', now())
+        .bind(project.id, email, role, now())
         .run();
-      return json({ ok: true, ...(await sendInvite(env, url.origin, email, user.email, project.name, b.role === 'viewer' ? 'viewer' : 'editor')) });
+      return json({ ok: true, ...(await sendInvite(env, url.origin, email, user.email, project.name, role)) });
     } else if (method === 'DELETE') {
       await DB.prepare('DELETE FROM project_members WHERE project_id = ? AND email = ?').bind(project.id, email).run();
     }
@@ -671,8 +691,11 @@ async function handleApi(req, env, url) {
   }
   // (re)send an invite; returns the text so the browser can fall back to the user's own mail app
   if (path === '/api/invite' && method === 'POST') {
-    requireAdmin(user);
     const b = await body(req);
+    if (user.role !== 'admin') {
+      if (!b.projectId) throw new HttpError(403, 'Only admins can do this');
+      requireManage(await getProject(env, String(b.projectId), user.email));
+    }
     const email = String(b.email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HttpError(400, 'Enter a valid email');
     const proj = b.projectId ? await DB.prepare('SELECT name FROM projects WHERE id = ?').bind(String(b.projectId)).first() : null;
@@ -721,10 +744,10 @@ async function handleApi(req, env, url) {
         .bind(project.id, year + '-%')
         .all();
       const { results: ga } = await DB.prepare('SELECT * FROM lob_ga WHERE project_id = ? AND period LIKE ?').bind(project.id, year + '-%').all();
-      return json({ groups, rows, ga, hasGa: !!project.ga4_property, canRun: canRun(project), isAdmin: user.role === 'admin' });
+      return json({ groups, rows, ga, hasGa: !!project.ga4_property, canRun: canRun(project), isAdmin: canManage(project) });
     }
     if (method === 'PUT') {
-      requireAdmin(user);
+      requireManage(project);
       const b = await body(req);
       const groups = (b.groups || []).slice(0, 40).map((g, i) => ({
         id: /^\w{8,40}$/.test(g.id || '') ? g.id : id(),
@@ -948,7 +971,7 @@ async function handleApi(req, env, url) {
       return new Response(out, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }
     if (method === 'DELETE') {
-      requireAdmin(user);
+      requireManage(project);
       await deleteRunData(env, [run.id]);
       await DB.batch([DB.prepare('DELETE FROM runs WHERE id = ?').bind(run.id), DB.prepare('DELETE FROM run_shard WHERE run_id = ?').bind(run.id)]);
       return json({ ok: true });
@@ -1233,7 +1256,7 @@ function gaFilter(organicOnly, patterns) {
 // ---------- invite emails (Brevo free plan: 300 emails/day, no card) ----------
 function inviteText(origin, inviter, projectName, role) {
   const where = projectName ? `the "${projectName}" project` : 'Searchverse';
-  const can = role === 'admin' ? 'full admin access' : role === 'viewer' ? 'view-only access' : 'permission to view and run analyses';
+  const can = role === 'admin' ? 'full admin access' : role === 'manager' ? 'manager access (run analyses, edit project settings and LOBs, invite the team)' : role === 'viewer' ? 'view-only access' : 'permission to view and run analyses';
   return {
     subject: `${inviter} invited you to Searchverse${projectName ? ` — ${projectName}` : ''}`,
     text: `Hi,\n\n${inviter} has invited you to ${where} in Searchverse (GA & GSC SEO insights), with ${can}.\n\nHow to open it:\n1. Go to ${origin}\n2. Click "Sign in with Google"\n3. Choose this email address\n\nIf Google says "app not verified", click Continue — it's your team's internal tool.\n\nThanks`,
@@ -1376,7 +1399,7 @@ async function setAccess(env, email, projects) {
     stmts.push(
       env.DB.prepare('INSERT INTO project_members (project_id, email, role, added_at) SELECT id, ?, ?, ? FROM projects WHERE id = ?').bind(
         email,
-        p.role === 'viewer' ? 'viewer' : 'editor',
+        memberRole(p.role),
         now(),
         String(p.id)
       )

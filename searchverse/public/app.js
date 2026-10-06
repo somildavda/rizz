@@ -20,8 +20,9 @@ const shortUrl = (u) => { try { const x = new URL(u); return x.pathname + x.sear
 const scoreColor = (v) => (v >= 80 ? 'var(--good)' : v >= 55 ? 'var(--warn)' : 'var(--bad)');
 const pillFor = (v) => (v >= 80 ? 'good' : v >= 55 ? 'warn' : 'bad');
 const isAdmin = () => state.me?.user.role === 'admin';
-const canRun = (p) => p.my_role === 'admin' || p.my_role === 'editor';
-const accessPill = (r) => r === 'admin' ? '<span class="pill info">Admin</span>' : r === 'editor' ? '<span class="pill good">Can run analysis</span>' : '<span class="pill">View only</span>';
+const canRun = (p) => ['admin', 'manager', 'editor'].includes(p.my_role);
+const canManage = (p) => p.my_role === 'admin' || p.my_role === 'manager';
+const accessPill = (r) => r === 'admin' ? '<span class="pill info">Admin</span>' : r === 'manager' ? '<span class="pill warn">Manager</span>' : r === 'editor' ? '<span class="pill good">Can run analysis</span>' : '<span class="pill">View only</span>';
 const ring = (v, big) => `<div class="ring ${big ? 'big' : ''}" style="--v:${v || 0};--c:${scoreColor(v)}"><span>${v ?? '–'}</span></div>`;
 const mark = (v) => (v >= 1 ? '<span class="yes">✓</span>' : v > 0 ? '<span class="part">~</span>' : '<span class="no">✗</span>');
 
@@ -166,7 +167,7 @@ async function route() {
   try {
     if (path === '/') return await renderHome(err);
     if (path === '/settings') return await renderSettings(err, p);
-    if (['/new', '/users'].includes(path) || /\/edit$/.test(path)) {
+    if (['/new', '/users'].includes(path)) {
       if (!isAdmin()) { app.innerHTML = '<div class="banner err">Only admins can open this page.</div>'; return; }
     }
     if (path === '/users') return await renderUsers(err);
@@ -379,7 +380,7 @@ function userEditor(u, projects) {
     <div id="ue-proj" class="${u.role === 'admin' ? 'hidden' : ''}">
       <label>Project access</label>
       ${projects.map((p) => `<div class="check" style="align-items:center"><div style="flex:1"><b>${esc(p.name)}</b><div class="small muted">${esc(p.gsc_property)}</div></div>
-        <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Can run analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>View only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
+        <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="manager" ${access[p.id] === 'manager' ? 'selected' : ''}>Manager</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Can run analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>View only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
     </div>
     ${isNew ? '' : `<label><input type="checkbox" id="ue-dis" style="width:auto" ${u.disabled ? 'checked' : ''}> Disable sign-in (keeps their settings)</label>`}
     <div class="row" style="margin-top:20px"><button class="btn primary" id="ue-save">${isNew ? 'Add user & send invite' : 'Save'}</button>${isNew ? '' : '<button class="btn" id="ue-inv">✉️ Send invite</button><button class="btn danger" id="ue-del">Remove user</button>'}</div>`);
@@ -408,21 +409,23 @@ function userEditor(u, projects) {
 
 // ---------- project form ----------
 async function renderProjectForm(pid) {
-  const { connections } = await api('/api/connections');
-  if (!connections.length) { location.hash = '#/settings'; return toast('Connect a Google account first'); }
   const p = pid ? (await api('/api/projects/' + pid)).project : { max_pages: 25 };
   const isOwner = isAdmin();
+  if (!isOwner && !(pid && canManage(p))) { app.innerHTML = '<div class="banner err">Only admins and project managers can open project settings.</div>'; return; }
+  const { connections } = isOwner ? await api('/api/connections') : { connections: [{ id: p.connection_id, google_email: p.connection_email || '—' }] };
+  if (!connections.length) { location.hash = '#/settings'; return toast('Connect a Google account first'); }
   app.innerHTML = `<div class="row spread"><h1>${pid ? 'Edit project' : 'New project'}</h1><a class="btn" href="${pid ? '#/p/' + pid : '#/'}">Cancel</a></div>
     <div class="grid g2 section">
       <div class="card">
         <label>Project name</label><input id="f-name" value="${esc(p.name || '')}" placeholder="e.g. Acme – India">
-        <label>Google account with access</label>
+        ${isOwner ? '' : `<div class="banner small" style="margin-top:12px">You're a <b>manager</b> of this project: you can change its name, crawl default, money pages, brand terms and lead event, and manage its team. The Google account and properties are set by an admin.</div>`}
+        <div class="${isOwner ? '' : 'hidden'}"><label>Google account with access</label>
         <select id="f-conn">${connections.map((c) => `<option value="${c.id}" ${c.id === p.connection_id ? 'selected' : ''}>${esc(c.google_email)}</option>`).join('')}</select>
         <label>Search Console property</label><select id="f-gsc"><option>Loading…</option></select>
         <label>GA4 property <span class="muted">(optional)</span></label><select id="f-ga"><option value="">Loading…</option></select>
         <div id="prop-err" class="hint"></div>
         <label>Homepage URL</label><input id="f-site" value="${esc(p.site_url || '')}" placeholder="Auto from Search Console property">
-        <div class="hint">Used for crawling and robots.txt / sitemap checks.</div>
+        <div class="hint">Used for crawling and robots.txt / sitemap checks.</div></div>
         <label>Pages to crawl per run <span class="muted">(default for new runs)</span></label><input id="f-max" type="number" min="5" max="1000" value="${p.max_pages || 25}">
         <div class="hint"><b>What it means:</b> how many pages of your site the tool opens and checks on each run (titles, meta, H1, schema, content vs. keywords, speed, AI-search readiness…).
           Money pages go first, then the pages with the most Search Console clicks & impressions. Pages beyond this number still count in GSC/GA numbers — they just aren't audited.<br>
@@ -437,13 +440,13 @@ async function renderProjectForm(pid) {
         <input id="f-lead" value="${esc(p.lead_event || '')}" placeholder="e.g. generate_lead or form_submit">
         <div class="hint">The exact GA4 key event name that counts as a lead. Shown as a separate "Leads" column.</div>
         <div class="hint">Top pages by clicks & impressions from Search Console (5–100).</div>
-        <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save" ${isOwner ? '' : 'disabled'}>${pid ? 'Save changes' : 'Create project'}</button>
+        <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save">${pid ? 'Save changes' : 'Create project'}</button>
         ${pid && isOwner ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
       </div>
       ${pid ? `<div class="card"><h2>Team access</h2>
-        <p class="muted small">Admins see every project. Members only see the projects you add them to: <b>View only</b> lets them see results, and <b>Can run analysis</b> also lets them run new analyses. Members sign in with their own Google account.</p>
-        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div><button class="btn sm" data-inv="${esc(m.email)}" data-role="${m.role}">✉️ Invite</button><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button></div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
-        <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto"><option value="editor">Can run analysis</option><option value="viewer">View only</option></select><button class="btn" id="m-add">Add</button></div>
+        <p class="muted small">Admins see every project. Members only see the projects they're added to: <b>View only</b> sees results · <b>Can run analysis</b> also runs analyses · <b>Manager</b> also edits project settings & LOBs, deletes runs and invites the team${isOwner ? '' : ' (only admins can add managers)'}. Everyone signs in with their own Google account.</p>
+        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div>${isOwner || m.role !== 'manager' ? `<button class="btn sm" data-inv="${esc(m.email)}" data-role="${m.role}">✉️ Invite</button><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button>` : ''}</div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
+        <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto">${isOwner ? '<option value="manager">Manager</option>' : ''}<option value="editor" selected>Can run analysis</option><option value="viewer">View only</option></select><button class="btn" id="m-add">Add</button></div>
       </div>` : ''}
     </div>`;
 
@@ -459,7 +462,7 @@ async function renderProjectForm(pid) {
     } catch (e) { document.getElementById('prop-err').textContent = e.message; }
   };
   document.getElementById('f-conn').onchange = load;
-  load();
+  if (isOwner) load();
 
   document.getElementById('f-save').onclick = async () => {
     const ga = document.getElementById('f-ga');
@@ -545,7 +548,7 @@ async function renderRunner(pid) {
         <label class="row small" style="margin:0 0 10px;gap:6px;font-weight:400"><input type="checkbox" id="r-sitemap" style="width:auto"> Also crawl URLs from the sitemap</label>
       </div>
       <div class="banner small" id="r-rec" style="margin:10px 0 6px"></div>
-      <div class="hint"><b>Pages to crawl</b> = how many pages get opened and audited (on-page, content vs. keywords, technical, AI-search). It doesn't limit the Search Console / GA numbers — those always cover the whole site or the chosen LOBs.<br>💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${isAdmin() ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
+      <div class="hint"><b>Pages to crawl</b> = how many pages get opened and audited (on-page, content vs. keywords, technical, AI-search). It doesn't limit the Search Console / GA numbers — those always cover the whole site or the chosen LOBs.<br>💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${canManage(project) ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
 
       <h3 style="margin-top:22px">📦 Search Console data</h3>
       <div class="row"><select id="r-rows" style="width:auto">
@@ -1477,7 +1480,7 @@ async function renderProject(pid, runId) {
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
       <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${esc(runLabel(r))}</option>`).join('')}</select><button class="btn" id="run-refresh" title="Reload this run">⟳ Refresh</button>` : ''}
-      <a class="btn" href="#/p/${pid}/urls">📈 URL performance</a><a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
+      <a class="btn" href="#/p/${pid}/urls">📈 URL performance</a><a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${canManage(project) ? `${isAdmin() ? '' : accessPill(project.my_role)}<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
     app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">${canRun(project) ? 'Run your first analysis to see scores, opportunities and AI recommendations.' : 'No analysis has been run yet. Ask someone with "Can run analysis" access to run one.'}</p>${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div>`;
     return;
@@ -2515,7 +2518,7 @@ function viewHistory(runs, project) {
       { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.kpis?.impressions), sort: (r) => r.kpis?.impressions || 0 },
       { key: 'p', label: 'Pos', num: 1, render: (r) => fmt(r.kpis?.position, 1), sort: (r) => r.kpis?.position || 0 },
       { key: 'by', label: 'By', render: (r) => esc(r.created_by) },
-      ...(isAdmin() ? [{ key: 'del', label: '', render: (r) => `<button class="btn sm danger" data-delrun="${r.id}">Delete</button>` }] : []),
+      ...(canManage(project) ? [{ key: 'del', label: '', render: (r) => `<button class="btn sm danger" data-delrun="${r.id}">Delete</button>` }] : []),
     ], runs, { filter: false })}</div>`;
 }
 
