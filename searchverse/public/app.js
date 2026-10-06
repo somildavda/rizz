@@ -150,7 +150,9 @@ function renderNav() {
     <a href="/auth/logout" class="btn sm">Sign out</a>`;
 }
 
+let ROUTE_SEQ = 0;
 async function route() {
+  ROUTE_SEQ++;
   document.getElementById('drawer').classList.add('hidden');
   if (!state.me) {
     try { const me = await fetch('/api/me').then((r) => r.json()); state.me = me.user ? me : null; } catch { state.me = null; }
@@ -251,6 +253,7 @@ function projectCard(p) {
           <span>${p.last_run ? 'Last run ' + new Date(p.last_run).toLocaleDateString() : 'Never analysed'}</span>
         </div>
         ${p.my_role !== 'admin' ? `<div style="margin-top:8px">${accessPill(p.my_role)}</div>` : ''}
+        ${(p.recent_runs || []).length ? `<div class="runlist"><div class="small muted" style="margin:12px 0 4px">Runs — click one to open</div>${p.recent_runs.map((r) => `<span class="runitem" data-go="#/p/${p.id}?run=${r.id}"><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span><span class="small" style="flex:1;min-width:0"><b>${esc(r.scope || 'Whole site')}</b><span class="muted"> · ${esc(r.start_date || '')} → ${esc(r.end_date || '')}<br>${new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${esc((r.created_by || '').split('@')[0])}${r.error === 'archived' ? ' · archived' : ''}</span></span><span class="muted">›</span></span>`).join('')}</div>` : ''}
       </a>`;
 }
 
@@ -1422,7 +1425,9 @@ function lobEditor(pid, groups) {
 // ---------- project dashboard ----------
 const runLabel = (r) => `${date(r.created_at)} · score ${r.score ?? '–'} · ${r.start_date || ''}→${r.end_date || ''}${r.scope ? ' · ' + r.scope : ''}${r.error === 'archived' ? ' · archived' : ''} · by ${(r.created_by || '').split('@')[0]}`;
 async function renderProject(pid, runId) {
+  const seq = ROUTE_SEQ;
   const [{ project }, { runs }] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/runs`)]);
+  if (seq !== ROUTE_SEQ) return;
   const done = runs.filter((r) => r.status === 'done');
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
@@ -1441,7 +1446,9 @@ async function renderProject(pid, runId) {
   let data;
   try {
     data = await api('/api/runs/' + rid);
+    if (seq !== ROUTE_SEQ) return; // user already switched to another run/page
   } catch (e) {
+    if (seq !== ROUTE_SEQ) return;
     document.getElementById('run-loading').innerHTML = `<p class="bad-text">Couldn't load this run: ${esc(e.message)}</p><button class="btn primary" id="run-retry">⟳ Try again</button>`;
     document.getElementById('run-retry').onclick = () => route();
     return;
@@ -2053,6 +2060,8 @@ function geoSection(p) {
 // ---------- Insights: clickable bullets → the pages & queries behind each point ----------
 let insightCtx = null;
 document.addEventListener('click', (e) => {
+  const go = e.target.closest('[data-go]');
+  if (go) { e.preventDefault(); e.stopPropagation(); if (location.hash === go.dataset.go) route(); else location.hash = go.dataset.go; return; }
   const ig = e.target.closest('[data-ign],[data-unign]');
   if (ig && insightCtx) {
     e.stopPropagation(); e.preventDefault();

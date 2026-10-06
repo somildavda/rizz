@@ -188,3 +188,6 @@ li.bullet + li.bullet { border-top: 1px dashed var(--border); }
 .bullet:hover .ign { opacity: 1; }
 .bullet .ign:hover { background: var(--bad); color: #fff; }
 .bullet > b { padding-right: 22px; display: inline-block; }
+.runlist { border-top: 1px solid var(--border, #e5e7eb); margin-top: 12px; }
+.runitem { display: flex; gap: 10px; align-items: center; padding: 8px; margin: 0 -8px; border-radius: 8px; cursor: pointer; }
+.runitem:hover { background: var(--bg, rgba(0,0,0,.04)); }

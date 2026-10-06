@@ -557,8 +557,15 @@ async function handleApi(req, env, url) {
     )
       .bind(user.role, user.email, user.role)
       .all();
+    const { results: rr } = await DB.prepare(
+      `SELECT id, project_id, created_at, created_by, score, start_date, end_date, error, json_extract(summary_json,'$.scope') AS scope
+       FROM runs WHERE status = 'done' ORDER BY created_at DESC LIMIT 400`
+    ).all();
+    const recent = {};
+    for (const r of rr) { const l = (recent[r.project_id] ||= []); if (l.length < 6) l.push(r); }
     return json({
       projects: results.map((p) => {
+        p.recent_runs = recent[p.id] || [];
         const k = p.last_kpis ? JSON.parse(p.last_kpis) : null;
         delete p.last_kpis;
         return { ...p, kpis: k };
