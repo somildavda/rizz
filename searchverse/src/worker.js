@@ -1077,9 +1077,44 @@ async function handleApi(req, env, url) {
     const b = await body(req);
     const key = user.gemini_key_enc ? await decrypt(env, user.gemini_key_enc) : env.GEMINI_API_KEY;
     if (!key && !env.AI) throw new HttpError(400, 'No Gemini API key. Add your free key in Settings (aistudio.google.com/apikey).');
-    const ai = await askAI(env, key, project, b.input);
+    const ignored = JSON.parse((await getMeta(env, project.id)).ai_ignored || '[]');
+    const ai = await askAI(env, key, { ...project, ignored }, b.input);
     ai.generated_at = now();
     await DB.prepare('UPDATE runs SET ai_json = ? WHERE id = ?').bind(JSON.stringify(ai), run.id).run();
+    return json({ ai });
+  }
+
+  // mark an AI bullet as not relevant: hide it on this run and teach future analyses to skip it
+  if ((m = path.match(/^\/api\/runs\/(\w+)\/ai-ignore$/)) && method === 'POST') {
+    const { run, project } = await getRun(env, m[1], user.email);
+    requireRun(project);
+    const b = await body(req);
+    const row = await DB.prepare('SELECT ai_json FROM runs WHERE id = ?').bind(run.id).first();
+    const ai = row?.ai_json ? JSON.parse(row.ai_json) : null;
+    const list = ai?.[b.sec];
+    if (!Array.isArray(list)) throw new HttpError(400, 'Nothing to change');
+    ai.hidden ||= [];
+    let point = '';
+    if (b.restore) {
+      const h = ai.hidden.findIndex((x) => x.sec === b.sec && x.item?.point === b.point);
+      if (h < 0) throw new HttpError(404, 'Not found');
+      list.push(ai.hidden[h].item);
+      point = ai.hidden[h].item.point;
+      ai.hidden.splice(h, 1);
+    } else {
+      const it = list[+b.i];
+      if (!it) throw new HttpError(404, 'Not found');
+      list.splice(+b.i, 1);
+      ai.hidden.push({ sec: b.sec, item: it, by: user.email });
+      point = it.point || it.title || '';
+    }
+    const meta = await getMeta(env, project.id);
+    let ign = JSON.parse(meta.ai_ignored || '[]').filter((x) => x !== point);
+    if (!b.restore && point) ign = [point, ...ign].slice(0, 40);
+    await DB.batch([
+      DB.prepare('UPDATE runs SET ai_json = ? WHERE id = ?').bind(JSON.stringify(ai), run.id),
+      DB.prepare('INSERT OR REPLACE INTO project_meta (project_id, key, value) VALUES (?, ?, ?)').bind(project.id, 'ai_ignored', JSON.stringify(ign)),
+    ]);
     return json({ ai });
   }
 
@@ -1559,21 +1594,22 @@ STRICT RULES:
 7. Prioritise money pages and non-branded growth. Never invent data.
 7b. Keep the four review sections SHORT and scannable: "point" = one crisp bullet (max ~14 words, lead with the number),
    "evidence" = one line (max ~25 words). ALWAYS fill "pages" (full URLs) and "queries" (exact query text) with the specific items
-   behind the point (up to 10 each) — the UI lets people click a bullet to see those pages/queries with their numbers.
+   behind the point (3-10 each; "queries" is REQUIRED on every bullet in all four sections, using exact query text from the data) — the UI lets people click a bullet to see those pages/queries with their numbers.
 8. Every action-plan item must be falsifiable: state the observation it rests on, what it depends on (another task or nothing),
    how we would know it failed (a concrete check after N weeks), and the leading indicator to watch first (e.g. impressions for query X, CTR on URL Y).
 9. Current Google guidance (2026): FAQ rich results were retired in May 2026 (do not recommend FAQPage markup for rich snippets; Q&A content itself is still useful);
    Google Search ignores llms.txt; Trust is the most important part of E-E-A-T; AI Overviews/AI Mode use normal Search crawling (Googlebot) and indexing,
    so server-rendered, clearly structured, attributable content is what gets cited. Use "aiSearchGeo" data for AI-search recommendations.
 
+${(project.ignored || []).length ? `10. The team marked these past points as IRRELEVANT for this site — do not repeat them or close variants:\n${project.ignored.map((x) => '   - ' + x).join('\n')}\n` : ''}
 Return ONLY JSON in this exact shape:
 {
   "summary": "3-4 sentence overview with the headline numbers",
   "health": "good" | "needs_work" | "poor",
   "what_went_well": [{"point": "", "evidence": "numbers", "queries": [""], "pages": [""]}],
-  "how_we_achieved_it": [{"point": "", "evidence": "on-page scores / schema / content facts from the crawl", "pages": [""]}],
-  "what_didnt_work": [{"point": "", "evidence": "numbers", "likely_cause": "", "pages": [""]}],
-  "how_to_improve": [{"point": "", "evidence": "", "pages": [""]}],
+  "how_we_achieved_it": [{"point": "", "evidence": "on-page scores / schema / content facts from the crawl", "queries": [""], "pages": [""]}],
+  "what_didnt_work": [{"point": "", "evidence": "numbers", "likely_cause": "", "queries": [""], "pages": [""]}],
+  "how_to_improve": [{"point": "", "evidence": "", "queries": [""], "pages": [""]}],
   "action_plan": [{"area": "workstream name you choose, e.g. On-page & titles, Schema, Topical authority / new blogs, Internal linking, Rendering (SSR/CSR), Indexation, CTR & snippets, Cannibalisation, Page experience, E-E-A-T, Backlinks — only areas the data justifies, most impactful first",
     "items": [{"task": "the exact change (exact text, exact blog title + slug + target query, exact anchor → URL, exact schema type...)", "urls": [""], "evidence": "numbers that justify it", "owner": "dev|seo|content", "priority": "high|medium|low",
       "observation": "the first-principle observation this rests on", "depends_on": "other task or 'none'", "failure_check": "how we'd know it failed, e.g. 'if CTR on X is still < 2% after 4 weeks'", "leading_indicator": "first metric that should move"}]}],
@@ -1581,7 +1617,7 @@ Return ONLY JSON in this exact shape:
   "cro": [{"url": "", "evidence": "GA numbers", "hypothesis": "", "change": "exact change + location", "metric": ""}],
   "quick_wins": [{"query": "", "url": "", "position": 0, "impressions": 0, "action": "exact change"}]
 }
-Limits: 3-5 items in each of the first four sections, 4-8 ai_search_geo items, 4-7 action_plan areas with 2-6 items each (use the internalLinkOpportunities, renderModes/csrPages and navigationFooter data where relevant), 3-6 cro, up to 8 quick wins.
+Limits: 10-15 items in each of the first four sections (cover different query clusters, page groups, LOBs, devices of evidence — no near-duplicates), 4-8 ai_search_geo items, 4-7 action_plan areas with 2-6 items each (use the internalLinkOpportunities, renderModes/csrPages and navigationFooter data where relevant), 3-6 cro, up to 8 quick wins.
 
 DATA:
 ${JSON.stringify(input).slice(0, maxChars)}`;
@@ -1641,7 +1677,7 @@ async function geminiOnce(key, model, prompt) {
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: 32768 },
     }),
   });
   const data = await res.json().catch(() => ({}));

@@ -1571,7 +1571,7 @@ function viewInsights(project, run, pages) {
   const urls = (list) => (has(list) ? `<div class="small">${list.filter(Boolean).map((u) => (/^https?:|^\//.test(u) ? pageLink(u.startsWith('/') ? new URL(u, project.site_url).href : u, pages) : esc(u))).join(' · ')}</div>` : '');
   const chips = (list) => (has(list) ? `<div class="small muted">${list.map(esc).join(' · ')}</div>` : '');
   const block = (title, icon, color, items, render, sec) => (has(items) ? `<div class="card section rv" style="border-top:4px solid ${color}"><h2>${icon} ${title}</h2><ul class="bullets">${items.map((x, i) => render(x, sec, i)).join('')}</ul></div>` : '');
-  const pt = (x, sec, i) => `<li class="bullet click" data-ins="${sec}:${i}"><b>${esc(x.point || x.title || '')}</b>${x.evidence ? `<div class="small muted">${esc(x.evidence)}</div>` : ''}<div class="small"><span class="link">${(x.pages || []).length ? `${x.pages.length} page${x.pages.length > 1 ? 's' : ''}` : 'pages'} · ${(x.queries || []).length ? `${x.queries.length} quer${x.queries.length > 1 ? 'ies' : 'y'}` : 'queries'} →</span></div></li>`;
+  const pt = (x, sec, i) => `<li class="bullet click" data-ins="${sec}:${i}">${canRun(project) ? `<button class="ign" data-ign="${sec}:${i}" title="Not relevant — hide it and don't suggest it again">✕</button>` : ''}<b>${esc(x.point || x.title || '')}</b>${x.evidence ? `<div class="small muted">${esc(x.evidence)}</div>` : ''}<div class="small"><span class="link">${(x.pages || []).length ? `${x.pages.length} page${x.pages.length > 1 ? 's' : ''}` : 'pages'} · ${(x.queries || []).length ? `${x.queries.length} quer${x.queries.length > 1 ? 'ies' : 'y'}` : 'queries'} →</span></div></li>`;
   const ap = ai.action_plan || {};
   const owner = (o) => `<span class="pill ${o === 'dev' ? 'bad' : o === 'content' ? 'warn' : 'info'}">${esc(o || 'seo')}</span>`;
   const structured = has(ai.what_went_well) || has(ai.what_didnt_work) || ai.action_plan;
@@ -1579,6 +1579,7 @@ function viewInsights(project, run, pages) {
       <p>${esc(ai.summary)}</p>
       <div class="row spread small muted"><span>${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
     ${structured ? '<p class="small muted section">Click any bullet to see the pages and queries behind it.</p>' : ''}${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
+    ${has(ai.hidden) ? `<details class="small section"><summary class="muted">🙈 ${ai.hidden.length} point(s) marked not relevant — future analyses skip these</summary>${ai.hidden.map((h) => `<div class="check"><div style="flex:1">${esc(h.item?.point || '')} <span class="muted">· ${esc(SEC_TITLE[h.sec] || h.sec)}${h.by ? ' · ' + esc(h.by.split('@')[0]) : ''}</span></div>${canRun(project) ? `<button class="btn small" data-unign="${esc(h.sec)}" data-point="${esc(h.item?.point || '')}">Restore</button>` : ''}</div>`).join('')}</details>` : ''}
     <div class="grid g2">
       ${block('What went well', '✅', 'var(--good)', ai.what_went_well, pt, 'what_went_well')}
       ${block('How we achieved it', '🏗️', 'var(--primary)', ai.how_we_achieved_it, pt, 'how_we_achieved_it')}
@@ -2052,6 +2053,14 @@ function geoSection(p) {
 // ---------- Insights: clickable bullets → the pages & queries behind each point ----------
 let insightCtx = null;
 document.addEventListener('click', (e) => {
+  const ig = e.target.closest('[data-ign],[data-unign]');
+  if (ig && insightCtx) {
+    e.stopPropagation(); e.preventDefault();
+    const body = ig.dataset.ign ? { sec: ig.dataset.ign.split(':')[0], i: +ig.dataset.ign.split(':')[1] } : { sec: ig.dataset.unign, point: ig.dataset.point, restore: 1 };
+    if (ig.dataset.ign && !confirm('Mark this point as not relevant? It will be hidden and future AI analyses for this project will skip it.')) return;
+    api(`/api/runs/${insightCtx.run.id}/ai-ignore`, { method: 'POST', body }).then((r) => { insightCtx.run.ai = r.ai; toast(body.restore ? 'Restored' : 'Hidden — the AI will skip this next time'); const pane = document.getElementById('tab'); if (pane) pane.innerHTML = viewInsights(insightCtx.project, insightCtx.run, insightCtx.pages); }).catch((er) => toast(er.message));
+    return;
+  }
   const el = e.target.closest('[data-ins]');
   if (!el || !insightCtx) return;
   e.preventDefault();
