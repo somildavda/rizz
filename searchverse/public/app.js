@@ -1441,7 +1441,7 @@ async function renderProject(pid, runId) {
   app.innerHTML = head + '<div class="card section center muted" id="run-loading"><div class="spinner"></div>Loading this run…</div>';
   const pick = document.getElementById('run-pick');
   pick.value = rid;
-  pick.onchange = () => { const h = `#/p/${pid}?run=${pick.value}`; if (location.hash === h) route(); else location.hash = h; };
+  pick.onchange = (e) => { const h = `#/p/${pid}?run=${e.target.value}`; if (location.hash === h) route(); else location.hash = h; };
   document.getElementById('run-refresh').onclick = () => route();
   let data;
   try {
