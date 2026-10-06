@@ -531,7 +531,10 @@ async function renderRunner(pid) {
       <h3 style="margin-top:22px">🎯 Scope</h3>
       <select id="r-scope" style="width:auto"><option value="">Whole site</option>
         ${lobGroups.length ? `<option value="all">Only my LOB pages (all ${lobGroups.length} groups)</option>` : ''}
-        ${lobCats.map((c) => `<option value="cat:${esc(c)}">Only LOB: ${esc(c)}</option>`).join('')}</select>
+        ${lobCats.map((c) => `<option value="cat:${esc(c)}">Only LOB: ${esc(c)}</option>`).join('')}
+        <option value="custom">Custom URL list…</option></select>
+      <div id="r-custom-box" class="hidden" style="margin-top:8px"><textarea id="r-custom" rows="6" placeholder="One per line (up to 1,000):&#10;https://www.example.com/plans/broadband/delhi   ← exact page&#10;/plans/broadband/                                ← every URL containing this path&#10;regex:/new-connection/.*-sim/(delhi|mumbai)      ← pattern"></textarea>
+        <div class="small muted" id="r-custom-n"></div></div>
       <div class="hint">${lobGroups.length ? 'LOB scope analyses, crawls and scores only URLs matching your LOB page paths (money pages are always included). Use the full export below so every LOB URL is covered.' : `Set up LOB groups in the <a href="#/p/${pid}/lob">LOB report</a> to analyse only those page paths.`}</div>
 
       <h3 style="margin-top:22px">🕷️ Crawl</h3>
@@ -617,6 +620,9 @@ async function renderRunner(pid) {
     $('r-userec').onclick = (e) => { e.preventDefault(); $('r-maxsel').value = String(n); $('r-max-wrap').classList.add('hidden'); setPages(n); };
   };
   $('r-scope').addEventListener('change', recommend);
+  const customList = () => $('r-custom').value.split(/\n+/).map((x) => x.trim()).filter(Boolean).slice(0, 1000);
+  $('r-scope').addEventListener('change', () => $('r-custom-box').classList.toggle('hidden', $('r-scope').value !== 'custom'));
+  $('r-custom').oninput = () => { const l = customList(); $('r-custom-n').textContent = `${l.length} line(s) · ${l.filter((x) => /^https?:/i.test(x)).length} exact URLs (always crawled) · ${l.filter((x) => !/^https?:/i.test(x)).length} paths/patterns`; };
   $('r-rows').addEventListener('change', recommend);
   recommend();
   let usage = null;
@@ -640,7 +646,8 @@ async function renderRunner(pid) {
     start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value, pstart: $('r-pstart').value, pend: $('r-pend').value, allGroups: lobGroups,
     maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
     scope: $('r-scope').value,
-    scopeGroups: $('r-scope').value === 'all' ? lobGroups : $('r-scope').value.startsWith('cat:') ? lobGroups.filter((g) => g.category === $('r-scope').value.slice(4)) : [],
+    customUrls: $('r-scope').value === 'custom' ? customList().filter((x) => /^https?:/i.test(x)) : [],
+    scopeGroups: $('r-scope').value === 'custom' ? (customList().length ? [{ name: 'Custom URLs', patterns: customList().join('\n') }] : []) : $('r-scope').value === 'all' ? lobGroups : $('r-scope').value.startsWith('cat:') ? lobGroups.filter((g) => g.category === $('r-scope').value.slice(4)) : [],
   });
 }
 
@@ -790,6 +797,7 @@ async function runAnalysis(project, opt) {
       }
     } catch (e) { log('Comparison export skipped: ' + e.message, 'no'); }
     const prevBrand = brandSplit(prevQ, isBranded);
+    if (inScope && prevQ.length) gsc.prevQueries = prevQ.slice().sort((a, b) => b.c - a.c).slice(0, 5000); // comparison numbers for LOB queries (capped to keep the run row small)
 
     const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
     step('Checking robots.txt & sitemap', 16);
@@ -803,6 +811,7 @@ async function runAnalysis(project, opt) {
     const moneySet = new Set(opt.money);
     const urls = [];
     const add = (u) => { if (u && !urls.includes(u) && urls.length < Math.max(maxPages, opt.money.length) && (!inScope || moneySet.has(u) || inScope(u))) urls.push(u); };
+    (opt.customUrls || []).forEach(add);
     opt.money.forEach(add);
     add(project.site_url);
     [...gsc.pages].sort((a, b) => b.c - a.c).slice(0, Math.ceil(maxPages * 0.6)).forEach((p) => add(p.u));
@@ -882,7 +891,7 @@ async function runAnalysis(project, opt) {
       },
       pagesCrawled: pages.length,
       moneyPages: opt.money.length,
-      scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : 'LOB: ' + opt.scope.slice(4)) : null,
+      scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : opt.scope === 'custom' ? `Custom URLs (${opt.scopeGroups[0].patterns.split('\n').length})` : 'LOB: ' + opt.scope.slice(4)) : null,
       brand: project.brand_terms ? { ...brand, terms: project.brand_terms } : null,
       prevBrand: project.brand_terms ? prevBrand : null,
       movers, navGaps: nav, links, renderModes, geo,
@@ -1309,7 +1318,7 @@ async function renderUrls(pid, params) {
       { label: 'Clicks', cur: (x) => x.c, prev: (x) => x.pc }, { label: 'Impressions', cur: (x) => x.i, prev: (x) => x.pi },
       ...(hasGa ? [{ label: 'Organic sessions', cur: (x) => x.s, prev: (x) => x.ps }] : []),
     ], (list) => table([
-      { key: 'cat', label: 'Category', render: (x) => `<span class="small">${esc(x.__cat.label)}</span>`, sort: (x) => x.__cat.label },
+      { key: 'cat', label: 'Category', render: (x) => `<span class="small">${esc(catTxt(x.__cat))}</span>`, sort: (x) => x.__cat.label },
       { key: 'path', label: 'URL', render: (x) => `<span class="url">${esc(x.path)}</span>${x.lob ? `<div class="small muted">${esc(x.lob)}</div>` : ''}`, text: (x) => x.path + ' ' + x.lob },
       { key: 'c', label: 'Clicks', num: 1, render: (x) => cell(x.c, x.pc) },
       { key: 'i', label: 'Impr.', num: 1, render: (x) => cell(x.i, x.pi) },
@@ -1359,7 +1368,7 @@ async function urlQueries(pid, project, x, per, prev, isBranded) {
       { key: 'i', label: 'Impr.', num: 1, render: (r) => `${fmt(r.i)} <div class="small">${delta(r.i, r.pi)}</div>` },
       { key: 'ctr', label: 'CTR', num: 1, render: (r) => pct(r.ctr) },
       { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)} <span class="small muted">(${r.ppos == null ? '–' : fmt(r.ppos, 1)})</span>` },
-    ], list, { limit: 2000 });
+    ], list, { limit: 2000, onRow: (r) => queryAudit(pid, x.url, r, () => urlQueries(pid, project, x, per, prev, isBranded)) });
     openDrawer(`<h2 style="word-break:break-all"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url)}</a></h2>
       <div class="muted small">${esc(curL)} vs ${esc(prevL)}${x.lob ? ' · LOB: ' + esc(x.lob) : ''}</div>
       <div class="grid kpis section">
@@ -1369,7 +1378,7 @@ async function urlQueries(pid, project, x, per, prev, isBranded) {
       </div>
       ${project.brand_terms ? '' : '<div class="banner">Add brand terms in project settings to tag branded queries.</div>'}
       <div class="card section"><div class="seg" style="margin-bottom:12px"><button class="on" data-qf="nb">Non-branded (${fmt(split.nonBranded.n)})</button><button data-qf="b">Branded (${fmt(split.branded.n)})</button><button data-qf="all">All</button></div>
-        <div id="qf-box">${qTable(rows.filter((r) => !r.b))}</div><p class="hint">Brackets show the ${esc(prevL)} position.</p></div>`);
+        <div id="qf-box">${qTable(rows.filter((r) => !r.b))}</div><p class="hint">Brackets show the ${esc(prevL)} position. <b>Click a query</b> to audit this page for it.</p></div>`);
     document.querySelectorAll('[data-qf]').forEach((btn) => (btn.onclick = () => {
       document.querySelectorAll('[data-qf]').forEach((x2) => x2.classList.toggle('on', x2 === btn));
       const f = btn.dataset.qf;
@@ -1377,6 +1386,42 @@ async function urlQueries(pid, project, x, per, prev, isBranded) {
     }));
   } catch (e) {
     openDrawer(`<div class="banner err">${esc(e.message)}</div>`);
+  }
+}
+
+// Live audit of one page for one query: where the query appears + the full page audit.
+async function queryAudit(pid, url, r, back) {
+  const backBtn = `<button class="btn sm" id="qa-back">← Back to queries</button>`;
+  const bind = () => document.getElementById('qa-back')?.addEventListener('click', back);
+  openDrawer(`${backBtn}<h2>🔎 “${esc(r.q)}”</h2><p class="muted small" style="word-break:break-all">${esc(url)}</p><div class="center muted"><div class="spinner"></div>Fetching and auditing the page live…</div>`); bind();
+  try {
+    const f = await api(`/api/projects/${pid}/fetch?url=${encodeURIComponent(url)}`);
+    const res = analyzePage(f, [{ q: r.q, c: r.c, i: r.i, p: r.pos, ctr: r.ctr }]);
+    const q = res.queries?.[0];
+    const where = q ? [['Title tag', q.inTitle, res.meta?.title], ['H1', q.inH1, (res.meta?.h1s || []).join(' | ')], ['H2 / H3 subheadings', q.inH2, ''], ['Meta description', q.inMeta, res.meta?.description], ['URL', q.inUrl, ''], ['First 100 words', q.inFirst100, '']] : [];
+    const tips = [];
+    if (q) {
+      if (q.inTitle < 1) tips.push(`Put “${r.q}” (or its exact wording) near the start of the title tag.`);
+      if (q.inH1 < 1) tips.push(`Use “${r.q}” in the H1.`);
+      if (q.inH2 < 0.6) tips.push(`Add an H2 that answers “${r.q}” directly, followed by a 40–60 word answer.`);
+      if (q.inMeta < 0.6) tips.push(`Mention “${r.q}” in the meta description with a clear benefit to lift CTR.`);
+      if (q.inFirst100 < 0.6) tips.push('Answer the query in the first 100 words.');
+      if (!q.bodyCount) tips.push('The exact phrase never appears in the body text — add it naturally at least once.');
+      if (r.pos > 3 && r.pos <= 15) tips.push(`Position ${fmt(r.pos, 1)} — a striking-distance query: add 2–3 internal links to this page with “${r.q}” as anchor text.`);
+      if (r.pos <= 5 && r.ctr < 0.03) tips.push(`Ranks ${fmt(r.pos, 1)} but CTR is only ${pct(r.ctr)} — rewrite the title/meta to match the search intent.`);
+    }
+    openDrawer(`${backBtn}<h2>🔎 “${esc(r.q)}”</h2><p class="muted small" style="word-break:break-all"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></p>
+      <div class="grid kpis section"><div class="card kpi"><div class="label">Query match score</div><div class="value">${q ? q.score : '–'}</div><span class="small muted">how well the page targets it</span></div>
+        <div class="card kpi"><div class="label">Clicks · Impr.</div><div class="value">${fmt(r.c)}</div><span class="small muted">${fmt(r.i)} impressions · CTR ${pct(r.ctr)}</span></div>
+        <div class="card kpi"><div class="label">Position</div><div class="value">${fmt(r.pos, 1)}</div><span class="small muted">${r.ppos == null ? '' : 'before: ' + fmt(r.ppos, 1)}</span></div></div>
+      ${q ? `<div class="card section"><h3>Where the query appears</h3>${where.map(([l, v, d]) => `<div class="check"><span class="dot ${v >= 1 ? 'good' : v > 0 ? 'warn' : 'bad'}">${v >= 1 ? '✓' : v > 0 ? '~' : '✗'}</span><div><div>${l}</div>${d ? `<div class="small muted">${esc(d)}</div>` : ''}</div></div>`).join('')}
+        <p class="small muted">Exact phrase in body: <b>${q.bodyCount}×</b> · words of the query on the page: <b>${pct(q.termCoverage, 0)}</b> · density ${q.density}%</p></div>` : `<div class="banner err">Couldn't read the page (HTTP ${res.status}).</div>`}
+      ${tips.length ? `<div class="card section"><h3>✅ What to change</h3><ul class="bullets">${tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>` : q ? '<div class="banner section">This page already targets the query well — look at links and content depth below.</div>' : ''}
+      ${res.meta ? `<div class="section"><button class="btn primary" id="qa-full">Open the full page audit →</button></div>` : ''}`);
+    bind();
+    document.getElementById('qa-full')?.addEventListener('click', () => pageDetail(res, { ai: null }));
+  } catch (e) {
+    openDrawer(`${backBtn}<div class="banner err">${esc(e.message)}</div>`); bind();
   }
 }
 
@@ -1585,7 +1630,7 @@ function viewInsights(project, run, pages) {
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>
       <div class="row spread small muted"><span>${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
-    ${structured ? '<p class="small muted section">Click any bullet to see the pages and queries behind it.</p>' : ''}${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
+    ${structured ? '<div class="row spread section"><p class="small muted" style="margin:0">Click any bullet to see the pages and queries behind it.</p><button class="btn" data-verify-all>🔍 Verify all with data</button></div>' : ''}${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
     ${has(ai.hidden) ? `<details class="small section"><summary class="muted">🙈 ${ai.hidden.length} point(s) marked not relevant — future analyses skip these</summary>${ai.hidden.map((h) => `<div class="check"><div style="flex:1">${esc(h.item?.point || '')} <span class="muted">· ${esc(SEC_TITLE[h.sec] || h.sec)}${h.by ? ' · ' + esc(h.by.split('@')[0]) : ''}</span></div>${canRun(project) ? `<button class="btn small" data-unign="${esc(h.sec)}" data-point="${esc(h.item?.point || '')}">Restore</button>` : ''}</div>`).join('')}</details>` : ''}
     <div class="grid g2">
       ${block('What went well', '✅', 'var(--good)', ai.what_went_well, pt, 'what_went_well')}
@@ -1935,11 +1980,12 @@ function viewGeo(run, pages) {
 }
 // ---------- category filters (type · topic · top N) + "by category" summary ----------
 const catState = {};
+const catTxt = (c) => c.label + (c.city ? ` · 📍 ${c.city}${c.locality ? ' / ' + c.locality : ''}` : '');
 function catView(key, rows, urlOf, sums, renderTable) {
-  const st = (catState[key] ||= { type: '', topic: '', top: '' });
+  const st = (catState[key] ||= { type: '', topic: '', top: '', level: '', city: '' });
   for (const r of rows) r.__cat ||= catOf(urlOf(r));
   const main = sums[0];
-  const inFilter = (r) => (!st.type || r.__cat.type === st.type) && (!st.topic || r.__cat.topic === st.topic);
+  const inFilter = (r) => (!st.type || r.__cat.type === st.type) && (!st.topic || r.__cat.topic === st.topic) && (!st.level || r.__cat.level === st.level) && (!st.city || r.__cat.city === st.city);
   const filtered = () => {
     const f = rows.filter(inFilter).sort((a, b) => (main.cur(b) || 0) - (main.cur(a) || 0));
     return st.top ? f.slice(0, +st.top) : f;
@@ -1949,22 +1995,24 @@ function catView(key, rows, urlOf, sums, renderTable) {
   const summary = () => {
     const g = {};
     for (const r of rows.filter(inFilter)) {
-      const k = r.__cat.label;
-      const t = (g[k] ||= { label: k, type: r.__cat.type, topic: r.__cat.topic, n: 0, v: sums.map(() => [0, 0]) });
+      const k = r.__cat.label + ' · ' + r.__cat.level;
+      const t = (g[k] ||= { label: k, type: r.__cat.type, topic: r.__cat.topic, level: r.__cat.level, n: 0, v: sums.map(() => [0, 0]) });
       t.n++;
       sums.forEach((s, i) => { t.v[i][0] += s.cur(r) || 0; t.v[i][1] += s.prev ? s.prev(r) || 0 : 0; });
     }
     const list = Object.values(g).sort((a, b) => b.v[0][0] - a.v[0][0]);
     return `<details ${list.length > 1 ? 'open' : ''}><summary class="small"><b>By category</b> <span class="muted">(${list.length}) — click a row to filter</span></summary>
       <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Category</th><th class="num">Pages</th>${sums.map((s) => `<th class="num">${esc(s.label)}</th>`).join('')}</tr></thead><tbody>
-      ${list.slice(0, 60).map((t) => `<tr class="click" data-catpick="${esc(t.type)}|${esc(t.topic)}"><td><b>${esc(t.type)}</b> · ${esc(t.topic)}</td><td class="num">${fmt(t.n)}</td>${t.v.map(([c, p], i) => `<td class="num">${sums[i].prev ? dcell(c, p) : fmt(c)}</td>`).join('')}</tr>`).join('')}
+      ${list.slice(0, 60).map((t) => `<tr class="click" data-catpick="${esc(t.type)}|${esc(t.topic)}|${esc(t.level)}"><td><b>${esc(t.type)}</b> · ${esc(t.topic)} <span class="pill ${t.level === 'Generic' ? '' : t.level === 'City' ? 'info' : 'warn'}">${esc(t.level)}</span></td><td class="num">${fmt(t.n)}</td>${t.v.map(([c, p], i) => `<td class="num">${sums[i].prev ? dcell(c, p) : fmt(c)}</td>`).join('')}</tr>`).join('')}
       </tbody></table></div></details>`;
   };
   const bar = () => `<div class="row" style="margin-bottom:10px">
       <select data-cv="type" style="width:auto">${opts(countBy((r) => r.__cat.type, rows), st.type, 'All page types')}</select>
       <select data-cv="topic" style="width:auto">${opts(countBy((r) => r.__cat.topic, rows.filter((r) => !st.type || r.__cat.type === st.type)), st.topic, 'All topics')}</select>
       <select data-cv="top" style="width:auto">${[['', 'All pages'], ...[3, 5, 10, 25, 50, 100, 250].map((n) => [String(n), `Top ${n} by ${main.label.toLowerCase()}`])].map(([v, l]) => `<option value="${v}" ${v === st.top ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      ${st.type || st.topic || st.top ? '<button class="btn sm" data-cv="reset">Clear filters</button>' : ''}
+      <select data-cv="level" style="width:auto">${opts(countBy((r) => r.__cat.level, rows.filter((r) => (!st.type || r.__cat.type === st.type) && (!st.topic || r.__cat.topic === st.topic))), st.level, 'All levels (generic / city / locality)')}</select>
+      <select data-cv="city" style="width:auto">${opts(countBy((r) => r.__cat.city || '—', rows.filter((r) => r.__cat.city && (!st.type || r.__cat.type === st.type) && (!st.topic || r.__cat.topic === st.topic))), st.city, '📍 All cities')}</select>
+      ${st.type || st.topic || st.top || st.level || st.city ? '<button class="btn sm" data-cv="reset">Clear filters</button>' : ''}
       <span class="small muted">${fmt(filtered().length)} of ${fmt(rows.length)} pages</span></div>`;
   const draw = () => {
     const root = document.getElementById('cv-' + key);
@@ -1977,9 +2025,9 @@ function catView(key, rows, urlOf, sums, renderTable) {
   const bind = () => {
     const root = document.getElementById('cv-' + key);
     if (!root) return;
-    root.querySelectorAll('select[data-cv]').forEach((el) => (el.onchange = () => { st[el.dataset.cv] = el.value; if (el.dataset.cv === 'type') st.topic = ''; draw(); }));
-    root.querySelector('[data-cv="reset"]')?.addEventListener('click', () => { st.type = st.topic = st.top = ''; draw(); });
-    root.querySelectorAll('[data-catpick]').forEach((el) => (el.onclick = () => { [st.type, st.topic] = el.dataset.catpick.split('|'); draw(); }));
+    root.querySelectorAll('select[data-cv]').forEach((el) => (el.onchange = () => { st[el.dataset.cv] = el.value; if (el.dataset.cv === 'type') st.topic = st.city = ''; if (el.dataset.cv === 'topic') st.city = ''; draw(); }));
+    root.querySelector('[data-cv="reset"]')?.addEventListener('click', () => { st.type = st.topic = st.top = st.level = st.city = ''; draw(); });
+    root.querySelectorAll('[data-catpick]').forEach((el) => (el.onclick = () => { [st.type, st.topic, st.level] = el.dataset.catpick.split('|'); st.city = ''; draw(); }));
   };
   setTimeout(bind);
   return `<div id="cv-${key}"><div class="cv-bar">${bar()}</div><div class="cv-sum card" style="padding:12px;margin-bottom:12px;box-shadow:none">${summary()}</div><div class="cv-tab">${renderTable(filtered())}</div></div>`;
@@ -2062,6 +2110,20 @@ let insightCtx = null;
 document.addEventListener('click', (e) => {
   const go = e.target.closest('[data-go]');
   if (go) { e.preventDefault(); e.stopPropagation(); if (location.hash === go.dataset.go) route(); else location.hash = go.dataset.go; return; }
+  if (e.target.closest('[data-verify-all]') && insightCtx) {
+    const { run, pages, project } = insightCtx;
+    let bad = 0;
+    document.querySelectorAll('li[data-ins]').forEach((li) => {
+      const [sec, i] = li.dataset.ins.split(':');
+      const v = insightData(sec, run.ai?.[sec]?.[+i] || {}, run, pages, project);
+      if (v.verdict === 'bad') bad++;
+      li.querySelector('.vbadge')?.remove();
+      const [c, l] = VERDICT[v.verdict];
+      li.querySelector('b')?.insertAdjacentHTML('afterend', ` <span class="pill ${c} vbadge">${l}</span>`);
+    });
+    toast(bad ? `${bad} point(s) contradict the data — open them to check` : 'All trend claims agree with the data');
+    return;
+  }
   const ig = e.target.closest('[data-ign],[data-unign]');
   if (ig && insightCtx) {
     e.stopPropagation(); e.preventDefault();
@@ -2077,13 +2139,18 @@ document.addEventListener('click', (e) => {
   insightDrawer(sec, insightCtx.run.ai?.[sec]?.[+i] || {}, insightCtx.run, insightCtx.pages, insightCtx.project);
 });
 const SEC_TITLE = { what_went_well: '✅ What went well', how_we_achieved_it: '🏗️ How we achieved it', what_didnt_work: "⚠️ What didn't work", how_to_improve: '📈 How we can improve' };
-function insightDrawer(sec, item, run, pages, project) {
+function insightData(sec, item, run, pages, project) {
   const g = run.gsc || {};
   const pathOf = (u) => { try { return new URL(u, project.site_url).pathname.replace(/\/$/, '') || '/'; } catch { return u; } };
   const byPath = (list) => { const m = {}; for (const r of list || []) { const k = pathOf(r.u); (m[k] ||= { c: 0, i: 0, pw: 0, u: r.u }); m[k].c += r.c; m[k].i += r.i; m[k].pw += r.p * r.i; } return m; };
   const cur = byPath(g.pages), prev = byPath(g.prevPages);
   const crawled = Object.fromEntries(pages.map((p) => [pathOf(p.url), p]));
-  const qCur = Object.fromEntries((g.queries || []).map((q) => [q.q.toLowerCase(), q])), qPrev = Object.fromEntries((g.prevQueries || []).map((q) => [q.q.toLowerCase(), q]));
+  const qCur = Object.fromEntries((g.queries || []).map((q) => [q.q.toLowerCase(), q]));
+  // queries outside the top list: total them from the page × query rows
+  const pqAgg = {};
+  for (const r of g.pageQueries || []) { const k = r.q.toLowerCase(); if (qCur[k]) continue; const t = (pqAgg[k] ||= { q: r.q, c: 0, i: 0, pw: 0 }); t.c += r.c; t.i += r.i; t.pw += r.p * r.i; }
+  for (const [k, t] of Object.entries(pqAgg)) qCur[k] = { q: t.q, c: t.c, i: t.i, p: t.i ? t.pw / t.i : null };
+  const qPrev = Object.fromEntries((g.prevQueries || []).map((q) => [q.q.toLowerCase(), q]));
   const m = run.summary ? moversFor(run, pages) : null;
   // pages/queries named by the AI; if it named none, fall back to the matching data (gainers, losers or weak pages)
   let urls = (item.pages || []).filter(Boolean);
@@ -2092,8 +2159,32 @@ function insightDrawer(sec, item, run, pages, project) {
   if (!qs.length && m) qs = (sec === 'what_didnt_work' ? m.queriesDown : m.queriesUp).filter((r) => !r.b).slice(0, 15).map((r) => r.k);
   const prows = urls.map((u) => { const k = pathOf(u), c = cur[k], p = prev[k], cp = crawled[k]; return { u: c?.u || new URL(u, project.site_url).href, c: c?.c ?? null, pc: p?.c ?? null, i: c?.i ?? null, pos: c?.i ? c.pw / c.i : null, ppos: p?.i ? p.pw / p.i : null, on: cp?.onpage_score ?? null, ct: cp?.content_score ?? null }; });
   const qrows = qs.map((q) => { const c = qCur[q.toLowerCase()], p = qPrev[q.toLowerCase()]; return { q, c: c?.c ?? null, pc: p?.c ?? null, i: c?.i ?? null, pos: c?.p ?? null, ppos: p?.p ?? null }; });
+  const isB = brandTester(project.brand_terms);
+  for (const r of qrows) r.b = isB(r.q);
+  // verdict: does the data actually move the way the section claims?
+  const dir = (r) => (r.c == null || r.pc == null ? 0 : r.c > r.pc ? 1 : r.c < r.pc ? -1 : 0);
+  const all = [...prows, ...qrows];
+  const up = all.filter((r) => dir(r) > 0).length, down = all.filter((r) => dir(r) < 0).length;
+  const missing = qrows.filter((r) => r.c == null).length;
+  const want = sec === 'what_went_well' ? 1 : sec === 'what_didnt_work' ? -1 : 0;
+  let verdict = 'na';
+  if (want && up + down) verdict = (want > 0 ? up : down) / (up + down) >= 0.6 ? 'ok' : (want > 0 ? down : up) / (up + down) > 0.5 ? 'bad' : 'mixed';
+  const sum = (l, k) => l.reduce((t, r) => t + (r[k] || 0), 0);
+  const nb = qrows.filter((r) => !r.b), br = qrows.filter((r) => r.b);
+  return { prows, qrows, up, down, missing, verdict, split: { nb: { n: nb.length, c: sum(nb, 'c'), pc: sum(nb, 'pc') }, b: { n: br.length, c: sum(br, 'c'), pc: sum(br, 'pc') } } };
+}
+const VERDICT = { ok: ['good', '✓ Data agrees'], mixed: ['warn', '~ Mixed data'], bad: ['bad', '⚠ Data contradicts'], na: ['', 'ℹ️ Not a trend claim'] };
+function insightDrawer(sec, item, run, pages, project) {
+  const { prows, qrows, up, down, missing, verdict, split } = insightData(sec, item, run, pages, project);
+  const [vc, vl] = VERDICT[verdict];
+  const verify = `<div class="card section" style="border-left:4px solid var(--${vc || 'primary'})"><div class="row spread"><h3 style="margin:0">🔍 Verify with data</h3><span class="pill ${vc}">${vl}</span></div>
+    <p class="small">${up} page/query rows went <b class="yes">up</b> and ${down} went <b class="no">down</b> (${esc(CMP.cur)} vs ${esc(CMP.prev)})${missing ? ` · ${missing} quer${missing > 1 ? 'ies' : 'y'} the AI named are <b>not in the data</b> (no clicks recorded)` : ''}.
+    ${verdict === 'bad' ? `<br><b>This point says “${sec === 'what_went_well' ? 'went well' : "didn't work"}” but most of its pages/queries moved the other way — treat it with caution or mark it ✕ not relevant.</b>` : ''}</p>
+    <div class="grid g2"><div class="card kpi"><div class="label">Non-branded queries (${split.nb.n})</div><div class="value">${fmt(split.nb.c)}</div>${delta(split.nb.c, split.nb.pc) || '<span class="muted small">no comparison</span>'}</div>
+      <div class="card kpi"><div class="label">Branded queries (${split.b.n})</div><div class="value">${fmt(split.b.c)}</div>${delta(split.b.c, split.b.pc) || '<span class="muted small">no comparison</span>'}</div></div></div>`;
   openDrawer(`<div class="small muted">${SEC_TITLE[sec] || ''} · ${esc(CMP.cur)} vs ${esc(CMP.prev)}</div><h2>${esc(item.point || '')}</h2>
     ${item.evidence ? `<p>📊 ${esc(item.evidence)}</p>` : ''}${item.likely_cause ? `<p>🔍 <b>Likely cause:</b> ${esc(item.likely_cause)}</p>` : ''}
+    ${verify}
     <div class="card section"><h3>Pages (${prows.length})</h3>${table([
       { key: 'u', label: 'Page', render: (r) => pageLink(r.u, pages) },
       { key: 'c', label: `Clicks ${esc(CMP.cur)}`, num: 1, render: (r) => fmt(r.c) },
@@ -2104,7 +2195,7 @@ function insightDrawer(sec, item, run, pages, project) {
       { key: 'ct', label: 'Content', num: 1, render: (r) => (r.ct == null ? '–' : `<span class="pill ${pillFor(r.ct)}">${r.ct}</span>`) },
     ], prows, { filter: false })}</div>
     <div class="card section"><h3>Queries (${qrows.length})</h3>${table([
-      { key: 'q', label: 'Query', render: (r) => `<b>${esc(r.q)}</b>` },
+      { key: 'q', label: 'Query', render: (r) => `<b>${esc(r.q)}</b> ${r.b ? '<span class="pill info">Branded</span>' : '<span class="pill good">Non-branded</span>'}${r.c == null ? ' <span class="pill warn">not in data</span>' : ''}` },
       { key: 'c', label: `Clicks ${esc(CMP.cur)}`, num: 1, render: (r) => fmt(r.c) },
       { key: 'pc', label: esc(CMP.prev), num: 1, render: (r) => `<span class="muted">${fmt(r.pc)}</span>` },
       { key: 'd', label: 'Δ', num: 1, render: (r) => delta(r.c, r.pc), sort: (r) => (r.c || 0) - (r.pc || 0) },
@@ -2182,7 +2273,7 @@ function viewGscGa(run, pages, project) {
       { label: 'Clicks', cur: (x) => x.c, prev: (x) => x.pc }, { label: 'Impressions', cur: (x) => x.i, prev: (x) => x.pi },
       ...(ga ? [{ label: 'Organic sessions', cur: (x) => x.s, prev: (x) => (hasPrevGa ? x.ps : 0) }] : []),
     ], (list) => table([
-      { key: 'path', label: 'Page', render: (x) => `${x.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(x.path)}</span><div class="small muted">${esc(x.__cat.label)}</div>`, text: (x) => x.path + ' ' + x.__cat.label + (x.money ? ' money' : '') },
+      { key: 'path', label: 'Page', render: (x) => `${x.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(x.path)}</span><div class="small muted">${esc(catTxt(x.__cat))}</div>`, text: (x) => x.path + ' ' + catTxt(x.__cat) + (x.money ? ' money' : '') },
       { key: 'c', label: 'Clicks', num: 1, render: (x) => dcell(x.c, x.pc) },
       { key: 'i', label: 'Impr.', num: 1, render: (x) => dcell(x.i, x.pi) },
       { key: 'p', label: 'Pos', num: 1, render: (x) => dcell(x.p, x.pp, (v) => fmt(v, 1), { invert: true }), sort: (x) => x.p ?? 999 },
@@ -2304,7 +2395,7 @@ function viewPages(pages, project, run) {
   return `<div class="card">${catView('pages', pages, (p) => p.url, [
     { label: 'Clicks', cur: (p) => p.gsc?.c }, { label: 'Impressions', cur: (p) => p.gsc?.i },
   ], (pages) => table([
-    { key: 'cat', label: 'Category', render: (p) => `<span class="small">${esc(p.__cat.label)}</span>`, sort: (p) => p.__cat.label },
+    { key: 'cat', label: 'Category', render: (p) => `<span class="small">${esc(catTxt(p.__cat))}</span>`, sort: (p) => p.__cat.label },
     { key: 'url', label: 'Page', render: (p) => `${p.money ? '<span class="pill warn" title="Money page">💰 money</span> ' : ''}<span class="url" style="display:inline-block;vertical-align:middle">${esc(shortUrl(p.url))}</span>`, text: (p) => (p.money ? 'money ' : '') + p.url, sort: (p) => (p.money ? 'a' : 'b') + p.url },
     { key: 'onpage_score', label: 'On-page', num: 1, render: (p) => `<span class="pill ${pillFor(p.onpage_score)}">${p.onpage_score}</span>` },
     { key: 'content_score', label: 'Content', num: 1, render: (p) => `<span class="pill ${pillFor(p.content_score)}">${p.content_score}</span>` },

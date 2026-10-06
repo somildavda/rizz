@@ -602,5 +602,10 @@ export function catOf(u) {
   const first = segs[0] || path.split('/').filter(Boolean)[0] || 'other';
   const topic = first.split(/[-_.]/).filter((w) => w && !['other', 'online', 'best', 'new', 'all', 'my'].includes(w))[0] || first;
   const shown = type === 'Landing' && path.split('/').filter(Boolean).length === 1 ? 'Landing (generic)' : type;
-  return { type: shown, topic, label: `${shown} · ${topic}` };
+  // hyperlocal: /plans/broadband/delhi → City, /plans/broadband/delhi/saket → Locality (not for blog articles)
+  const all = path.split('/').filter(Boolean);
+  const rest = type === 'Blog' ? [] : all.slice(all.indexOf(first) + 1).filter((x) => !/^\d+$/.test(x) && !/\.(html?|php)$/.test(x));
+  const level = type === 'Blog' ? (all.length > all.indexOf(first) + 1 ? 'Article' : 'Generic') : rest.length === 0 ? 'Generic' : rest.length === 1 ? 'City' : 'Locality';
+  const city = rest[0] || '', locality = rest.slice(1).join('/');
+  return { type: shown, topic, label: `${shown} · ${topic}`, level, city, locality };
 }

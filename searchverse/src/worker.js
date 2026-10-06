@@ -1601,7 +1601,8 @@ STRICT RULES:
 7. Prioritise money pages and non-branded growth. Never invent data.
 7b. Keep the four review sections SHORT and scannable: "point" = one crisp bullet (max ~14 words, lead with the number),
    "evidence" = one line (max ~25 words). ALWAYS fill "pages" (full URLs) and "queries" (exact query text) with the specific items
-   behind the point (3-10 each; "queries" is REQUIRED on every bullet in all four sections, using exact query text from the data) — the UI lets people click a bullet to see those pages/queries with their numbers.
+   behind the point. In "what_went_well" list ONLY pages/queries whose clicks went UP; in "what_didnt_work" ONLY ones that went DOWN
+   (check the numbers before listing — never put a declining page under "went well"). Lists (3-10 each; "queries" is REQUIRED on every bullet in all four sections, using exact query text from the data) — the UI lets people click a bullet to see those pages/queries with their numbers.
 8. Every action-plan item must be falsifiable: state the observation it rests on, what it depends on (another task or nothing),
    how we would know it failed (a concrete check after N weeks), and the leading indicator to watch first (e.g. impressions for query X, CTR on URL Y).
 9. Current Google guidance (2026): FAQ rich results were retired in May 2026 (do not recommend FAQPage markup for rich snippets; Q&A content itself is still useful);
