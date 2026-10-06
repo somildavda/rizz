@@ -15,14 +15,21 @@ function storageBar(u, extra = 0) {
   return `<div class="progress" style="height:12px;display:flex"><div style="width:${pu}%;background:${col}"></div><div style="width:${pe}%;background:${col};opacity:.35"></div></div>
     <div class="row spread small"><span><b>${mb(used)}</b> used of ${mb(lim)} (free plan${u.databases?.length > 1 ? `, ${u.databases.length} databases` : ''})${u.exact ? '' : ' · approx.'}</span><span><b>${mb(left)}</b> left</span></div>`;
 }
-const date = (ts) => new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const date = (ts) => { const x = new Date(ts); return `${x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${x.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })}`; };
 const shortUrl = (u) => { try { const x = new URL(u); return x.pathname + x.search || '/'; } catch { return u; } };
 const scoreColor = (v) => (v >= 80 ? 'var(--good)' : v >= 55 ? 'var(--warn)' : 'var(--bad)');
 const pillFor = (v) => (v >= 80 ? 'good' : v >= 55 ? 'warn' : 'bad');
 const isAdmin = () => state.me?.user.role === 'admin';
 const canRun = (p) => ['admin', 'manager', 'editor'].includes(p.my_role);
 const canManage = (p) => p.my_role === 'admin' || p.my_role === 'manager';
-const accessPill = (r) => r === 'admin' ? '<span class="pill info">Admin</span>' : r === 'manager' ? '<span class="pill warn">Manager</span>' : r === 'editor' ? '<span class="pill good">Can run analysis</span>' : '<span class="pill">View only</span>';
+const ROLE = { admin: 'Admin (Manager)', pm: 'PM', manager: 'PM', editor: 'Analyst', viewer: 'Client (view only)' };
+const accessPill = (r) => `<span class="pill ${r === 'admin' ? 'info' : r === 'manager' || r === 'pm' ? 'warn' : r === 'editor' ? 'good' : ''}">${ROLE[r] || ROLE.viewer}</span>`;
+const isPM = () => state.me?.user.role === 'pm';
+// big numbers: 10.2M / 384.5K with the exact number on hover
+const big = (n) => (n == null || isNaN(n) ? '–' : Math.abs(n) < 10000 ? fmt(n) : `<span title="${fmt(n)}">${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: Math.abs(n) >= 1e6 ? 2 : 1 }).format(n)}</span>`);
+// dates like "1 Sept 2026"
+const dmy = (d) => { if (!d) return ''; const x = new Date(String(d).length === 10 ? d + 'T00:00:00Z' : d); return isNaN(x) ? String(d) : x.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: String(d).length === 10 ? 'UTC' : undefined }); };
+const range = (a, b) => `${dmy(a)} → ${dmy(b)}`;
 const ring = (v, big) => `<div class="ring ${big ? 'big' : ''}" style="--v:${v || 0};--c:${scoreColor(v)}"><span>${v ?? '–'}</span></div>`;
 const mark = (v) => (v >= 1 ? '<span class="yes">✓</span>' : v > 0 ? '<span class="part">~</span>' : '<span class="no">✗</span>');
 
@@ -142,12 +149,14 @@ document.getElementById('drawer').addEventListener('click', (e) => { if (e.targe
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.getElementById('drawer').classList.add('hidden'); });
 
 // ---------- nav / router ----------
+const initials = (u) => (u.name && u.name !== u.email ? u.name : u.email).split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+const avatarHtml = (u) => `<span class="av">${esc(initials(u))}${u.picture ? `<img src="${esc(u.picture)}" referrerpolicy="no-referrer" alt="" onerror="this.remove()">` : ''}</span>`;
 function renderNav() {
   const nav = document.getElementById('nav');
   if (!state.me) { nav.innerHTML = ''; return; }
   const u = state.me.user;
   nav.innerHTML = `<a href="#/">Projects</a>${isAdmin() ? '<a href="#/users">Users</a>' : ''}<a href="#/settings">Settings</a>
-    <span class="row" style="gap:8px">${u.picture ? `<img class="avatar" src="${esc(u.picture)}" referrerpolicy="no-referrer">` : ''}<span class="hide-sm small muted">${esc(u.email)}</span></span>
+    <span class="userchip">${avatarHtml(u)}<span class="hide-sm uc-text"><b>${esc(u.name && u.name !== u.email ? u.name : u.email.split('@')[0])}</b><small>${esc(ROLE[u.role] || 'Team member')}</small></span></span>
     <a href="/auth/logout" class="btn sm">Sign out</a>`;
 }
 
@@ -167,7 +176,7 @@ async function route() {
   try {
     if (path === '/') return await renderHome(err);
     if (path === '/settings') return await renderSettings(err, p);
-    if (['/new', '/users'].includes(path)) {
+    if (path === '/users' || (path === '/new' && !isPM())) {
       if (!isAdmin()) { app.innerHTML = '<div class="banner err">Only admins can open this page.</div>'; return; }
     }
     if (path === '/users') return await renderUsers(err);
@@ -224,7 +233,7 @@ function renderLogin(err) {
 async function renderHome(err) {
   const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), isAdmin() ? api('/api/connections') : { connections: null }]);
   if (!connections) {
-    app.innerHTML = `${err}<h1>Projects</h1>
+    app.innerHTML = `${err}<div class="row spread"><h1>Projects</h1>${isPM() ? '<a class="btn primary" href="#/new">+ New project</a>' : ''}</div>
       <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access.</div>'}</div>`;
     return;
   }
@@ -249,12 +258,12 @@ function projectCard(p) {
       <a class="card click" href="#/p/${p.id}" style="color:inherit;text-decoration:none">
         <div class="row spread"><div style="min-width:0"><h3 style="margin:0">${esc(p.name)}</h3><div class="muted small url">${esc(p.gsc_property)}</div></div>${ring(p.last_score)}</div>
         <div class="row small muted" style="margin-top:12px;gap:16px">
-          <span>Clicks <b style="color:var(--text)">${fmt(p.kpis?.clicks)}</b></span>
-          <span>Impr. <b style="color:var(--text)">${fmt(p.kpis?.impressions)}</b></span>
-          <span>${p.last_run ? 'Last run ' + new Date(p.last_run).toLocaleDateString() : 'Never analysed'}</span>
+          <span>Clicks <b style="color:var(--text)">${big(p.kpis?.clicks)}</b></span>
+          <span>Impr. <b style="color:var(--text)">${big(p.kpis?.impressions)}</b></span>
+          <span>${p.last_run ? 'Last run ' + dmy(p.last_run) : 'Never analysed'}</span>
         </div>
         ${p.my_role !== 'admin' ? `<div style="margin-top:8px">${accessPill(p.my_role)}</div>` : ''}
-        ${(p.recent_runs || []).length ? `<div class="runlist"><div class="small muted" style="margin:12px 0 4px">Runs — click one to open</div>${p.recent_runs.map((r) => `<span class="runitem" data-go="#/p/${p.id}?run=${r.id}"><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span><span class="small" style="flex:1;min-width:0"><b>${esc(r.scope || 'Whole site')}</b><span class="muted"> · ${esc(r.start_date || '')} → ${esc(r.end_date || '')}<br>${new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} · ${esc((r.created_by || '').split('@')[0])}${r.error === 'archived' ? ' · archived' : ''}</span></span><span class="muted">›</span></span>`).join('')}</div>` : ''}
+        ${(p.recent_runs || []).length ? `<div class="runlist"><div class="small muted" style="margin:12px 0 4px">Runs — click one to open</div>${p.recent_runs.map((r) => `<span class="runitem" data-go="#/p/${p.id}?run=${r.id}"><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span><span class="small" style="flex:1;min-width:0"><b>${esc(r.scope || 'Whole site')}</b><span class="muted"> · ${esc(range(r.start_date, r.end_date))}<br>${date(r.created_at)} · ${esc((r.created_by || '').split('@')[0])}${r.error === 'archived' ? ' · archived' : ''}</span></span><span class="muted">›</span></span>`).join('')}</div>` : ''}
       </a>`;
 }
 
@@ -356,12 +365,12 @@ async function sendInviteUi(email, projectId, role, alreadySent) {
 async function renderUsers(err) {
   const [{ users }, { projects }] = await Promise.all([api('/api/users'), api('/api/projects')]);
   const me = state.me.user.email;
-  app.innerHTML = `${err}<div class="row spread"><div><h1>Users</h1><div class="muted small">Admins have full access. Members only see the projects you give them.</div></div>
+  app.innerHTML = `${err}<div class="row spread"><div><h1>Users</h1><div class="muted small">Admin (Manager) → PM → Analyst → Client. Everyone except admins only sees the projects they're given.</div></div>
       <button class="btn primary" id="u-add">+ Add user</button></div>
     <div class="card section">${table([
       { key: 'email', label: 'User', render: (u) => `<div class="row" style="gap:8px;flex-wrap:nowrap">${u.picture ? `<img class="avatar" src="${esc(u.picture)}" referrerpolicy="no-referrer">` : ''}<div><b>${esc(u.name && u.name !== u.email ? u.name : u.email)}</b>${u.email === me ? ' <span class="pill">you</span>' : ''}<div class="small muted">${esc(u.email)}</div></div></div>` },
-      { key: 'role', label: 'Role', render: (u) => (u.role === 'admin' ? '<span class="pill info">Admin</span>' : '<span class="pill">Member</span>') },
-      { key: 'access', label: 'Project access', render: (u) => (u.role === 'admin' ? '<span class="muted small">All projects</span>' : u.projects.map((p) => `<div class="small">${esc(p.name)} · ${p.role === 'editor' ? 'can run' : 'view only'}</div>`).join('') || '<span class="muted small">None</span>') },
+      { key: 'role', label: 'Role', render: (u) => (u.role === 'member' ? '<span class="pill">Team member</span>' : accessPill(u.role)) },
+      { key: 'access', label: 'Project access', render: (u) => (u.role === 'admin' ? '<span class="muted small">All projects</span>' : u.projects.map((p) => `<div class="small">${esc(p.name)} · ${ROLE[p.role] || p.role}</div>`).join('') || '<span class="muted small">None</span>') },
       { key: 'status', label: 'Status', render: (u) => (u.disabled ? '<span class="pill bad">Disabled</span>' : u.last_login ? '<span class="pill good">Active</span>' : '<span class="pill warn">Invited</span>') },
       { key: 'last_login', label: 'Last sign-in', render: (u) => (u.last_login ? date(u.last_login) : '–') },
     ], users, { onRow: (u) => userEditor(u, projects) })}<p class="hint">Click a user to edit their role or project access. Added users sign in with the Google account for that email.</p></div>`;
@@ -375,12 +384,12 @@ function userEditor(u, projects) {
   openDrawer(`<h2>${isNew ? 'Add user' : esc(u.email)}</h2>
     ${isNew ? '<label>Email (their Google account)</label><input id="ue-email" placeholder="name@company.com">' : ''}
     <label>Role</label>
-    <select id="ue-role"><option value="member" ${u.role === 'member' ? 'selected' : ''}>Member — limited access</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin — full access</option></select>
-    <div class="hint">Admins do the setup: connect Google accounts, create/edit/delete projects, manage users. Members can open their projects and run analyses, but can't change any setup.</div>
+    <select id="ue-role"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin (Manager) — full access</option><option value="pm" ${u.role === 'pm' ? 'selected' : ''}>PM — creates projects, runs audits, gives access</option><option value="member" ${u.role === 'member' ? 'selected' : ''}>Team member — access per project below</option></select>
+    <div class="hint"><b>Admin (Manager)</b>: everything, incl. Google accounts, users, storage. <b>PM</b>: creates projects, sets them up, runs analyses and gives Analysts / Clients access to their projects. <b>Team member</b>: per project — <b>Analyst</b> runs analyses, <b>Client</b> only views.</div>
     <div id="ue-proj" class="${u.role === 'admin' ? 'hidden' : ''}">
       <label>Project access</label>
       ${projects.map((p) => `<div class="check" style="align-items:center"><div style="flex:1"><b>${esc(p.name)}</b><div class="small muted">${esc(p.gsc_property)}</div></div>
-        <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="manager" ${access[p.id] === 'manager' ? 'selected' : ''}>Manager</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Can run analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>View only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
+        <select data-pid="${p.id}" style="width:auto"><option value="">No access</option><option value="manager" ${access[p.id] === 'manager' ? 'selected' : ''}>PM of this project</option><option value="editor" ${access[p.id] === 'editor' ? 'selected' : ''}>Analyst — runs analysis</option><option value="viewer" ${access[p.id] === 'viewer' ? 'selected' : ''}>Client — view only</option></select></div>`).join('') || '<p class="muted">No projects yet.</p>'}
     </div>
     ${isNew ? '' : `<label><input type="checkbox" id="ue-dis" style="width:auto" ${u.disabled ? 'checked' : ''}> Disable sign-in (keeps their settings)</label>`}
     <div class="row" style="margin-top:20px"><button class="btn primary" id="ue-save">${isNew ? 'Add user & send invite' : 'Save'}</button>${isNew ? '' : '<button class="btn" id="ue-inv">✉️ Send invite</button><button class="btn danger" id="ue-del">Remove user</button>'}</div>`);
@@ -410,7 +419,7 @@ function userEditor(u, projects) {
 // ---------- project form ----------
 async function renderProjectForm(pid) {
   const p = pid ? (await api('/api/projects/' + pid)).project : { max_pages: 25 };
-  const isOwner = isAdmin();
+  const isOwner = isAdmin() || (isPM() && (!pid || canManage(p)));
   if (!isOwner && !(pid && canManage(p))) { app.innerHTML = '<div class="banner err">Only admins and project managers can open project settings.</div>'; return; }
   const { connections } = isOwner ? await api('/api/connections') : { connections: [{ id: p.connection_id, google_email: p.connection_email || '—' }] };
   if (!connections.length) { location.hash = '#/settings'; return toast('Connect a Google account first'); }
@@ -441,12 +450,12 @@ async function renderProjectForm(pid) {
         <div class="hint">The exact GA4 key event name that counts as a lead. Shown as a separate "Leads" column.</div>
         <div class="hint">Top pages by clicks & impressions from Search Console (5–100).</div>
         <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save">${pid ? 'Save changes' : 'Create project'}</button>
-        ${pid && isOwner ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
+        ${pid && isAdmin() ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
       </div>
       ${pid ? `<div class="card"><h2>Team access</h2>
-        <p class="muted small">Admins see every project. Members only see the projects they're added to: <b>View only</b> sees results · <b>Can run analysis</b> also runs analyses · <b>Manager</b> also edits project settings & LOBs, deletes runs and invites the team${isOwner ? '' : ' (only admins can add managers)'}. Everyone signs in with their own Google account.</p>
-        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div>${isOwner || m.role !== 'manager' ? `<button class="btn sm" data-inv="${esc(m.email)}" data-role="${m.role}">✉️ Invite</button><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button>` : ''}</div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
-        <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto">${isOwner ? '<option value="manager">Manager</option>' : ''}<option value="editor" selected>Can run analysis</option><option value="viewer">View only</option></select><button class="btn" id="m-add">Add</button></div>
+        <p class="muted small">Admins see every project. Members only see the projects they're added to: <b>Client</b> only views · <b>Analyst</b> also runs analyses · <b>PM</b> also edits settings & LOBs, deletes runs and gives access${isAdmin() ? '' : ' (only admins can add PMs)'}. Everyone signs in with their own Google account.</p>
+        ${(p.members || []).map((m) => `<div class="check"><div style="flex:1">${esc(m.email)}<div>${accessPill(m.role)}</div></div>${isAdmin() || m.role !== 'manager' ? `<button class="btn sm" data-inv="${esc(m.email)}" data-role="${m.role}">✉️ Invite</button><button class="btn sm danger" data-rm="${esc(m.email)}">Remove</button>` : ''}</div>`).join('') || '<p class="muted">No members yet. Only admins can see this project.</p>'}
+        <div class="row" style="margin-top:12px"><input id="m-email" placeholder="colleague@company.com" style="flex:1"><select id="m-role" style="width:auto">${isAdmin() ? '<option value="manager">PM of this project</option>' : ''}<option value="editor" selected>Analyst — runs analysis</option><option value="viewer">Client — view only</option></select><button class="btn" id="m-add">Add</button></div>
       </div>` : ''}
     </div>`;
 
@@ -516,6 +525,7 @@ async function renderRunner(pid) {
   const lobCats = [...new Set(lobGroups.map((g) => g.category).filter(Boolean))];
   const [s0, e0] = presetRange('28');
   app.innerHTML = `<div class="row spread"><div><h1>Run analysis</h1><div class="muted">${esc(project.name)} · ${esc(project.gsc_property)}</div></div><a class="btn" href="#/p/${pid}">Back</a></div>
+    <div class="card section" id="sugg"><h3>💡 Suggested runs</h3><p class="muted small">Loading…</p></div>
     <div class="card section" id="setup">
       <h3>📅 Date range</h3>
       <div class="row" style="align-items:flex-end">
@@ -582,7 +592,7 @@ async function renderRunner(pid) {
       ps = new Date($('r-pstart').value); pe = new Date($('r-pend').value);
     } else if ($('r-compare').value === 'year') { ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1); pe = new Date(e); pe.setUTCFullYear(pe.getUTCFullYear() - 1); }
     else { pe = new Date(s.getTime() - 86400000); ps = new Date(pe.getTime() - (len - 1) * 86400000); }
-    $('r-cmp-text').textContent = `${len} days: ${isoDay(s)} → ${isoDay(e)}, compared with ${isoDay(ps)} → ${isoDay(pe)}. Search Console keeps ~16 months and lags 2–3 days.`;
+    $('r-cmp-text').textContent = `${len} days: ${range(isoDay(s), isoDay(e))}, compared with ${range(isoDay(ps), isoDay(pe))}. Search Console keeps ~16 months and lags 2–3 days.`;
   };
   $('r-preset').onchange = () => {
     if ($('r-preset').value !== 'custom') { const [s, e] = presetRange($('r-preset').value); $('r-start').value = isoDay(s); $('r-end').value = isoDay(e); }
@@ -645,6 +655,33 @@ async function renderRunner(pid) {
   Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => { usage = { ...u, retention: r.days }; storageNote(); }).catch(() => ($('r-storage').textContent = 'Storage info unavailable'));
   ['r-pstart', 'r-pend'].forEach((id) => ($(id).onchange = cmpText));
   cmpText();
+  // suggested runs: one click fills the form; shows when each was last run
+  api(`/api/projects/${pid}/runs`).then(({ runs }) => {
+    const last = (label) => runs.filter((r) => r.status === 'done' && (r.scope || '') === label).sort((a, b) => b.created_at - a.created_at)[0];
+    const hyper = 'regex:/(plans|new-connection)/[^/]+/[^/?#]+';
+    const S = [
+      ...(money.length ? [{ t: '💰 Money pages — weekly check', why: `Your ${money.length} money pages, last 7 days vs the week before: catches drops fast.`, f: 'Weekly', preset: '7', scope: 'custom', custom: money.join('\n'), rows: 0, pages: Math.min(1000, money.length), label: `Custom URLs (${money.length})` }] : []),
+      ...lobCats.map((c) => ({ t: `📊 LOB: ${c} — monthly review`, why: 'Last full month vs the month before, full export so every LOB URL and query is covered.', f: 'Monthly', preset: 'lm', scope: 'cat:' + c, rows: 50000, pages: 1000, label: 'LOB: ' + c })),
+      { t: '📍 Hyperlocal city & locality pages — monthly', why: 'Every /plans/… and /new-connection/… page one level below the product (Delhi, Mumbai, localities): finds thin or duplicate city pages.', f: 'Monthly', preset: 'lm', scope: 'custom', custom: hyper, rows: 50000, pages: 1000, label: 'Custom URLs (1)' },
+      { t: '🌐 Whole site — monthly health', why: 'Top 250 pages for technical, rendering and AI-search checks across the site.', f: 'Monthly', preset: 'lm', scope: '', rows: 0, pages: 250, label: '' },
+      { t: '📅 Whole site — quarterly vs last year', why: 'Last 3 months vs the same months last year: removes seasonality for the quarterly report.', f: 'Quarterly', preset: 'l3m', compare: 'year', scope: '', rows: 100000, pages: 500, label: '' },
+    ];
+    const due = { Weekly: 7, Monthly: 31, Quarterly: 92 };
+    $('sugg').innerHTML = `<div class="row spread"><h3 style="margin:0">💡 Suggested runs</h3><span class="small muted">Click one to fill in the form below</span></div>
+      <div class="grid g2" style="margin-top:12px">${S.map((x, i) => { const l = last(x.label); const age = l ? (Date.now() - l.created_at) / 86400000 : null; const overdue = age == null || age > due[x.f];
+        return `<div class="card click sugg" data-sg="${i}" style="padding:14px"><div class="row spread" style="flex-wrap:nowrap;align-items:flex-start"><b>${esc(x.t)}</b><span class="pill ${overdue ? 'warn' : 'good'}" style="flex:none">${x.f}</span></div>
+          <div class="small muted" style="margin:6px 0">${esc(x.why)}</div><div class="small">${l ? `Last run ${dmy(l.created_at)}${overdue ? ' · <b class="no">due now</b>' : ' · up to date'}` : '<b class="no">Not run yet</b>'}</div></div>`; }).join('')}</div>`;
+    $('sugg').querySelectorAll('[data-sg]').forEach((el) => (el.onclick = () => {
+      const x = S[+el.dataset.sg];
+      const set = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
+      set('r-preset', x.preset); set('r-compare', x.compare || 'previous'); set('r-scope', x.scope);
+      if (x.scope === 'custom') { $('r-custom').value = x.custom; $('r-custom').dispatchEvent(new Event('input')); }
+      set('r-rows', String(x.rows));
+      const opt = [...$('r-maxsel').options].some((o) => o.value === String(x.pages));
+      set('r-maxsel', opt ? String(x.pages) : 'custom'); $('r-max').value = x.pages; $('r-max').dispatchEvent(new Event('input'));
+      $('setup').scrollIntoView({ behavior: 'smooth' }); toast('Form filled — check it and press Run');
+    }));
+  }).catch(() => $('sugg').remove());
   $('r-go').onclick = () => runAnalysis(project, {
     start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value, pstart: $('r-pstart').value, pend: $('r-pend').value, allGroups: lobGroups,
     maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
@@ -733,7 +770,7 @@ async function runAnalysis(project, opt) {
   try {
     step('Creating run', 2);
     run = (await api(`/api/projects/${project.id}/runs`, { method: 'POST', body: { start: opt.start, end: opt.end, compare: opt.compare, pstart: opt.pstart, pend: opt.pend } })).run;
-    log(`Period ${run.start} → ${run.end} (compared with ${run.pstart} → ${run.pend})`);
+    log(`Period ${range(run.start, run.end)} (compared with ${range(run.pstart, run.pend)})`);
 
     step('Fetching Search Console data', 5);
     const { gsc } = await api(`/api/runs/${run.id}/gsc`, { method: 'POST' });
@@ -1471,14 +1508,14 @@ function lobEditor(pid, groups) {
 }
 
 // ---------- project dashboard ----------
-const runLabel = (r) => `${date(r.created_at)} · score ${r.score ?? '–'} · ${r.start_date || ''}→${r.end_date || ''}${r.scope ? ' · ' + r.scope : ''}${r.error === 'archived' ? ' · archived' : ''} · by ${(r.created_by || '').split('@')[0]}`;
+const runLabel = (r) => `${date(r.created_at)} · score ${r.score ?? '–'} · ${range(r.start_date, r.end_date)}${r.scope ? ' · ' + r.scope : ''}${r.error === 'archived' ? ' · archived' : ''} · by ${(r.created_by || '').split('@')[0]}`;
 async function renderProject(pid, runId) {
   const seq = ROUTE_SEQ;
   const [{ project }, { runs }] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/runs`)]);
   if (seq !== ROUTE_SEQ) return;
   const done = runs.filter((r) => r.status === 'done');
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
-      <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
+      ${isAdmin() ? `<div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div>` : ''}</div>
       <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${esc(runLabel(r))}</option>`).join('')}</select><button class="btn" id="run-refresh" title="Reload this run">⟳ Refresh</button>` : ''}
       <a class="btn" href="#/p/${pid}/urls">📈 URL performance</a><a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${canManage(project) ? `${isAdmin() ? '' : accessPill(project.my_role)}<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
@@ -1516,7 +1553,7 @@ function renderRun(project, { run, pages }, runs, head) {
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
-    <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
+    <div class="muted small" style="margin-top:6px">Data ${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
       <div class="score click-score" data-score="overall">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
       <div class="score click-score" data-score="onpage">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
@@ -1525,13 +1562,13 @@ function renderRun(project, { run, pages }, runs, head) {
       ${s.geo ? `<div class="score click-score" data-tab="AI search & GEO">${ring(s.geo.score)}<div><b>AI search</b><div class="muted small">GEO readiness for AI Overviews, ChatGPT…</div></div></div>` : ''}
     </div></div>
     <div class="grid kpis section">
-      ${kpi('Clicks', fmt(k.clicks), delta(k.clicks, k.prev?.clicks))}
-      ${kpi('Impressions', fmt(k.impressions), delta(k.impressions, k.prev?.impressions))}
+      ${kpi('Clicks', big(k.clicks), delta(k.clicks, k.prev?.clicks))}
+      ${kpi('Impressions', big(k.impressions), delta(k.impressions, k.prev?.impressions))}
       ${kpi('CTR', pct(k.ctr, 2), delta(k.ctr, k.prev?.ctr, { isPct: true }))}
       ${kpi('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }))}
-      ${k.sessions != null ? kpi('Organic sessions', fmt(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
-      ${k.keyEvents != null ? kpi('Organic key events', fmt(k.keyEvents), delta(k.keyEvents, k.prevKeyEvents)) : ''}
-      ${s.brand ? kpi('Non-branded clicks', fmt(s.brand.nonBranded.c), `<span class="small muted">${pct(s.brand.nonBranded.c / Math.max(1, s.brand.nonBranded.c + s.brand.branded.c))} of clicks</span>`) + kpi('Branded clicks', fmt(s.brand.branded.c), `<span class="small muted">${fmt(s.brand.branded.n)} queries</span>`) : ''}
+      ${k.sessions != null ? kpi('Organic sessions', big(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
+      ${k.keyEvents != null ? kpi('Organic key events', big(k.keyEvents), delta(k.keyEvents, k.prevKeyEvents)) : ''}
+      ${s.brand ? kpi('Non-branded clicks', big(s.brand.nonBranded.c), `<span class="small muted">${pct(s.brand.nonBranded.c / Math.max(1, s.brand.nonBranded.c + s.brand.branded.c))} of clicks</span>`) + kpi('Branded clicks', big(s.brand.branded.c), `<span class="small muted">${fmt(s.brand.branded.n)} queries</span>`) : ''}
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="small muted" style="margin-right:auto">Tip: click any score or number for the breakdown.</span><button class="btn" id="xlsx-btn">⬇ Excel report</button></div>
     <div class="tabs">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}">${t}</button>`).join('')}</div>
@@ -1582,9 +1619,9 @@ function renderArchivedRun(project, run, runs, head) {
       ${s.geo ? `<div class="score">${ring(s.geo.score)}<div><b>AI search</b></div></div>` : ''}
     </div></div>
     <div class="grid kpis section">
-      ${kpi('Clicks', fmt(k.clicks), delta(k.clicks, k.prev?.clicks))}${kpi('Impressions', fmt(k.impressions), delta(k.impressions, k.prev?.impressions))}
+      ${kpi('Clicks', big(k.clicks), delta(k.clicks, k.prev?.clicks))}${kpi('Impressions', big(k.impressions), delta(k.impressions, k.prev?.impressions))}
       ${kpi('CTR', pct(k.ctr, 2), delta(k.ctr, k.prev?.ctr, { isPct: true }))}${kpi('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }))}
-      ${k.sessions != null ? kpi('Organic sessions', fmt(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
+      ${k.sessions != null ? kpi('Organic sessions', big(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
     </div>
     <div class="tabs"><button class="tab active" data-t="Insights">Insights</button><button class="tab" data-t="History">History</button></div><div id="tab"></div>`;
   const show = (t) => { app.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.t === t)); document.getElementById('tab').innerHTML = t === 'History' ? viewHistory(runs, project) : viewInsights(project, run, []); };
@@ -1632,7 +1669,7 @@ function viewInsights(project, run, pages) {
   const structured = has(ai.what_went_well) || has(ai.what_didnt_work) || ai.action_plan;
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>
-      <div class="row spread small muted"><span>${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
+      <div class="row spread small muted"><span>${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
     ${structured ? '<div class="row spread section"><p class="small muted" style="margin:0">Click any bullet to see the pages and queries behind it.</p><button class="btn" data-verify-all>🔍 Verify all with data</button></div>' : ''}${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
     ${has(ai.hidden) ? `<details class="small section"><summary class="muted">🙈 ${ai.hidden.length} point(s) marked not relevant — future analyses skip these</summary>${ai.hidden.map((h) => `<div class="check"><div style="flex:1">${esc(h.item?.point || '')} <span class="muted">· ${esc(SEC_TITLE[h.sec] || h.sec)}${h.by ? ' · ' + esc(h.by.split('@')[0]) : ''}</span></div>${canRun(project) ? `<button class="btn small" data-unign="${esc(h.sec)}" data-point="${esc(h.item?.point || '')}">Restore</button>` : ''}</div>`).join('')}</details>` : ''}
     <div class="grid g2">
@@ -2271,7 +2308,7 @@ function viewGscGa(run, pages, project) {
   const list = Object.values(rows).map((x) => ({ ...x, p: x.i ? x.pw / x.i : null, pp: x.pi ? x.ppw / x.pi : null, br: x.s ? x.bs / x.s : null, pbr: x.ps ? x.pbs / x.ps : null, onpage: crawled[x.path]?.onpage_score ?? null, money: crawled[x.path]?.money }))
     .sort((a, b) => b.c - a.c || b.s - a.s);
   const hasPrevGa = !!ga?.prevLanding;
-  return `<div class="card"><h2>Search Console + GA4 by page</h2><p class="muted small">${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.scope ? ' · ' + esc(s.scope) : ''}. Pages are matched to GA4 organic landing pages by path.${ga && !hasPrevGa ? ' Run a new analysis to get GA4 comparison numbers.' : ''}</p>
+  return `<div class="card"><h2>Search Console + GA4 by page</h2><p class="muted small">${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.scope ? ' · ' + esc(s.scope) : ''}. Pages are matched to GA4 organic landing pages by path.${ga && !hasPrevGa ? ' Run a new analysis to get GA4 comparison numbers.' : ''}</p>
     ${catView('gscga', list, (x) => x.url, [
       { label: 'Clicks', cur: (x) => x.c, prev: (x) => x.pc }, { label: 'Impressions', cur: (x) => x.i, prev: (x) => x.pi },
       ...(ga ? [{ label: 'Organic sessions', cur: (x) => x.s, prev: (x) => (hasPrevGa ? x.ps : 0) }] : []),
