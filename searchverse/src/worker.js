@@ -11,6 +11,7 @@ const DATA_SCOPES = [
   'https://www.googleapis.com/auth/webmasters.readonly',
   'https://www.googleapis.com/auth/analytics.readonly',
 ].join(' ');
+const MAIL_SCOPES = 'openid email https://www.googleapis.com/auth/gmail.send';
 const SESSION_DAYS = 30;
 const DAY = 86400000;
 
@@ -155,10 +156,10 @@ async function handleAuth(req, env, url) {
   const redirectUri = url.origin + '/auth/callback';
   const path = url.pathname;
 
-  if (path === '/auth/login' || path === '/auth/connect') {
-    const mode = path === '/auth/login' ? 'login' : 'connect';
+  if (path === '/auth/login' || path === '/auth/connect' || path === '/auth/connect-mail') {
+    const mode = path === '/auth/login' ? 'login' : path === '/auth/connect-mail' ? 'mail' : 'connect';
     let email = null;
-    if (mode === 'connect') {
+    if (mode !== 'login') {
       const user = await currentUser(req, env);
       if (!user) return redirect('/');
       if (user.role !== 'admin') return redirect('/#/?error=' + encodeURIComponent('Only admins can connect Google accounts'));
@@ -173,11 +174,12 @@ async function handleAuth(req, env, url) {
       client_id: env.GOOGLE_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: mode === 'login' ? LOGIN_SCOPES : DATA_SCOPES,
+      scope: mode === 'login' ? LOGIN_SCOPES : mode === 'mail' ? MAIL_SCOPES : DATA_SCOPES,
       state,
       prompt: mode === 'login' ? 'select_account' : 'consent select_account',
     });
-    if (mode === 'connect') params.set('access_type', 'offline');
+    if (mode !== 'login') params.set('access_type', 'offline');
+    if (mode === 'mail' && !url.searchParams.get('hint')) params.set('login_hint', email);
     if (url.searchParams.get('hint')) params.set('login_hint', url.searchParams.get('hint'));
     return redirect(`${GOOGLE_AUTH}?${params}`);
   }
@@ -223,6 +225,16 @@ async function handleAuth(req, env, url) {
         .bind(sid, email, now() + SESSION_DAYS * DAY)
         .run();
       return redirect('/#/', { 'set-cookie': sessionCookie(sid, SESSION_DAYS * 86400) });
+    }
+
+    // mail mode: store the admin's own mailbox (gmail.send) for sending invites
+    if (st.mode === 'mail') {
+      if (!(tok.scope || '').includes('gmail.send')) return redirect('/#/settings?error=' + encodeURIComponent('Please tick the "Send email on your behalf" permission on the Google screen.'));
+      if (!tok.refresh_token) return redirect('/#/settings?error=' + encodeURIComponent('Google did not return a refresh token. Remove the app at myaccount.google.com/permissions and connect again.'));
+      await env.DB.prepare(
+        `INSERT OR REPLACE INTO mail_senders (owner_email, google_email, refresh_token_enc, access_token_enc, access_expires, connected_at, expired) VALUES (?, ?, ?, ?, ?, ?, 0)`
+      ).bind(st.email, email, await encrypt(env, tok.refresh_token), await encrypt(env, tok.access_token), now() + (tok.expires_in || 3600) * 1000, now()).run();
+      return redirect('/#/settings?mailconnected=' + encodeURIComponent(email));
     }
 
     // connect mode: store the refresh token for this Google account under the signed-in user
@@ -392,6 +404,7 @@ async function handleApi(req, env, url) {
       user: { email: user.email, name: user.name, picture: user.picture, role: user.role, hasGeminiKey: !!user.gemini_key_enc },
       serverGeminiKey: !!env.GEMINI_API_KEY,
       mailEnabled: !!(env.BREVO_API_KEY && env.MAIL_FROM),
+      mailSender: await env.DB.prepare('SELECT google_email, connected_at, expired FROM mail_senders WHERE owner_email = ?').bind(user.email).first().catch(() => null),
       connections: conns.n,
     });
   }
@@ -1161,9 +1174,52 @@ function inviteText(origin, inviter, projectName, role) {
     text: `Hi,\n\n${inviter} has invited you to ${where} in Searchverse (GA & GSC SEO insights), with ${can}.\n\nHow to open it:\n1. Go to ${origin}\n2. Click "Sign in with Google"\n3. Choose this email address\n\nIf Google says "app not verified", click Continue — it's your team's internal tool.\n\nThanks`,
   };
 }
+// Send from the inviting admin's own Gmail / Workspace mailbox (Gmail API, gmail.send scope).
+async function sendViaGmail(env, inviter, to, t, html) {
+  const ms = await env.DB.prepare('SELECT * FROM mail_senders WHERE owner_email = ? AND expired = 0').bind(inviter).first();
+  if (!ms) return null;
+  let token;
+  if (ms.access_token_enc && ms.access_expires > now() + 60000) token = await decrypt(env, ms.access_token_enc);
+  else {
+    const r = await fetch(GOOGLE_TOKEN, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, refresh_token: await decrypt(env, ms.refresh_token_enc), grant_type: 'refresh_token' }),
+    });
+    const tk = await r.json();
+    if (!r.ok) {
+      if (tk.error === 'invalid_grant') await env.DB.prepare('UPDATE mail_senders SET expired = 1 WHERE owner_email = ?').bind(inviter).run();
+      return { emailed: false, reason: 'Your mailbox connection expired — reconnect it in Settings' };
+    }
+    token = tk.access_token;
+    await env.DB.prepare('UPDATE mail_senders SET access_token_enc = ?, access_expires = ? WHERE owner_email = ?').bind(await encrypt(env, token), now() + tk.expires_in * 1000, inviter).run();
+  }
+  const b64 = (str) => { const bytes = new TextEncoder().encode(str); let bin = ''; for (const x of bytes) bin += String.fromCharCode(x); return btoa(bin); };
+  const boundary = 'sv' + id();
+  const mime = [
+    `From: ${ms.google_email}`, `To: ${to}`, `Subject: =?UTF-8?B?${b64(t.subject)}?=`, 'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`, '',
+    `--${boundary}`, 'Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(t.text),
+    `--${boundary}`, 'Content-Type: text/html; charset="UTF-8"', 'Content-Transfer-Encoding: base64', '', b64(html),
+    `--${boundary}--`,
+  ].join('\r\n');
+  const raw = b64(mime).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ raw }),
+  });
+  if (res.ok) return { emailed: true, via: 'gmail', from: ms.google_email };
+  const err = await res.json().catch(() => ({}));
+  return { emailed: false, reason: 'Gmail: ' + (err.error?.message || res.statusText) };
+}
+
 async function sendInvite(env, origin, to, inviter, projectName, role) {
-  if (!env.BREVO_API_KEY || !env.MAIL_FROM) return { emailed: false, reason: 'not_configured' };
   const t = inviteText(origin, inviter, projectName, role);
+  const html0 = t.text.split('\n').map((l) => (l ? l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(origin, `<a href="${origin}">${origin}</a>`) : '')).join('<br>');
+  const viaGmail = await sendViaGmail(env, inviter, to, t, html0).catch((e) => ({ emailed: false, reason: e.message }));
+  if (viaGmail?.emailed) return viaGmail;
+  if (!env.BREVO_API_KEY || !env.MAIL_FROM) return viaGmail || { emailed: false, reason: 'not_configured' };
   const html = t.text.split('\n').map((l) => (l ? l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(origin, `<a href="${origin}">${origin}</a>`) : '<br>')).join('<br>');
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',

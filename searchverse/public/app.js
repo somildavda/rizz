@@ -242,7 +242,7 @@ function projectCard(p) {
 async function renderSettings(err, p) {
   const me = state.me;
   const { connections } = isAdmin() ? await api('/api/connections') : { connections: null };
-  app.innerHTML = `${err}${p.connected ? `<div class="banner">✅ Connected <b>${esc(p.connected)}</b>. You can now use its Search Console / GA4 properties in projects.</div>` : ''}
+  app.innerHTML = `${err}${p.mailconnected ? `<div class="banner">✅ Invites will now be sent automatically from <b>${esc(p.mailconnected)}</b>.</div>` : ''}${p.connected ? `<div class="banner">✅ Connected <b>${esc(p.connected)}</b>. You can now use its Search Console / GA4 properties in projects.</div>` : ''}
     <h1>Settings</h1>
     <div class="grid g2 section">
       ${connections ? `<div class="card">
@@ -264,14 +264,15 @@ async function renderSettings(err, p) {
       </div>
     </div>`;
   if (isAdmin()) {
-    app.insertAdjacentHTML('beforeend', `<div class="card section"><h2>✉️ Invite emails</h2>${me.mailEnabled
-      ? '<p><span class="pill good">Automatic emails on</span> — new users and project members get an invite email (Brevo free plan, 300/day).</p>'
-      : `<p><span class="pill warn">Using your mail app</span> — when you add someone, your own email app opens with the invite ready to send.</p>
-         <details><summary class="small"><b>Turn on automatic emails (free)</b></summary><ol class="small">
-         <li>Sign up free at <a href="https://www.brevo.com" target="_blank" rel="noopener">brevo.com</a> (no card).</li>
-         <li>Senders, Domains & Dedicated IPs → <b>Senders</b> → add & verify the address emails should come from.</li>
-         <li>SMTP & API → <b>API keys</b> → Generate a new key and copy it.</li>
-         <li>In Terminal (searchverse folder): <code>npx wrangler secret put BREVO_API_KEY</code> (paste key) and <code>npx wrangler secret put MAIL_FROM</code> (type the verified sender email), then <code>npm run deploy</code>.</li></ol></details>`}</div>`);
+    const ms = me.mailSender;
+    const msAge = ms ? Math.floor((Date.now() - ms.connected_at) / 86400000) : 0;
+    app.insertAdjacentHTML('beforeend', `<div class="card section"><h2>✉️ Invite emails</h2>
+      <div class="check"><div style="flex:1"><b>Send from my own mailbox (recommended)</b>
+        <div class="small muted">When you click <b>✉️ Invite</b> or add someone, the invite is sent automatically from your Gmail / Google Workspace address and appears in your Sent folder. Uses Google's “send email on your behalf” permission only — Searchverse can't read your mail.</div>
+        <div style="margin-top:6px">${ms && !ms.expired ? `<span class="pill good">Connected: ${esc(ms.google_email)}</span> <span class="small muted">${7 - msAge > 0 ? `reconnect in ${7 - msAge} day(s) (Google testing mode)` : 'may need reconnecting'}</span>` : ms ? `<span class="pill bad">Expired: ${esc(ms.google_email)}</span>` : '<span class="pill warn">Not connected</span>'}</div></div>
+        <a class="btn ${ms && !ms.expired ? '' : 'primary'}" href="/auth/connect-mail">${ms ? 'Reconnect' : 'Connect my mailbox'}</a></div>
+      <div class="check"><div style="flex:1"><b>Backup: Brevo</b> <span class="small muted">— used if your mailbox isn't connected</span><div style="margin-top:6px">${me.mailEnabled ? '<span class="pill good">On</span>' : '<span class="pill">Not set up</span> <span class="small muted">(optional — see GO-LIVE-GUIDE)</span>'}</div></div></div>
+      <p class="hint">If neither is set up, your own mail app opens with the invite ready to send.</p></div>`);
     app.insertAdjacentHTML('beforeend', `<div class="card section" id="storage-card"><h2>💾 Storage</h2><p class="muted small">Loading…</p></div>`);
     Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => {
       u.retentionDays = r.days;
@@ -305,10 +306,10 @@ function openMailApp(r) {
   location.href = `mailto:${encodeURIComponent(r.to)}?subject=${encodeURIComponent(r.subject)}&body=${encodeURIComponent(r.text)}`;
 }
 async function sendInviteUi(email, projectId, role, alreadySent) {
-  if (alreadySent?.emailed) return toast(`✉️ Invite emailed to ${email}`);
+  if (alreadySent?.emailed) return toast(`✉️ Invite emailed to ${email}${alreadySent.via === 'gmail' ? ` from ${alreadySent.from}` : ''}`);
   try {
     const r = await api('/api/invite', { method: 'POST', body: { email, projectId, role, manualOnly: alreadySent && alreadySent.reason === 'not_configured' } });
-    if (r.emailed) return toast(`✉️ Invite emailed to ${email}`);
+    if (r.emailed) return toast(`✉️ Invite emailed to ${email}${r.via === 'gmail' ? ` from ${r.from}` : ''}`);
     openMailApp(r);
     toast(r.reason === 'not_configured' || r.reason === 'manual' ? 'Opening your mail app with the invite ready — just press Send' : `Auto-email failed (${r.reason}) — opening your mail app instead`, 6000);
   } catch (e) { toast(e.message); }

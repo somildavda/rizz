@@ -182,3 +182,14 @@ CREATE TABLE IF NOT EXISTS ai_checks (
   error TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ai_checks ON ai_checks (project_id, run_at);
+
+-- Admins' own Gmail / Google Workspace mailbox used to send invite emails (gmail.send only)
+CREATE TABLE IF NOT EXISTS mail_senders (
+  owner_email TEXT PRIMARY KEY,
+  google_email TEXT NOT NULL,
+  refresh_token_enc TEXT NOT NULL,
+  access_token_enc TEXT,
+  access_expires INTEGER,
+  connected_at INTEGER,
+  expired INTEGER DEFAULT 0
+);

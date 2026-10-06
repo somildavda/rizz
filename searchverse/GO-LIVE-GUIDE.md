@@ -194,3 +194,9 @@ Without setup, adding a teammate opens your own mail app with the invite ready. 
 1. Sign up free at https://www.brevo.com (no card) → **Senders** → add & verify the sender email.
 2. **SMTP & API → API keys** → generate a key.
 3. In Terminal: `npx wrangler secret put BREVO_API_KEY` (paste key), `npx wrangler secret put MAIL_FROM` (sender email), then `npm run deploy`.
+
+## Send invites automatically from your own mailbox (free, recommended)
+1. Google Cloud → APIs & Services → Library → enable **Gmail API**.
+2. Google Auth Platform → **Data Access** → Add or remove scopes → manually add `https://www.googleapis.com/auth/gmail.send` → Update → Save.
+3. In Searchverse: **Settings → ✉️ Invite emails → Connect my mailbox** → pick your account → allow "Send email on your behalf".
+Invites now go out automatically from your address (they show in your Sent folder). In Testing mode reconnect every 7 days.
