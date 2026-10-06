@@ -580,3 +580,27 @@ export function robotsAccess(txt) {
     return { bot, use, status: full ? 'Blocked' : 'Allowed', rule: (g ? (g.agents.includes('*') && !g.agents.includes(bot.toLowerCase()) ? 'via *' : 'own rules') : 'no rules') + (some && !full ? ' · some paths disallowed' : '') };
   });
 }
+
+// ---------- automatic page categories from the URL path ----------
+// type = what kind of page (Blog, Plans, New connection…), topic = what it's about (postpaid, broadband…)
+const TYPE_RULES = [
+  ['Blog', /\/(blogs?|articles?|news|guides?|learn|stories|insights)(\/|$)/],
+  ['New connection', /new-connection|new_connection|\/(buy|apply|get-new|port-?in)(\/|$)|-sim(\/|$)/],
+  ['Plans', /\/(plans?|tariffs?|packs?)(\/|$)|-(plans?|packs?)(\/|$)/],
+  ['Offers', /\/(offers?|deals?|coupons?|discounts?)(\/|$)/],
+  ['Recharge / pay', /\/(recharge|recharge-online|pay|bill-?pay|pay-?bill|payments?)(\/|$)|recharge/],
+  ['Help / support', /\/(help|support|faqs?|contact|care|customer-care)(\/|$)/],
+  ['Store / product', /\/(store|shop|products?|devices?|phones?)(\/|$)/],
+];
+const SKIP_SEGS = new Set(['blog', 'blogs', 'article', 'articles', 'news', 'guide', 'guides', 'learn', 'stories', 'insights', 'plan', 'plans', 'tariff', 'tariffs', 'pack', 'packs', 'new-connection', 'new_connection', 'buy', 'apply', 'offer', 'offers', 'deal', 'deals', 'recharge', 'recharge-online', 'pay', 'payments', 'help', 'support', 'faq', 'faqs', 'store', 'shop', 'product', 'products', 'explore', 'hi', 'en', 'in', 'amp', 'other']);
+export function catOf(u) {
+  let path = '/';
+  try { path = new URL(u).pathname.toLowerCase(); } catch { path = String(u || '/').toLowerCase(); }
+  if (path === '/' || path === '') return { type: 'Home', topic: 'home', label: 'Home' };
+  const type = TYPE_RULES.find(([, re]) => re.test(path))?.[0] || 'Landing';
+  const segs = path.split('/').filter(Boolean).filter((x) => !SKIP_SEGS.has(x) && !/^\d+$/.test(x));
+  const first = segs[0] || path.split('/').filter(Boolean)[0] || 'other';
+  const topic = first.split(/[-_.]/).filter((w) => w && !['other', 'online', 'best', 'new', 'all', 'my'].includes(w))[0] || first;
+  const shown = type === 'Landing' && path.split('/').filter(Boolean).length === 1 ? 'Landing (generic)' : type;
+  return { type: shown, topic, label: `${shown} · ${topic}` };
+}

@@ -1,4 +1,4 @@
-import { analyzePage, opportunities, siteChecks, overallScores, missingSpots, lobMatcher, brandTester, brandSplit, internalLinkPlan, robotsAccess } from './analyzer.js';
+import { analyzePage, opportunities, siteChecks, overallScores, missingSpots, lobMatcher, brandTester, brandSplit, internalLinkPlan, robotsAccess, catOf } from './analyzer.js';
 
 const app = document.getElementById('app');
 const state = { me: null };
@@ -1268,7 +1268,11 @@ async function renderUrls(pid, params) {
       ${hasLead ? tile(`Leads (${esc(project.lead_event)})`, sum('ld'), sum('pld')) : ''}
     </div>
     ${project.brand_terms ? `<div class="small muted" style="margin-top:6px">Branded = queries containing ${esc(project.brand_terms)} · non-branded share of clicks: <b>${pct(bs.nonBranded.c / Math.max(1, bs.nonBranded.c + bs.branded.c))}</b>${groupIds.length ? ' · query split is for the selected LOB URLs' : ''}</div>` : ''}
-    <div class="card section">${table([
+    <div class="card section">${catView('urls', list, (x) => x.url, [
+      { label: 'Clicks', cur: (x) => x.c, prev: (x) => x.pc }, { label: 'Impressions', cur: (x) => x.i, prev: (x) => x.pi },
+      ...(hasGa ? [{ label: 'Organic sessions', cur: (x) => x.s, prev: (x) => x.ps }] : []),
+    ], (list) => table([
+      { key: 'cat', label: 'Category', render: (x) => `<span class="small">${esc(x.__cat.label)}</span>`, sort: (x) => x.__cat.label },
       { key: 'path', label: 'URL', render: (x) => `<span class="url">${esc(x.path)}</span>${x.lob ? `<div class="small muted">${esc(x.lob)}</div>` : ''}`, text: (x) => x.path + ' ' + x.lob },
       { key: 'c', label: 'Clicks', num: 1, render: (x) => cell(x.c, x.pc) },
       { key: 'i', label: 'Impr.', num: 1, render: (x) => cell(x.i, x.pi) },
@@ -1283,7 +1287,7 @@ async function renderUrls(pid, params) {
         { key: 'ke', label: 'Key events', num: 1, render: (x) => cell(x.ke, x.pke) },
       ] : []),
       ...(hasLead ? [{ key: 'ld', label: 'Leads', num: 1, render: (x) => cell(x.ld, x.pld) }] : []),
-    ], list, { limit: 1000, onRow: (x) => urlQueries(pid, project, x, per, prev, isBranded) })}
+    ], list, { limit: 1000, onRow: (x) => urlQueries(pid, project, x, per, prev, isBranded) }))}
     <p class="hint">${fmt(list.length)} URLs. Click a URL to see all its queries (branded vs non-branded). GSC URLs are matched to GA4 organic landing pages by path (GA4 = Organic Search only). ${hasGa ? 'Returning users = total users − new users.' : ''}</p></div>`;
 
   document.getElementById('u-csv').onclick = () => {
@@ -1874,6 +1878,58 @@ function viewGeo(run, pages) {
     ], ok, { limit: 1000, onRow: (p) => pageDetail(p, run) })}</div>
     <div id="aivis"><div class="card section muted">Loading AI answer visibility…</div></div>`;
 }
+// ---------- category filters (type · topic · top N) + "by category" summary ----------
+const catState = {};
+function catView(key, rows, urlOf, sums, renderTable) {
+  const st = (catState[key] ||= { type: '', topic: '', top: '' });
+  for (const r of rows) r.__cat ||= catOf(urlOf(r));
+  const main = sums[0];
+  const inFilter = (r) => (!st.type || r.__cat.type === st.type) && (!st.topic || r.__cat.topic === st.topic);
+  const filtered = () => {
+    const f = rows.filter(inFilter).sort((a, b) => (main.cur(b) || 0) - (main.cur(a) || 0));
+    return st.top ? f.slice(0, +st.top) : f;
+  };
+  const opts = (vals, cur, all) => `<option value="">${all}</option>` + vals.map(([v, n]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(v)} (${n})</option>`).join('');
+  const countBy = (fn, list) => { const m = {}; for (const r of list) { const k = fn(r); (m[k] ||= { n: 0, v: 0 }); m[k].n++; m[k].v += main.cur(r) || 0; } return Object.entries(m).sort((a, b) => b[1].v - a[1].v).map(([k, x]) => [k, x.n]); };
+  const summary = () => {
+    const g = {};
+    for (const r of rows.filter(inFilter)) {
+      const k = r.__cat.label;
+      const t = (g[k] ||= { label: k, type: r.__cat.type, topic: r.__cat.topic, n: 0, v: sums.map(() => [0, 0]) });
+      t.n++;
+      sums.forEach((s, i) => { t.v[i][0] += s.cur(r) || 0; t.v[i][1] += s.prev ? s.prev(r) || 0 : 0; });
+    }
+    const list = Object.values(g).sort((a, b) => b.v[0][0] - a.v[0][0]);
+    return `<details ${list.length > 1 ? 'open' : ''}><summary class="small"><b>By category</b> <span class="muted">(${list.length}) — click a row to filter</span></summary>
+      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Category</th><th class="num">Pages</th>${sums.map((s) => `<th class="num">${esc(s.label)}</th>`).join('')}</tr></thead><tbody>
+      ${list.slice(0, 60).map((t) => `<tr class="click" data-catpick="${esc(t.type)}|${esc(t.topic)}"><td><b>${esc(t.type)}</b> · ${esc(t.topic)}</td><td class="num">${fmt(t.n)}</td>${t.v.map(([c, p], i) => `<td class="num">${sums[i].prev ? dcell(c, p) : fmt(c)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div></details>`;
+  };
+  const bar = () => `<div class="row" style="margin-bottom:10px">
+      <select data-cv="type" style="width:auto">${opts(countBy((r) => r.__cat.type, rows), st.type, 'All page types')}</select>
+      <select data-cv="topic" style="width:auto">${opts(countBy((r) => r.__cat.topic, rows.filter((r) => !st.type || r.__cat.type === st.type)), st.topic, 'All topics')}</select>
+      <select data-cv="top" style="width:auto">${[['', 'All pages'], ...[3, 5, 10, 25, 50, 100, 250].map((n) => [String(n), `Top ${n} by ${main.label.toLowerCase()}`])].map(([v, l]) => `<option value="${v}" ${v === st.top ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${st.type || st.topic || st.top ? '<button class="btn sm" data-cv="reset">Clear filters</button>' : ''}
+      <span class="small muted">${fmt(filtered().length)} of ${fmt(rows.length)} pages</span></div>`;
+  const draw = () => {
+    const root = document.getElementById('cv-' + key);
+    if (!root) return;
+    root.querySelector('.cv-bar').innerHTML = bar();
+    root.querySelector('.cv-sum').innerHTML = summary();
+    root.querySelector('.cv-tab').innerHTML = renderTable(filtered());
+    bind();
+  };
+  const bind = () => {
+    const root = document.getElementById('cv-' + key);
+    if (!root) return;
+    root.querySelectorAll('select[data-cv]').forEach((el) => (el.onchange = () => { st[el.dataset.cv] = el.value; if (el.dataset.cv === 'type') st.topic = ''; draw(); }));
+    root.querySelector('[data-cv="reset"]')?.addEventListener('click', () => { st.type = st.topic = st.top = ''; draw(); });
+    root.querySelectorAll('[data-catpick]').forEach((el) => (el.onclick = () => { [st.type, st.topic] = el.dataset.catpick.split('|'); draw(); }));
+  };
+  setTimeout(bind);
+  return `<div id="cv-${key}"><div class="cv-bar">${bar()}</div><div class="cv-sum card" style="padding:12px;margin-bottom:12px;box-shadow:none">${summary()}</div><div class="cv-tab">${renderTable(filtered())}</div></div>`;
+}
+
 // ---------- AI answer visibility (Gemini + Google Search grounding) ----------
 const dom = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 async function loadAiVisibility(pid, run, pages) {
@@ -2057,8 +2113,11 @@ function viewGscGa(run, pages, project) {
     .sort((a, b) => b.c - a.c || b.s - a.s);
   const hasPrevGa = !!ga?.prevLanding;
   return `<div class="card"><h2>Search Console + GA4 by page</h2><p class="muted small">${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.scope ? ' · ' + esc(s.scope) : ''}. Pages are matched to GA4 organic landing pages by path.${ga && !hasPrevGa ? ' Run a new analysis to get GA4 comparison numbers.' : ''}</p>
-    ${table([
-      { key: 'path', label: 'Page', render: (x) => `${x.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(x.path)}</span>`, text: (x) => x.path + (x.money ? ' money' : '') },
+    ${catView('gscga', list, (x) => x.url, [
+      { label: 'Clicks', cur: (x) => x.c, prev: (x) => x.pc }, { label: 'Impressions', cur: (x) => x.i, prev: (x) => x.pi },
+      ...(ga ? [{ label: 'Organic sessions', cur: (x) => x.s, prev: (x) => (hasPrevGa ? x.ps : 0) }] : []),
+    ], (list) => table([
+      { key: 'path', label: 'Page', render: (x) => `${x.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(x.path)}</span><div class="small muted">${esc(x.__cat.label)}</div>`, text: (x) => x.path + ' ' + x.__cat.label + (x.money ? ' money' : '') },
       { key: 'c', label: 'Clicks', num: 1, render: (x) => dcell(x.c, x.pc) },
       { key: 'i', label: 'Impr.', num: 1, render: (x) => dcell(x.i, x.pi) },
       { key: 'p', label: 'Pos', num: 1, render: (x) => dcell(x.p, x.pp, (v) => fmt(v, 1), { invert: true }), sort: (x) => x.p ?? 999 },
@@ -2070,7 +2129,7 @@ function viewGscGa(run, pages, project) {
       ] : []),
       { key: 'onpage', label: 'On-page', num: 1, render: (x) => (x.onpage == null ? '<span class="muted">–</span>' : `<span class="pill ${pillFor(x.onpage)}">${x.onpage}</span>`), sort: (x) => x.onpage ?? -1 },
     ], list, { limit: 1000, onRow: (x) => urlQueries(project.id, project, { url: x.url, lob: '', ga: x.s ? 1 : null, s: x.s, br: x.br, ke: x.ke },
-      { start: run.start_date, end: run.end_date }, { start: run.prev_start, end: run.prev_end }, brandTester(s.brand?.terms || project.brand_terms)) })}
+      { start: run.start_date, end: run.end_date }, { start: run.prev_start, end: run.prev_end }, brandTester(s.brand?.terms || project.brand_terms)) }))}
     <p class="hint">Click a page to see its queries (non-branded first).</p></div>`;
 }
 
@@ -2177,7 +2236,10 @@ function viewMajor(run, pages) {
 
 
 function viewPages(pages, project, run) {
-  return `<div class="card">${table([
+  return `<div class="card">${catView('pages', pages, (p) => p.url, [
+    { label: 'Clicks', cur: (p) => p.gsc?.c }, { label: 'Impressions', cur: (p) => p.gsc?.i },
+  ], (pages) => table([
+    { key: 'cat', label: 'Category', render: (p) => `<span class="small">${esc(p.__cat.label)}</span>`, sort: (p) => p.__cat.label },
     { key: 'url', label: 'Page', render: (p) => `${p.money ? '<span class="pill warn" title="Money page">💰 money</span> ' : ''}<span class="url" style="display:inline-block;vertical-align:middle">${esc(shortUrl(p.url))}</span>`, text: (p) => (p.money ? 'money ' : '') + p.url, sort: (p) => (p.money ? 'a' : 'b') + p.url },
     { key: 'onpage_score', label: 'On-page', num: 1, render: (p) => `<span class="pill ${pillFor(p.onpage_score)}">${p.onpage_score}</span>` },
     { key: 'content_score', label: 'Content', num: 1, render: (p) => `<span class="pill ${pillFor(p.content_score)}">${p.content_score}</span>` },
@@ -2186,7 +2248,7 @@ function viewPages(pages, project, run) {
     { key: 'pos', label: 'Pos', num: 1, render: (p) => fmt(p.gsc?.p, 1), sort: (p) => p.gsc?.p || 999 },
     { key: 'sessions', label: 'Org. sessions', num: 1, render: (p) => fmt(p.ga?.sessions), sort: (p) => p.ga?.sessions || 0 },
     { key: 'issues', label: 'Issues', num: 1, render: (p) => p.checks.filter((c) => c.val < 1).length, sort: (p) => p.checks.filter((c) => c.val < 1).length },
-  ], pages, { onRow: (p) => pageDetail(p, run), limit: 1000 })}<p class="hint">Click a page for the full audit and query coverage. Type <b>money</b> in the filter to see only money pages.</p></div>`;
+  ], pages, { onRow: (p) => pageDetail(p, run), limit: 1000 }))}<p class="hint">Click a page for the full audit and query coverage. Type <b>money</b> in the filter to see only money pages.</p></div>`;
 }
 
 function pageDetail(p, run) {
