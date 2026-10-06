@@ -824,8 +824,9 @@ async function runAnalysis(project, opt) {
     const pageGeo = geoPages.length ? geoPages.reduce((t, p) => t + p.geo.score * gw(p), 0) / geoPages.reduce((t, p) => t + gw(p), 0) : 0;
     const crawlers = robotsAccess(robots.status === 200 ? robots.html : '');
     const trust = {
-      about: !!home?.meta?.trustLinks?.about, contact: !!home?.meta?.trustLinks?.contact, privacy: !!home?.meta?.trustLinks?.privacy,
-      orgSchema: (home?.meta?.schemaTypes || []).some((t) => /Organization|Corporation|LocalBusiness/i.test(t)), sameAs: home?.meta?.sameAs || 0,
+      // any crawled page counts (the homepage may be client-rendered)
+      about: geoPages.some((p) => p.meta?.trustLinks?.about), contact: geoPages.some((p) => p.meta?.trustLinks?.contact), privacy: geoPages.some((p) => p.meta?.trustLinks?.privacy),
+      orgSchema: geoPages.some((p) => (p.meta?.schemaTypes || []).some((t) => /Organization|Corporation|LocalBusiness/i.test(t))), sameAs: Math.max(0, ...geoPages.map((p) => p.meta?.sameAs || 0)),
     };
     const keyBots = crawlers.filter((c) => ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'PerplexityBot', 'Claude-SearchBot'].includes(c.bot));
     const siteGeo = (keyBots.filter((c) => c.status === 'Allowed').length / keyBots.length) * 50 + (trust.about + trust.contact + trust.privacy + trust.orgSchema) * 10 + (trust.sameAs ? 10 : 0);
@@ -1407,7 +1408,7 @@ function renderRun(project, { run, pages }, runs, head) {
   CMP.cur = periodLabel(run.start_date, run.end_date); CMP.prev = periodLabel(run.prev_start, run.prev_end);
   pages.sort((a, b) => (b.gsc?.c || 0) - (a.gsc?.c || 0) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
-  const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Pages', 'Technical', 'History'];
+  const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
     <div class="muted small" style="margin-top:6px">Data ${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
@@ -1437,6 +1438,7 @@ function renderRun(project, { run, pages }, runs, head) {
     'Quick wins': () => viewQuick(s.opps, pages),
     'Major optimisations': () => viewMajor(run, pages),
     'AI search & GEO': () => viewGeo(run, pages),
+    Rendering: () => viewRendering(run, pages),
     Pages: () => viewPages(pages, project, run),
     Technical: () => viewTechnical(s.site, pages),
     History: () => viewHistory(runs, project),
@@ -1511,25 +1513,26 @@ const pageLink = (u, pages) => (pages.some((p) => p.url === u) ? `<a href="#" da
 
 function viewInsights(project, run, pages) {
   const ai = run.ai;
+  insightCtx = { run, pages, project };
   const btn = (label, cls) => (canRun(project) ? `<button class="btn ${cls}" id="ai-retry">${label}</button>` : '');
   if (!ai) return `<div class="card center"><h2>No AI analysis yet</h2><p class="muted">Uses the free Gemini key in Settings, with Cloudflare AI as backup.</p>${btn('Generate AI analysis', 'primary')}</div>`;
   const has = (a) => Array.isArray(a) && a.length;
   const urls = (list) => (has(list) ? `<div class="small">${list.filter(Boolean).map((u) => (/^https?:|^\//.test(u) ? pageLink(u.startsWith('/') ? new URL(u, project.site_url).href : u, pages) : esc(u))).join(' · ')}</div>` : '');
   const chips = (list) => (has(list) ? `<div class="small muted">${list.map(esc).join(' · ')}</div>` : '');
-  const block = (title, icon, color, items, render) => (has(items) ? `<div class="card section rv" style="border-top:4px solid ${color}"><h2>${icon} ${title}</h2>${items.map(render).join('')}</div>` : '');
-  const pt = (x) => `<div class="rv-item"><p><b>${esc(x.point || x.title || '')}</b></p>${x.evidence ? `<p class="small">📊 ${esc(x.evidence)}</p>` : ''}${x.likely_cause ? `<p class="small">🔍 <b>Likely cause:</b> ${esc(x.likely_cause)}</p>` : ''}${chips(x.queries)}${urls(x.pages)}</div>`;
+  const block = (title, icon, color, items, render, sec) => (has(items) ? `<div class="card section rv" style="border-top:4px solid ${color}"><h2>${icon} ${title}</h2><ul class="bullets">${items.map((x, i) => render(x, sec, i)).join('')}</ul></div>` : '');
+  const pt = (x, sec, i) => `<li class="bullet click" data-ins="${sec}:${i}"><b>${esc(x.point || x.title || '')}</b>${x.evidence ? `<div class="small muted">${esc(x.evidence)}</div>` : ''}<div class="small"><span class="link">${(x.pages || []).length ? `${x.pages.length} page${x.pages.length > 1 ? 's' : ''}` : 'pages'} · ${(x.queries || []).length ? `${x.queries.length} quer${x.queries.length > 1 ? 'ies' : 'y'}` : 'queries'} →</span></div></li>`;
   const ap = ai.action_plan || {};
   const owner = (o) => `<span class="pill ${o === 'dev' ? 'bad' : o === 'content' ? 'warn' : 'info'}">${esc(o || 'seo')}</span>`;
   const structured = has(ai.what_went_well) || has(ai.what_didnt_work) || ai.action_plan;
   return `<div class="card"><div class="row spread"><h2 style="margin:0">Summary</h2><span class="pill ${ai.health === 'good' ? 'good' : ai.health === 'poor' ? 'bad' : 'warn'}">${esc((ai.health || '').replace('_', ' '))}</span></div>
       <p>${esc(ai.summary)}</p>
       <div class="row spread small muted"><span>${run.start_date} → ${run.end_date} vs ${run.prev_start} → ${run.prev_end} · generated ${ai.generated_at ? date(ai.generated_at) : ''} by ${esc(ai.provider || 'Gemini')}</span>${btn('Regenerate', 'sm')}</div></div>
-    ${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
+    ${structured ? '<p class="small muted section">Click any bullet to see the pages and queries behind it.</p>' : ''}${structured ? '' : '<div class="banner section">This analysis uses the old format — click <b>Regenerate</b> for the new "What went well / didn\'t work / Action plan" report.</div>'}
     <div class="grid g2">
-      ${block('What went well', '✅', 'var(--good)', ai.what_went_well, pt)}
-      ${block('How we achieved it', '🏗️', 'var(--primary)', ai.how_we_achieved_it, pt)}
-      ${block("What didn't work", '⚠️', 'var(--bad)', ai.what_didnt_work, pt)}
-      ${block('How we can improve', '📈', 'var(--warn)', ai.how_to_improve, pt)}
+      ${block('What went well', '✅', 'var(--good)', ai.what_went_well, pt, 'what_went_well')}
+      ${block('How we achieved it', '🏗️', 'var(--primary)', ai.how_we_achieved_it, pt, 'how_we_achieved_it')}
+      ${block("What didn't work", '⚠️', 'var(--bad)', ai.what_didnt_work, pt, 'what_didnt_work')}
+      ${block('How we can improve', '📈', 'var(--warn)', ai.how_to_improve, pt, 'how_to_improve')}
     </div>
     ${Array.isArray(ai.action_plan) && ai.action_plan.length ? `<div class="card section"><h2>📋 Action plan</h2>${ai.action_plan.map((area, i) => `<h3 class="ap-h">${i + 1}. ${esc(area.area)}</h3>
       ${(area.items || []).map((t) => `<div class="check"><span class="pill ${t.priority === 'high' ? 'bad' : t.priority === 'medium' ? 'warn' : ''}" style="flex:none">${esc(t.priority || '')}</span><div style="flex:1"><b>${esc(t.task)}</b> ${owner(t.owner)}${t.evidence ? `<div class="small muted">📊 ${esc(t.evidence)}</div>` : ''}${urls(t.urls)}
@@ -1823,7 +1826,20 @@ function viewGeo(run, pages) {
   const ai = run.ai?.ai_search_geo || [];
   const st = (s) => `<span class="pill ${s === 'Allowed' ? 'good' : s === 'Blocked' ? 'bad' : 'warn'}">${s}</span>`;
   const tick = (v) => mark(v ? 1 : 0);
-  setTimeout(() => loadAiVisibility(run.project_id, run, pages));
+  setTimeout(() => {
+    loadAiVisibility(run.project_id, run, pages);
+    const sigs = trustSignals(pages);
+    document.querySelectorAll('[data-trust]').forEach((el) => (el.onclick = () => {
+      const t = sigs.find((x) => x.id === el.dataset.trust);
+      openDrawer(`<h2>${esc(t.label)}</h2><p><b>${t.have}/${t.n}</b> crawled pages have it · <b>${t.missing.length}</b> missing</p>
+        <div class="banner">🛠️ <b>Fix:</b> ${esc(t.fix)}</div>
+        <div class="card section"><h3>Pages missing it (money pages & most impressions first)</h3>${table([
+          { key: 'url', label: 'Page', render: (p) => `${p.money ? '💰 ' : ''}${pageLink(p.url, pages)}` },
+          { key: 'i', label: 'Impr.', num: 1, render: (p) => fmt(p.gsc?.i), sort: (p) => p.gsc?.i || 0 },
+          { key: 'r', label: 'Rendering', render: (p) => esc(p.meta.renderMode || '') },
+        ], t.missing, { filter: false, limit: 500 })}${t.missing.some((p) => p.meta.renderMode === 'CSR') ? '<p class="hint">Some of these are client-rendered — the link/schema may exist after JavaScript runs but bots reading raw HTML won’t see it.</p>' : ''}</div>`);
+    }));
+  });
   return `<div class="card"><div class="scores">
       <div class="score">${ring(g.score, true)}<div><b>AI search readiness</b><div class="muted small">How easily AI Overviews, AI Mode, ChatGPT, Perplexity & Copilot can read, trust and quote your pages</div></div></div>
       <div class="score">${ring(g.pageScore)}<div><b>Page content</b><div class="muted small">Answer-ready structure, freshness, authorship, facts</div></div></div>
@@ -1837,7 +1853,8 @@ function viewGeo(run, pages) {
         { key: 'rule', label: 'Rule', render: (c) => `<span class="small muted">${esc(c.rule)}</span>` },
       ], g.crawlers, { filter: false })}<p class="hint">Blocking Googlebot removes you from Search <i>and</i> AI Overviews. Blocking Google-Extended only opts out of Gemini training. llms.txt: <b>${g.llms}</b> — Google Search ignores llms.txt; some other AI tools read it.</p></div>
       <div class="card"><h2>Trust signals (E-E-A-T)</h2>
-        ${[['About page linked from homepage', g.trust.about], ['Contact / support linked', g.trust.contact], ['Privacy policy linked', g.trust.privacy], ['Organization schema on homepage', g.trust.orgSchema], [`sameAs profiles in schema (${g.trust.sameAs})`, g.trust.sameAs > 0]].map(([l, v]) => `<div class="check"><span>${tick(v)}</span><div>${esc(l)}</div></div>`).join('')}
+        <p class="small muted">Checked on every crawled page. Click a signal to see which pages are missing it.</p>
+        ${trustSignals(pages).map((t) => `<div class="check click" data-trust="${t.id}"><span class="pill ${pillFor((t.have / Math.max(1, t.n)) * 100)}" style="flex:none">${t.have}/${t.n}</span><div style="flex:1"><div>${esc(t.label)}</div><div class="small muted">${t.missing.length ? `missing on ${t.missing.length} page${t.missing.length > 1 ? 's' : ''} →` : 'all pages ✓'}</div></div></div>`).join('')}
         <p class="hint">Google weighs <b>Trust</b> highest in E-E-A-T. FAQ rich results were retired in May 2026 — keep FAQ sections for readers and AI answers, not for rich snippets.</p></div>
     </div>
     <div class="card section"><h2>Readiness checklist across crawled pages</h2>${table([
@@ -1927,6 +1944,101 @@ async function loadAiVisibility(pid, run, pages) {
 function geoSection(p) {
   if (!p.geo) return '';
   return `<div class="card section"><h3>🤖 AI search readiness — ${p.geo.score}/100</h3>${p.geo.checks.map((c) => `<div class="check"><span class="dot ${c.val >= 1 ? 'good' : c.val > 0 ? 'warn' : 'bad'}">${c.val >= 1 ? '✓' : c.val > 0 ? '!' : '✗'}</span><div><div>${esc(c.label)}</div><div class="small muted">${esc(c.detail)}</div></div></div>`).join('')}</div>`;
+}
+
+// ---------- Insights: clickable bullets → the pages & queries behind each point ----------
+let insightCtx = null;
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-ins]');
+  if (!el || !insightCtx) return;
+  e.preventDefault();
+  const [sec, i] = el.dataset.ins.split(':');
+  insightDrawer(sec, insightCtx.run.ai?.[sec]?.[+i] || {}, insightCtx.run, insightCtx.pages, insightCtx.project);
+});
+const SEC_TITLE = { what_went_well: '✅ What went well', how_we_achieved_it: '🏗️ How we achieved it', what_didnt_work: "⚠️ What didn't work", how_to_improve: '📈 How we can improve' };
+function insightDrawer(sec, item, run, pages, project) {
+  const g = run.gsc || {};
+  const pathOf = (u) => { try { return new URL(u, project.site_url).pathname.replace(/\/$/, '') || '/'; } catch { return u; } };
+  const byPath = (list) => { const m = {}; for (const r of list || []) { const k = pathOf(r.u); (m[k] ||= { c: 0, i: 0, pw: 0, u: r.u }); m[k].c += r.c; m[k].i += r.i; m[k].pw += r.p * r.i; } return m; };
+  const cur = byPath(g.pages), prev = byPath(g.prevPages);
+  const crawled = Object.fromEntries(pages.map((p) => [pathOf(p.url), p]));
+  const qCur = Object.fromEntries((g.queries || []).map((q) => [q.q.toLowerCase(), q])), qPrev = Object.fromEntries((g.prevQueries || []).map((q) => [q.q.toLowerCase(), q]));
+  const m = run.summary ? moversFor(run, pages) : null;
+  // pages/queries named by the AI; if it named none, fall back to the matching data (gainers, losers or weak pages)
+  let urls = (item.pages || []).filter(Boolean);
+  let qs = (item.queries || []).filter(Boolean);
+  if (!urls.length && m) urls = (sec === 'what_didnt_work' ? m.pagesDown : sec === 'how_to_improve' ? pages.filter((p) => p.content_score < 60).sort((a, b) => (b.gsc?.i || 0) - (a.gsc?.i || 0)).map((p) => ({ k: p.url })) : m.pagesUp).slice(0, 15).map((r) => r.k);
+  if (!qs.length && m) qs = (sec === 'what_didnt_work' ? m.queriesDown : m.queriesUp).filter((r) => !r.b).slice(0, 15).map((r) => r.k);
+  const prows = urls.map((u) => { const k = pathOf(u), c = cur[k], p = prev[k], cp = crawled[k]; return { u: c?.u || new URL(u, project.site_url).href, c: c?.c ?? null, pc: p?.c ?? null, i: c?.i ?? null, pos: c?.i ? c.pw / c.i : null, ppos: p?.i ? p.pw / p.i : null, on: cp?.onpage_score ?? null, ct: cp?.content_score ?? null }; });
+  const qrows = qs.map((q) => { const c = qCur[q.toLowerCase()], p = qPrev[q.toLowerCase()]; return { q, c: c?.c ?? null, pc: p?.c ?? null, i: c?.i ?? null, pos: c?.p ?? null, ppos: p?.p ?? null }; });
+  openDrawer(`<div class="small muted">${SEC_TITLE[sec] || ''} · ${esc(CMP.cur)} vs ${esc(CMP.prev)}</div><h2>${esc(item.point || '')}</h2>
+    ${item.evidence ? `<p>📊 ${esc(item.evidence)}</p>` : ''}${item.likely_cause ? `<p>🔍 <b>Likely cause:</b> ${esc(item.likely_cause)}</p>` : ''}
+    <div class="card section"><h3>Pages (${prows.length})</h3>${table([
+      { key: 'u', label: 'Page', render: (r) => pageLink(r.u, pages) },
+      { key: 'c', label: `Clicks ${esc(CMP.cur)}`, num: 1, render: (r) => fmt(r.c) },
+      { key: 'pc', label: esc(CMP.prev), num: 1, render: (r) => `<span class="muted">${fmt(r.pc)}</span>` },
+      { key: 'd', label: 'Δ', num: 1, render: (r) => delta(r.c, r.pc), sort: (r) => (r.c || 0) - (r.pc || 0) },
+      { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)} <span class="small muted">(${fmt(r.ppos, 1)})</span>` },
+      { key: 'on', label: 'On-page', num: 1, render: (r) => (r.on == null ? '–' : `<span class="pill ${pillFor(r.on)}">${r.on}</span>`) },
+      { key: 'ct', label: 'Content', num: 1, render: (r) => (r.ct == null ? '–' : `<span class="pill ${pillFor(r.ct)}">${r.ct}</span>`) },
+    ], prows, { filter: false })}</div>
+    <div class="card section"><h3>Queries (${qrows.length})</h3>${table([
+      { key: 'q', label: 'Query', render: (r) => `<b>${esc(r.q)}</b>` },
+      { key: 'c', label: `Clicks ${esc(CMP.cur)}`, num: 1, render: (r) => fmt(r.c) },
+      { key: 'pc', label: esc(CMP.prev), num: 1, render: (r) => `<span class="muted">${fmt(r.pc)}</span>` },
+      { key: 'd', label: 'Δ', num: 1, render: (r) => delta(r.c, r.pc), sort: (r) => (r.c || 0) - (r.pc || 0) },
+      { key: 'i', label: 'Impr.', num: 1, render: (r) => fmt(r.i) },
+      { key: 'pos', label: 'Pos', num: 1, render: (r) => `${fmt(r.pos, 1)} <span class="small muted">(${fmt(r.ppos, 1)})</span>` },
+    ], qrows, { filter: false })}${item.pages?.length || item.queries?.length ? '' : '<p class="hint">The AI named no specific pages/queries here, so this shows the matching gainers/losers from the data.</p>'}</div>`);
+}
+
+// ---------- Rendering: SSR vs CSR ----------
+function viewRendering(run, pages) {
+  const ok = pages.filter((p) => p.meta?.renderMode);
+  if (!ok.length) return '<div class="card center"><h2>Run a new analysis</h2><p class="muted">Rendering is checked during the crawl.</p></div>';
+  const by = {};
+  for (const p of ok) { const t = (by[p.meta.renderMode] ||= { n: 0, c: 0, i: 0, money: 0 }); t.n++; t.c += p.gsc?.c || 0; t.i += p.gsc?.i || 0; if (p.money) t.money++; }
+  const fw = {};
+  for (const p of ok) fw[p.meta.framework || 'None detected'] = (fw[p.meta.framework || 'None detected'] || 0) + 1;
+  const csr = ok.filter((p) => p.meta.renderMode === 'CSR').sort((a, b) => (b.money - a.money) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
+  const totI = ok.reduce((t, p) => t + (p.gsc?.i || 0), 0) || 1;
+  const pill = (m) => `<span class="pill ${m === 'CSR' ? 'bad' : m === 'SSR (framework)' ? 'info' : 'good'}">${esc(m)}</span>`;
+  return `<div class="grid kpis">${['SSR / static', 'SSR (framework)', 'CSR'].map((m) => `<div class="card kpi"><div class="label">${pill(m)}</div><div class="value">${fmt(by[m]?.n || 0)}</div><span class="small muted">${pct((by[m]?.i || 0) / totI)} of impressions${by[m]?.money ? ` · 💰${by[m].money}` : ''}</span></div>`).join('')}</div>
+    <div class="card section"><h2>What this means</h2>
+      <ul class="small"><li><b>SSR / static</b> — the content is in the HTML Google and AI crawlers receive. ✅ Best.</li>
+      <li><b>SSR (framework)</b> — a JavaScript framework (${esc(Object.keys(fw).filter((k) => k !== 'None detected').join(', ') || 'e.g. Next.js')}) that still sends the content in the HTML. ✅ Fine.</li>
+      <li><b>CSR</b> — the HTML is nearly empty and the content appears only after JavaScript runs. Google renders it later (slower, less reliable); most AI crawlers (ChatGPT, Perplexity, Claude) don't run JavaScript at all, so they see an empty page. ❌ Needs dev work.</li></ul>
+      <p class="small">Frameworks seen: ${Object.entries(fw).map(([k, v]) => `<span class="pill">${esc(k)} · ${v}</span>`).join(' ')}</p></div>
+    ${csr.length ? `<div class="card section"><h2>❌ Client-rendered pages to fix (${csr.length})</h2>
+      <p class="small"><b>Fix (dev):</b> switch these templates to server-side rendering or static generation (e.g. Next.js SSR/SSG), or add pre-rendering for bots; make sure title, H1, main copy and internal links are in the first HTML response. <b>Check it worked:</b> “View source” shows the text, and this tab moves the page to SSR on the next run.</p>
+      ${table([{ key: 'url', label: 'Page', render: (p) => `${p.money ? '💰 ' : ''}${pageLink(p.url, pages)}` }, { key: 'i', label: 'Impr.', num: 1, render: (p) => fmt(p.gsc?.i), sort: (p) => p.gsc?.i || 0 }, { key: 'c', label: 'Clicks', num: 1, render: (p) => fmt(p.gsc?.c), sort: (p) => p.gsc?.c || 0 }, { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta.wordCount) }, { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta.scripts) }, { key: 'f', label: 'Framework', render: (p) => esc(p.meta.framework || '–') }], csr, { filter: false })}</div>`
+      : '<div class="card section center"><h2>🎉 No client-rendered pages found</h2><p class="muted">All crawled pages send their content in the HTML.</p></div>'}
+    <div class="card section"><h2>All crawled pages</h2>${table([
+      { key: 'url', label: 'Page', render: (p) => `${p.money ? '💰 ' : ''}<span class="url" style="display:inline-block">${esc(shortUrl(p.url))}</span>`, text: (p) => p.url + ' ' + p.meta.renderMode },
+      { key: 'm', label: 'Rendering', render: (p) => pill(p.meta.renderMode), sort: (p) => p.meta.renderMode },
+      { key: 'f', label: 'Framework', render: (p) => esc(p.meta.framework || '–') },
+      { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta.wordCount), sort: (p) => p.meta.wordCount },
+      { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta.scripts), sort: (p) => p.meta.scripts },
+      { key: 'i', label: 'Impr.', num: 1, render: (p) => fmt(p.gsc?.i), sort: (p) => p.gsc?.i || 0 },
+    ], ok, { limit: 1000, onRow: (p) => pageDetail(p, run) })}</div>`;
+}
+
+// ---------- Trust signals per page ----------
+function trustSignals(pages) {
+  const ok = pages.filter((p) => p.meta);
+  const sig = [
+    ['about', 'About page linked', (p) => p.meta.trustLinks?.about, 'Add an “About us” link to the global footer (and header if possible) so every page links to it.'],
+    ['contact', 'Contact / support linked', (p) => p.meta.trustLinks?.contact, 'Add “Contact us” / “Help & support” to the global footer.'],
+    ['privacy', 'Privacy policy linked', (p) => p.meta.trustLinks?.privacy, 'Add “Privacy policy” to the global footer.'],
+    ['org', 'Organization schema', (p) => (p.meta.schemaTypes || []).some((t) => /Organization|Corporation|LocalBusiness/i.test(t)), 'Add Organization JSON-LD (name, logo, url, contactPoint, sameAs) site-wide or at least on the homepage.'],
+    ['sameas', 'sameAs social/profile links in schema', (p) => (p.meta.sameAs || 0) > 0, 'In the Organization schema add sameAs: official Wikipedia, LinkedIn, X/Twitter, Facebook, Instagram, YouTube URLs.'],
+    ['author', 'Author / byline', (p) => p.meta.hasAuthor, 'Show the author (or team/editorial name) with a link to an author page — most important on blogs/guides.'],
+    ['date', 'Published / updated date', (p) => !!p.meta.lastDate, 'Show “Updated on …” and add datePublished / dateModified in Article schema.'],
+  ];
+  return sig.map(([id, label, test, fix]) => {
+    const missing = ok.filter((p) => !test(p)).sort((a, b) => (b.money - a.money) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
+    return { id, label, fix, have: ok.length - missing.length, n: ok.length, missing };
+  });
 }
 
 function viewGscGa(run, pages, project) {
@@ -2053,10 +2165,7 @@ function viewMajor(run, pages) {
       table([{ key: 'q', label: 'Query' }, { key: 'total', label: 'Impr.', num: 1, render: (r) => fmt(r.total) }, { key: 'pages', label: 'Competing pages', render: (r) => r.pages.map((p) => `${pg(p.u)} <span class="muted small">${fmt(p.i)} impr · pos ${p.p}</span>`).join('<br>') }], o.cannibalization))
     + (o.lowEngagement.length ? sec('😴 Low-engagement organic landing pages (GA4)', 'Visitors from search leave quickly — CRO candidates.',
       table([{ key: 'path', label: 'Landing page' }, { key: 'sessions', label: 'Sessions', num: 1 }, { key: 'engagementRate', label: 'Engaged', num: 1, render: (r) => pct(r.engagementRate) }, { key: 'bounceRate', label: 'Bounce', num: 1, render: (r) => pct(r.bounceRate) }, { key: 'keyEvents', label: 'Key events', num: 1 }], o.lowEngagement)) : '')
-    + sec('⚙️ JavaScript rendering risk', 'Pages whose raw HTML has little text — search bots may not read the content. Needs dev help (server-side rendering / pre-rendering).',
-      js.length ? table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta?.wordCount), sort: (p) => p.meta?.wordCount || 0 }, { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta?.scripts), sort: (p) => p.meta?.scripts || 0 }], js, { filter: false }) : '<p class="muted">No JS-rendering risk found on crawled pages 🎉</p>')
-    + sec('🖥️ Rendering: SSR vs CSR', `Checked from the raw HTML search bots receive first. ${Object.entries(s.renderModes || {}).map(([k, v]) => `<b>${esc(k)}</b>: ${v}`).join(' · ') || 'Run a new analysis to see this.'}. CSR pages need server-side rendering or pre-rendering so Google sees the content without running JavaScript.`,
-      table([{ key: 'url', label: 'Page', render: (p) => pg(p.url) }, { key: 'm', label: 'Rendering', render: (p) => `<span class="pill ${p.meta?.renderMode === 'CSR' ? 'bad' : p.meta?.renderMode === 'SSR (framework)' ? 'info' : 'good'}">${esc(p.meta?.renderMode || '–')}</span>`, text: (p) => p.meta?.renderMode || '', sort: (p) => p.meta?.renderMode || '' }, { key: 'f', label: 'Framework', render: (p) => esc(p.meta?.framework || '–') }, { key: 'w', label: 'Words in HTML', num: 1, render: (p) => fmt(p.meta?.wordCount), sort: (p) => p.meta?.wordCount || 0 }, { key: 's', label: 'Scripts', num: 1, render: (p) => fmt(p.meta?.scripts), sort: (p) => p.meta?.scripts || 0 }], pages.filter((p) => p.meta?.renderMode).sort((a, b) => (a.meta.renderMode === 'CSR' ? 0 : 1) - (b.meta.renderMode === 'CSR' ? 0 : 1)), { limit: 300 }))
+    + sec('🖥️ Rendering (SSR / CSR)', 'Moved to its own tab.', '<p><a href="#" data-tab="Rendering">Open the Rendering tab →</a></p>')
     + (s.links ? sec('🔗 Internal link opportunities', 'These pages already mention the target keyword in their copy but don\'t link to the target page. Turn the mention into a link with that anchor text.',
       table([{ key: 'from', label: 'Add link on', render: (r) => pg(r.from) }, { key: 'anchor', label: 'Anchor text', render: (r) => `<b>“${esc(r.anchor)}”</b>` }, { key: 'to', label: 'Link to', render: (r) => `${r.toMoney ? '💰 ' : ''}${pg(r.to)}` }, { key: 'impressions', label: 'Target impr.', num: 1, render: (r) => fmt(r.impressions) }, { key: 'position', label: 'Target pos', num: 1, render: (r) => fmt(r.position, 1) }], s.links.suggestions, { limit: 100 })
       + `<h3 style="margin-top:18px">Pages with few internal links pointing to them</h3>` + table([{ key: 'url', label: 'Page', render: (r) => `${r.money ? '💰 ' : ''}${pg(r.url)}` }, { key: 'inbound', label: 'Inbound links (from crawled pages)', num: 1 }, { key: 'impressions', label: 'Impr.', num: 1, render: (r) => fmt(r.impressions) }], s.links.weakInbound, { filter: false })) : '')

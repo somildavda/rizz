@@ -1478,6 +1478,9 @@ STRICT RULES:
 5. No competitor or backlink data is available: for external links/backlinks, state exactly what to audit (which pages, which tool/report) instead of inventing competitor numbers.
 6. Technical items must say who owns them (dev / seo / content) and what evidence triggered them (e.g. "JS-rendering risk on /x: 80 words in raw HTML, 45 scripts").
 7. Prioritise money pages and non-branded growth. Never invent data.
+7b. Keep the four review sections SHORT and scannable: "point" = one crisp bullet (max ~14 words, lead with the number),
+   "evidence" = one line (max ~25 words). ALWAYS fill "pages" (full URLs) and "queries" (exact query text) with the specific items
+   behind the point (up to 10 each) — the UI lets people click a bullet to see those pages/queries with their numbers.
 8. Every action-plan item must be falsifiable: state the observation it rests on, what it depends on (another task or nothing),
    how we would know it failed (a concrete check after N weeks), and the leading indicator to watch first (e.g. impressions for query X, CTR on URL Y).
 9. Current Google guidance (2026): FAQ rich results were retired in May 2026 (do not recommend FAQPage markup for rich snippets; Q&A content itself is still useful);
