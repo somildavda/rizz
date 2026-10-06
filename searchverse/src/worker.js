@@ -423,6 +423,16 @@ async function handleApi(req, env, url) {
     await DB.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('retention_days', ?)").bind(String(days)).run();
     return json({ days, ...(await archiveOldRuns(env)) });
   }
+  if (path === '/api/runs/delete' && method === 'POST') {
+    requireAdmin(user);
+    const ids = ((await body(req)).ids || []).map(String).slice(0, 200);
+    await deleteRunData(env, ids);
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50), q = chunk.map(() => '?').join(',');
+      await DB.batch([DB.prepare(`DELETE FROM runs WHERE id IN (${q})`).bind(...chunk), DB.prepare(`DELETE FROM run_shard WHERE run_id IN (${q})`).bind(...chunk)]);
+    }
+    return json({ ok: true, deleted: ids.length });
+  }
   if (path === '/api/retention/cleanup' && method === 'POST') {
     requireAdmin(user);
     return json(await archiveOldRuns(env));
@@ -457,7 +467,27 @@ async function handleApi(req, env, url) {
       projects = names.map((p) => ({ id: p.id, name: p.name, ...(per[p.id] || bucket(p.id)) }))
         .map((p) => ({ ...p, bytes: p.run + p.pages + p.exports })).sort((a, b) => b.bytes - a.bytes);
     }
+    let runList = [];
+    if (user.role === 'admin' && url.searchParams.get('runs')) {
+      const perRun = {};
+      for (const x of list) {
+        const [pg, bl] = await Promise.all([
+          x.db.prepare('SELECT run_id, SUM(LENGTH(data_json)) AS b, COUNT(*) AS n FROM pages GROUP BY run_id').all().then((r) => r.results).catch(() => []),
+          x.db.prepare('SELECT run_id, SUM(LENGTH(data)) AS b FROM run_blobs GROUP BY run_id').all().then((r) => r.results).catch(() => []),
+        ]);
+        for (const r of pg) { const t = (perRun[r.run_id] ||= { b: 0, n: 0 }); t.b += r.b; t.n += r.n; }
+        for (const r of bl) (perRun[r.run_id] ||= { b: 0, n: 0 }).b += r.b;
+      }
+      const { results: rr } = await DB.prepare(
+        `SELECT r.id, r.project_id, p.name AS project, r.created_at, r.created_by, r.status, r.score, r.start_date, r.end_date, r.error,
+           COALESCE(LENGTH(r.summary_json),0)+COALESCE(LENGTH(r.gsc_json),0)+COALESCE(LENGTH(r.ga_json),0)+COALESCE(LENGTH(r.ai_json),0) AS b, s.shard
+         FROM runs r LEFT JOIN projects p ON p.id = r.project_id LEFT JOIN run_shard s ON s.run_id = r.id ORDER BY r.created_at DESC`
+      ).all();
+      runList = rr.map((r) => ({ ...r, pages: perRun[r.id]?.n || 0, bytes: r.b + (perRun[r.id]?.b || 0), b: undefined }));
+    }
     return json({
+      runs: runList,
+      dataBytes: Object.values(per).reduce((t, x) => t + x.run + x.pages + x.exports, 0),
       dbBytes: sizes.reduce((t, v) => t + v, 0), limitBytes: list.length * SHARD_LIMIT, exact: sizes.every(Boolean),
       databases: list.map((x, i) => ({ name: x.name, bytes: sizes[i], limit: SHARD_LIMIT })), maxDatabases: 10,
       avgPageBytes: Math.round(avgPage || 15000), avgRunBytes: Math.round(Math.max(avgRun, 100000)),
@@ -520,7 +550,7 @@ async function handleApi(req, env, url) {
       `SELECT p.id, p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.owner_email, p.created_at,
         (SELECT score FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_score,
         (SELECT created_at FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_run,
-        (SELECT summary_json FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_summary
+        (SELECT json_extract(summary_json,'$.kpis') FROM runs r WHERE r.project_id = p.id AND r.status = 'done' ORDER BY created_at DESC LIMIT 1) AS last_kpis
         , CASE WHEN ? = 'admin' THEN 'admin' ELSE m.role END AS my_role
        FROM projects p LEFT JOIN project_members m ON m.project_id = p.id AND m.email = ?
        WHERE ? = 'admin' OR m.email IS NOT NULL ORDER BY p.created_at DESC`
@@ -529,9 +559,9 @@ async function handleApi(req, env, url) {
       .all();
     return json({
       projects: results.map((p) => {
-        const s = p.last_summary ? JSON.parse(p.last_summary) : null;
-        delete p.last_summary;
-        return { ...p, kpis: s?.kpis || null };
+        const k = p.last_kpis ? JSON.parse(p.last_kpis) : null;
+        delete p.last_kpis;
+        return { ...p, kpis: k };
       }),
     });
   }
@@ -863,16 +893,17 @@ async function handleApi(req, env, url) {
     const project = await getProject(env, m[1], user.email);
     if (method === 'GET') {
       const { results } = await DB.prepare(
-        `SELECT id, created_at, created_by, status, start_date, end_date, score, summary_json, error
+        `SELECT id, created_at, created_by, status, start_date, end_date, score, error,
+           json_extract(summary_json,'$.kpis') AS kpis, json_extract(summary_json,'$.scores') AS scores,
+           json_extract(summary_json,'$.scope') AS scope, json_extract(summary_json,'$.compare') AS compare
          FROM runs WHERE project_id = ? ORDER BY created_at DESC LIMIT 100`
       )
         .bind(project.id)
         .all();
       return json({
         runs: results.map((r) => {
-          const s = r.summary_json ? JSON.parse(r.summary_json) : null;
-          delete r.summary_json;
-          return { ...r, kpis: s?.kpis || null, scores: s?.scores || null };
+          const pj = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+          return { ...r, kpis: pj(r.kpis), scores: pj(r.scores) };
         }),
       });
     }
@@ -901,21 +932,13 @@ async function handleApi(req, env, url) {
       const { results: pages } = await (await dataDb(env, run.id)).prepare('SELECT url, onpage_score, content_score, data_json FROM pages WHERE run_id = ?')
         .bind(run.id)
         .all();
-      return json({
-        run: {
-          ...run,
-          summary: run.summary_json ? JSON.parse(run.summary_json) : null,
-          gsc: run.gsc_json ? JSON.parse(run.gsc_json) : null,
-          ga: run.ga_json ? JSON.parse(run.ga_json) : null,
-          ai: run.ai_json ? JSON.parse(run.ai_json) : null,
-          summary_json: undefined,
-          gsc_json: undefined,
-          ga_json: undefined,
-          ai_json: undefined,
-        },
-        pages: pages.map((p) => ({ url: p.url, onpage_score: p.onpage_score, content_score: p.content_score, ...JSON.parse(p.data_json) })),
-        project: { id: project.id, name: project.name, site_url: project.site_url },
-      });
+      // Big runs hold megabytes of JSON; parsing it here would blow the free plan's CPU limit,
+      // so the stored JSON strings are spliced into the response as-is and parsed in the browser.
+      const { summary_json, gsc_json, ga_json, ai_json, ...meta } = run;
+      const raw = (v) => (v && v.trim() ? v : 'null');
+      const pagesJson = '[' + pages.map((p) => `{"url":${JSON.stringify(p.url)},"onpage_score":${Number(p.onpage_score) || 0},"content_score":${Number(p.content_score) || 0},"data":${raw(p.data_json)}}`).join(',') + ']';
+      const out = `{"run":${JSON.stringify(meta).slice(0, -1)},"summary":${raw(summary_json)},"gsc":${raw(gsc_json)},"ga":${raw(ga_json)},"ai":${raw(ai_json)}},"pages":${pagesJson},"project":${JSON.stringify({ id: project.id, name: project.name, site_url: project.site_url })},"packed":1}`;
+      return new Response(out, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }
     if (method === 'DELETE') {
       requireAdmin(user);

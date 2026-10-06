@@ -181,6 +181,22 @@ async function route() {
 }
 window.addEventListener('hashchange', route);
 
+// ---------- new version check ----------
+let APP_VER = null, verShown = false;
+async function checkVersion() {
+  try {
+    const v = (await (await fetch('/version.json', { cache: 'no-store' })).json()).v;
+    if (!APP_VER) APP_VER = v;
+    else if (v && v !== APP_VER && !verShown) {
+      verShown = true;
+      document.body.insertAdjacentHTML('beforeend', `<div class="update-bar">✨ A new version of Searchverse is available. <button class="btn primary" onclick="location.reload()">Reload now</button><button class="btn" onclick="this.parentElement.remove()">Later</button></div>`);
+    }
+  } catch {}
+}
+checkVersion();
+setInterval(checkVersion, 5 * 60 * 1000);
+window.addEventListener('focus', checkVersion);
+
 // ---------- login ----------
 function renderLogin(err) {
   const feat = (icon, t, d) => `<div class="feat"><div class="feat-icon">${icon}</div><b>${t}</b><p>${d}</p></div>`;
@@ -274,7 +290,7 @@ async function renderSettings(err, p) {
       <div class="check"><div style="flex:1"><b>Backup: Brevo</b> <span class="small muted">— used if your mailbox isn't connected</span><div style="margin-top:6px">${me.mailEnabled ? '<span class="pill good">On</span>' : '<span class="pill">Not set up</span> <span class="small muted">(optional — see GO-LIVE-GUIDE)</span>'}</div></div></div>
       <p class="hint">If neither is set up, your own mail app opens with the invite ready to send.</p></div>`);
     app.insertAdjacentHTML('beforeend', `<div class="card section" id="storage-card"><h2>💾 Storage</h2><p class="muted small">Loading…</p></div>`);
-    Promise.all([api('/api/usage'), api('/api/retention')]).then(([u, r]) => {
+    Promise.all([api('/api/usage?runs=1'), api('/api/retention')]).then(([u, r]) => {
       u.retentionDays = r.days;
       document.getElementById('storage-card').innerHTML = `<h2>💾 Storage</h2>${storageBar(u)}
         <div class="row small" style="margin:8px 0">${(u.databases || []).map((d) => `<span class="pill ${d.bytes / d.limit > 0.9 ? 'bad' : d.bytes / d.limit > 0.7 ? 'warn' : 'info'}">${d.name === 'main' ? 'Main' : d.name}: ${mb(d.bytes)} / 500 MB</span>`).join(' ')}</div>
@@ -285,6 +301,23 @@ async function renderSettings(err, p) {
           <div class="row"><select id="ret-days" style="width:auto">${[[0, 'Keep everything (no cleanup)'], [30, 'Keep full detail for 30 days'], [60, 'Keep full detail for 60 days'], [90, 'Keep full detail for 90 days'], [180, 'Keep full detail for 180 days'], [365, 'Keep full detail for 1 year']].map(([d, l]) => `<option value="${d}" ${u.retentionDays === d ? 'selected' : ''}>${l}</option>`).join('')}</select>
           <button class="btn primary" id="ret-save">Save</button><button class="btn" id="ret-clean">Clean up now</button></div></div>
         ${table([{ key: 'name', label: 'Project', render: (p) => `<a href="#/p/${p.id}">${esc(p.name)}</a>` }, { key: 'runs', label: 'Runs', num: 1 }, { key: 'pagesCount', label: 'Pages stored', num: 1, render: (p) => fmt(p.pagesCount) }, { key: 'pages', label: 'Page data', num: 1, render: (p) => mb(p.pages) }, { key: 'exports', label: 'Exports', num: 1, render: (p) => mb(p.exports) }, { key: 'bytes', label: 'Total', num: 1, render: (p) => `<b>${mb(p.bytes)}</b>` }], u.projects, { filter: false })}`;
+      const runs = u.runs || [];
+      document.getElementById('storage-card').insertAdjacentHTML('beforeend', `<div class="card" style="margin:14px 0;padding:14px"><div class="row spread"><b>🧾 Runs (${runs.length}) — delete run by run</b><button class="btn danger" id="runs-del-sel" disabled>Delete selected</button></div>
+        <p class="small muted" style="margin:4px 0 10px">Each row is one analysis and the space it uses (scores, exports, crawled pages). Deleting removes it for everyone and can't be undone. Freed space is reused by new runs straight away, even if the total above shrinks slowly.</p>
+        <div class="tablewrap" style="max-height:420px;overflow:auto"><table class="lob"><thead><tr><th><input type="checkbox" id="runs-all"></th><th>Run date</th><th>Project</th><th>Period</th><th>By</th><th>Score</th><th>Status</th><th class="num">Pages</th><th class="num">Size</th><th></th></tr></thead><tbody>
+        ${runs.map((x) => `<tr><td><input type="checkbox" class="run-sel" value="${x.id}"></td><td class="nowrap"><a href="#/p/${x.project_id}?run=${x.id}">${date(x.created_at)}</a></td><td>${esc(x.project || '—')}</td><td class="nowrap small">${esc(x.start_date || '')} → ${esc(x.end_date || '')}</td><td class="small">${esc((x.created_by || '').split('@')[0])}</td><td>${x.score ?? '–'}</td><td>${x.error === 'archived' ? '<span class="pill">archived</span>' : x.status === 'done' ? '<span class="pill good">done</span>' : `<span class="pill ${x.status === 'failed' ? 'bad' : 'warn'}">${esc(x.status)}</span>`}</td><td class="num">${fmt(x.pages)}</td><td class="num"><b>${mb(x.bytes)}</b></td><td><button class="btn small danger" data-rdel="${x.id}">🗑 Delete</button></td></tr>`).join('') || '<tr><td colspan="10" class="muted center">No runs yet</td></tr>'}
+        </tbody></table></div></div>`);
+      const card = document.getElementById('storage-card');
+      const sel = () => [...card.querySelectorAll('.run-sel:checked')].map((c) => c.value);
+      const upd = () => { const n = sel().length; const b = document.getElementById('runs-del-sel'); b.disabled = !n; b.textContent = n ? `Delete selected (${n} · ${mb(runs.filter((x) => sel().includes(x.id)).reduce((t, x) => t + x.bytes, 0))})` : 'Delete selected'; };
+      card.querySelectorAll('.run-sel').forEach((c) => (c.onchange = upd));
+      document.getElementById('runs-all').onchange = (e) => { card.querySelectorAll('.run-sel').forEach((c) => (c.checked = e.target.checked)); upd(); };
+      const delRuns = async (ids) => {
+        if (!ids.length || !confirm(`Delete ${ids.length} run(s) and all their data? This can't be undone.`)) return;
+        try { await api('/api/runs/delete', { method: 'POST', body: { ids } }); toast(`Deleted ${ids.length} run(s)`); route(); } catch (e) { toast('Delete failed: ' + e.message); }
+      };
+      document.getElementById('runs-del-sel').onclick = () => delRuns(sel());
+      card.querySelectorAll('[data-rdel]').forEach((b) => (b.onclick = () => delRuns([b.dataset.rdel])));
       const after = (r) => { toast(r.archived ? `Archived ${r.archived} older run(s)` : 'Nothing to clean up'); route(); };
       document.getElementById('ret-save').onclick = async () => after(await api('/api/retention', { method: 'PUT', body: { days: +document.getElementById('ret-days').value } }));
       document.getElementById('ret-clean').onclick = async () => after(await api('/api/retention/cleanup', { method: 'POST' }));
@@ -1387,24 +1420,37 @@ function lobEditor(pid, groups) {
 }
 
 // ---------- project dashboard ----------
+const runLabel = (r) => `${date(r.created_at)} · score ${r.score ?? '–'} · ${r.start_date || ''}→${r.end_date || ''}${r.scope ? ' · ' + r.scope : ''}${r.error === 'archived' ? ' · archived' : ''} · by ${(r.created_by || '').split('@')[0]}`;
 async function renderProject(pid, runId) {
   const [{ project }, { runs }] = await Promise.all([api('/api/projects/' + pid), api(`/api/projects/${pid}/runs`)]);
   const done = runs.filter((r) => r.status === 'done');
   const head = `<div class="row spread"><div><h1>${esc(project.name)}</h1>
       <div class="muted small">${esc(project.gsc_property)}${project.ga4_name ? ' · GA4: ' + esc(project.ga4_name) : ''} · via ${esc(project.connection_email || '—')}</div></div>
-      <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${date(r.created_at)} · score ${r.score}</option>`).join('')}</select>` : ''}
+      <div class="row">${done.length ? `<select id="run-pick" style="width:auto">${done.map((r) => `<option value="${r.id}">${esc(runLabel(r))}</option>`).join('')}</select><button class="btn" id="run-refresh" title="Reload this run">⟳ Refresh</button>` : ''}
       <a class="btn" href="#/p/${pid}/urls">📈 URL performance</a><a class="btn" href="#/p/${pid}/lob">📊 LOB report</a>${isAdmin() ? `<a class="btn" href="#/p/${pid}/edit">Settings</a>` : accessPill(project.my_role)}${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div></div>`;
   if (!done.length) {
     app.innerHTML = head + `<div class="card section center"><h2>No analysis yet</h2><p class="muted">${canRun(project) ? 'Run your first analysis to see scores, opportunities and AI recommendations.' : 'No analysis has been run yet. Ask someone with "Can run analysis" access to run one.'}</p>${canRun(project) ? `<a class="btn primary" href="#/p/${pid}/run">▶ Run analysis</a>` : ''}</div>`;
     return;
   }
   const rid = runId && done.find((r) => r.id === runId) ? runId : done[0].id;
-  app.innerHTML = head + '<div class="center muted">Loading run…</div>';
-  const data = await api('/api/runs/' + rid);
+  app.innerHTML = head + '<div class="card section center muted" id="run-loading"><div class="spinner"></div>Loading this run…</div>';
   const pick = document.getElementById('run-pick');
   pick.value = rid;
-  pick.onchange = () => (location.hash = `#/p/${pid}?run=${pick.value}`);
+  pick.onchange = () => { const h = `#/p/${pid}?run=${pick.value}`; if (location.hash === h) route(); else location.hash = h; };
+  document.getElementById('run-refresh').onclick = () => route();
+  let data;
+  try {
+    data = await api('/api/runs/' + rid);
+  } catch (e) {
+    document.getElementById('run-loading').innerHTML = `<p class="bad-text">Couldn't load this run: ${esc(e.message)}</p><button class="btn primary" id="run-retry">⟳ Try again</button>`;
+    document.getElementById('run-retry').onclick = () => route();
+    return;
+  }
+  if (data.packed) data.pages = (data.pages || []).map((p) => ({ ...(p.data || {}), url: p.url, onpage_score: p.onpage_score, content_score: p.content_score }));
   renderRun(project, data, done, head);
+  const p2 = document.getElementById('run-pick');
+  if (p2) { p2.value = rid; p2.onchange = pick.onchange; }
+  document.getElementById('run-refresh')?.addEventListener('click', () => route());
 }
 
 function renderRun(project, { run, pages }, runs, head) {

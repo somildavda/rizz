@@ -175,3 +175,11 @@ li.bullet::before { content: '•'; position: absolute; left: 10px; top: 8px; fo
 li.bullet + li.bullet { border-top: 1px dashed var(--border); }
 .click { cursor: pointer; } li.bullet.click:hover, .check.click:hover { background: var(--surface-2); }
 .link { color: var(--primary); font-weight: 500; }
+
+/* run loading, update banner */
+.spinner { width: 28px; height: 28px; margin: 0 auto 10px; border: 3px solid var(--border, #ddd); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bad-text { color: var(--bad); }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.update-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 1000; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 32px); padding: 12px 16px; border-radius: 12px; background: var(--card, #fff); color: var(--text, inherit); box-shadow: 0 8px 30px rgba(0,0,0,.25); border: 1px solid var(--primary); }
