@@ -6,7 +6,7 @@
   <title>Searchverse YouTube Audit</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235B3DF5'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -26,7 +26,7 @@
 
   <main>
     <section class="card setup" id="setup">
-      <h1>Audit YouTube channels</h1>
+      <h1>Audit <span class="grad">YouTube channels</span></h1>
       <p class="muted">Paste a channel URL, @handle, or any video link. Add up to 10 competitors to compare against.</p>
 
       <div class="grid2">
@@ -88,7 +88,7 @@
       <label>YouTube Data API key (only if the server has none)
         <input id="ytKey" type="password" autocomplete="off" placeholder="AIza…">
       </label>
-      <label>Gemini API key (optional, for AI review)
+      <label>Gemini API key (optional; AI review uses open-source models by default)
         <input id="gemKey" type="password" autocomplete="off" placeholder="AIza…">
       </label>
       <p class="muted small">Keys typed here stay in this browser only and are sent just to this tool's own API.</p>

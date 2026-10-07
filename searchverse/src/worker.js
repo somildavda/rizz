@@ -1,7 +1,11 @@
 // Searchverse API: a thin Cloudflare Worker.
 // - Proxies the YouTube Data API so the key stays server-side (one channel per
 //   request, which keeps each call well under the free plan's 50 subrequests).
-// - Wraps the Gemini free tier for optional AI review (titles, CTA, thumbnails).
+// - Optional AI review with two providers:
+//     open   = open-source models on Cloudflare Workers AI (Llama 3.3 for text,
+//              Llama 3.2 Vision for thumbnails, FLUX.1 schnell for images). No key.
+//     gemini = Google Gemini free tier (needs GEMINI_API_KEY).
+// - Real CC-licensed photos for thumbnail ideas via Openverse.
 // All scoring runs in the browser (public/analysis.js).
 
 const YT = 'https://www.googleapis.com/youtube/v3/';
@@ -22,11 +26,13 @@ export default {
 };
 
 const ROUTES = {
-  'GET /api/health': async (req, env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY }),
+  'GET /api/health': async (req, env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY, openModels: !!env.AI }),
   'GET /api/channel': getChannel,
   'POST /api/ai/classify': aiClassify,
   'POST /api/ai/rewrite': aiRewrite,
   'POST /api/ai/thumbnail': aiThumbnail,
+  'POST /api/ai/image': aiImage,
+  'GET /api/photos': photos,
 };
 
 function json(data, status = 200, headers = {}) {
@@ -144,69 +150,146 @@ async function getChannel(req, env, ctx, url) {
   return res;
 }
 
-// ── Gemini ───────────────────────────────────────────────────
-async function gemini(req, env, { parts, temperature = 0.2 }) {
+// ── AI providers ─────────────────────────────────────────────
+const MODELS = {
+  text: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  vision: '@cf/meta/llama-3.2-11b-vision-instruct',
+  image: '@cf/black-forest-labs/flux-1-schnell',
+};
+
+function pickProvider(req, env, asked) {
+  const hasGemini = !!(env.GEMINI_API_KEY || req.headers.get('x-gemini-key'));
+  // Open-source models are the default; Gemini only when chosen (or when Workers AI is unavailable).
+  const p = asked === 'gemini' || asked === 'open' ? asked : env.AI ? 'open' : hasGemini ? 'gemini' : 'open';
+  if (p === 'open' && !env.AI) fail('Open-source models need the Workers AI binding ([ai] in wrangler.toml) and a Cloudflare login.', 501);
+  return p;
+}
+
+// Ask a model for JSON. `image` (optional) is { bytes: Uint8Array, mime }.
+async function askJson(req, env, provider, prompt, { image, temperature = 0.2 } = {}) {
+  let text;
+  if (provider === 'gemini') {
+    const parts = image ? [{ inline_data: { mime_type: image.mime, data: toBase64(image.bytes) } }, { text: prompt }] : [{ text: prompt }];
+    text = await gemini(req, env, parts, temperature);
+  } else if (image) {
+    text = await runVision(env, prompt, image.bytes);
+  } else {
+    const out = await env.AI.run(MODELS.text, {
+      messages: [{ role: 'system', content: 'You reply with a single valid JSON object and nothing else.' }, { role: 'user', content: prompt }],
+      max_tokens: 900,
+      temperature,
+    });
+    text = out.response;
+  }
+  return parseJson(text);
+}
+
+async function runVision(env, prompt, bytes) {
+  const input = { messages: [{ role: 'user', content: prompt + '\nReply with a single JSON object only.' }], image: [...bytes], max_tokens: 600 };
+  try {
+    return (await env.AI.run(MODELS.vision, input)).response;
+  } catch (e) {
+    // Meta's licence must be accepted once per account before first use.
+    if (!/agree/i.test(e.message)) throw e;
+    await env.AI.run(MODELS.vision, { prompt: 'agree' });
+    return (await env.AI.run(MODELS.vision, input)).response;
+  }
+}
+
+async function gemini(req, env, parts, temperature) {
   const model = env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const body = {
-    contents: [{ role: 'user', parts }],
-    generationConfig: { temperature, responseMimeType: 'application/json' },
-  };
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey(req, env) },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature, responseMimeType: 'application/json' } }),
   });
   const data = await r.json();
   if (!r.ok) fail(`Gemini ${r.status}: ${data.error?.message || 'error'}`, r.status === 429 ? 429 : 502);
-  const cand = data.candidates?.[0];
-  const text = (cand?.content?.parts || []).map((p) => p.text || '').join('');
-  return { text, cand };
+  return (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
 }
 
 function parseJson(text) {
-  const t = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
-  try { return JSON.parse(t); } catch { fail('AI returned invalid JSON. Try again.', 502); }
+  if (text && typeof text === 'object') return text;
+  const t = String(text || '');
+  const start = t.indexOf('{'), end = t.lastIndexOf('}');
+  try { return JSON.parse(t.slice(start, end + 1)); } catch { fail('AI returned invalid JSON. Try again.', 502); }
 }
 
 async function aiClassify(req, env) {
-  const { title, description = '', type = '' } = await req.json();
+  const { title, description = '', type = '', provider } = await req.json();
   const prompt = `You are a YouTube content analyst. Classify this video. Return JSON only.
 Title: ${title}
 Description (first 400 chars): ${description.slice(0, 400)}
 Video type: ${type}
 JSON keys: "theme" (short topic label), "format" (one of: Podcast, Interview, Comparison, How To, Listicle, Review, Testimonial, Case Study, Webinar, Product Demo, Explainer, News / Update, Opinion, Behind The Scenes, Shorts, Other), "intent" (one of: Awareness, Educational, Consideration, Comparison, Decision, Proof / Case Study), "audience" (5 words max), "funnel" (Top, Middle or Bottom), "opportunity" (0-100 number), "notes" (one plain-language observation, under 20 words).`;
-  const { text } = await gemini(req, env, { parts: [{ text: prompt }], temperature: 0.1 });
-  return json(parseJson(text));
+  const p = pickProvider(req, env, provider);
+  return json({ ...(await askJson(req, env, p, prompt, { temperature: 0.1 })), provider: p });
 }
 
 async function aiRewrite(req, env) {
-  const { title, description = '', market = '' } = await req.json();
+  const { title, description = '', market = '', provider } = await req.json();
   const prompt = `You are a YouTube SEO strategist${market ? ' for the ' + market + ' market' : ''}. Improve this video's metadata. Return JSON only.
 Title: ${title}
 Description: ${description.slice(0, 1500)}
-JSON keys: "titles" (array of 3 alternative titles, 40-70 chars, keyword first), "cta_review" (one sentence on the current CTA: is it clear, specific, early?), "cta" (a rewritten CTA for the first 2 lines of the description), "description_intro" (a rewritten first 150 characters), "hashtags" (array of 3 hashtags).`;
-  const { text } = await gemini(req, env, { parts: [{ text: prompt }], temperature: 0.5 });
-  return json(parseJson(text));
+JSON keys:
+"titles": array of 3 alternative titles, 40-70 chars, keyword first,
+"title_why": one sentence on why these titles should get more clicks or search traffic,
+"cta_review": one sentence on the current CTA: is it clear, specific and early?,
+"cta": a rewritten CTA for the first 2 lines of the description,
+"description_intro": a rewritten first 150 characters,
+"hashtags": array of 3 hashtags,
+"thumbnail_text": 2-4 punchy words to print on the thumbnail,
+"thumbnail_prompt": an image-generation prompt for a new thumbnail background: one clear subject, bold colours, high contrast, space on the left for text, no words or letters in the image.`;
+  const p = pickProvider(req, env, provider);
+  return json({ ...(await askJson(req, env, p, prompt, { temperature: 0.5 })), provider: p });
 }
 
 async function aiThumbnail(req, env) {
-  const { url, title = '' } = await req.json();
+  const { url, title = '', provider } = await req.json();
   if (!/^https:\/\/i\d?\.ytimg\.com\//.test(url || '')) fail('Only YouTube thumbnail URLs are allowed.');
-  const img = await fetch(url);
+  // A smaller rendition keeps the vision request light; fall back to the given URL.
+  const img = await fetch(url.replace(/(maxresdefault|sddefault)\.jpg/, 'hqdefault.jpg')).then((r) => (r.ok ? r : fetch(url)));
   if (!img.ok) fail('Could not load thumbnail', 502);
-  const b64 = toBase64(await img.arrayBuffer());
-  const prompt = `You are a YouTube thumbnail expert. Review this thumbnail for the video "${title}". Judge it as it appears on a phone (small size). Return JSON only with keys:
-"score" (0-100), "text_readable" (true/false/null if no text), "face_or_emotion" (true/false), "contrast" (Low/Medium/High), "clutter" (Low/Medium/High), "matches_title" (true/false), "fixes" (array of 2 short, specific fixes).`;
-  const { text } = await gemini(req, env, {
-    parts: [{ inline_data: { mime_type: img.headers.get('content-type') || 'image/jpeg', data: b64 } }, { text: prompt }],
-    temperature: 0.1,
-  });
-  return json(parseJson(text));
+  const bytes = new Uint8Array(await img.arrayBuffer());
+  const prompt = `You are a YouTube thumbnail expert. Review this thumbnail for the video "${title}" as it appears on a phone (small size). Return JSON only with keys:
+"score" (0-100), "text_readable" (true/false/null if no text), "face_or_emotion" (true/false), "contrast" (Low/Medium/High), "clutter" (Low/Medium/High), "matches_title" (true/false), "why" (one sentence explaining the score), "fixes" (array of 2 short, specific fixes).`;
+  const p = pickProvider(req, env, provider);
+  return json({ ...(await askJson(req, env, p, prompt, { image: { bytes, mime: img.headers.get('content-type') || 'image/jpeg' }, temperature: 0.1 })), provider: p });
 }
 
-function toBase64(buf) {
-  const bytes = new Uint8Array(buf);
+// Thumbnail concept image from an open-source model (FLUX.1 schnell, Apache-2.0),
+// so generated images can be used freely.
+async function aiImage(req, env) {
+  const { prompt } = await req.json();
+  if (!prompt) fail('Missing prompt');
+  if (!env.AI) fail('Image generation needs the Workers AI binding ([ai] in wrangler.toml).', 501);
+  const out = await env.AI.run(MODELS.image, { prompt: `YouTube thumbnail, 16:9, ${prompt}, no text, no letters, no watermark`.slice(0, 2000), steps: 6 });
+  return json({ image: 'data:image/jpeg;base64,' + out.image, model: 'FLUX.1 [schnell] (Apache-2.0)' });
+}
+
+function toBase64(bytes) {
   let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);
+}
+
+// Real, openly licensed photos for thumbnail ideas from Openverse
+// (open source: github.com/WordPress/openverse). No key needed; each result
+// carries its licence and attribution, filtered to licences allowing commercial use.
+async function photos(req, env, ctx, url) {
+  const q = (url.searchParams.get('q') || '').slice(0, 120) || fail('Missing ?q=');
+  const u = new URL('https://api.openverse.org/v1/images/');
+  u.searchParams.set('q', q);
+  u.searchParams.set('license_type', 'commercial,modification');
+  u.searchParams.set('aspect_ratio', 'wide');
+  u.searchParams.set('page_size', '8');
+  const r = await fetch(u, { headers: { 'user-agent': 'searchverse-yt-audit' } });
+  if (!r.ok) fail(`Openverse ${r.status}`, 502);
+  const d = await r.json();
+  return json({
+    results: (d.results || []).map((x) => ({
+      thumb: x.thumbnail, url: x.url, page: x.foreign_landing_url, title: x.title,
+      creator: x.creator, license: `CC ${String(x.license).toUpperCase()} ${x.license_version || ''}`.trim(), licenseUrl: x.license_url, attribution: x.attribution,
+    })),
+  }, 200, { 'cache-control': 'public, max-age=86400' });
 }

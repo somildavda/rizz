@@ -74,20 +74,33 @@ export function lengthBucket(sec) {
 // ── Scoring ──────────────────────────────────────────────────
 const KEYWORD_SIGNAL = /how to|guide|best|tutorial|review|\bvs\b|20\d\d|\d+/i;
 
+// Every score is a sum of named parts so the UI can explain it ("why").
+// part = [label, points earned, max points, explanation]
+export function seoParts(title, desc, hashtagCount, tagsText) {
+  const tl = title.length, dl = desc.length;
+  return [
+    ['Title length', tl >= 40 && tl <= 75 ? 25 : tl >= 30 ? 12 : 0, 25, `${tl} chars (best 40–75: long enough for a keyword and a hook, short enough not to be cut off)`],
+    ['Description', dl >= 180 ? 25 : dl >= 100 ? 12 : 0, 25, `${dl} chars without hashtags (best 180+: gives YouTube and Google text to index)`],
+    ['Hashtags', hashtagCount >= 2 && hashtagCount <= 8 ? 20 : hashtagCount >= 1 ? 10 : 0, 20, `${hashtagCount} (best 2–8; YouTube ignores all hashtags when there are more than 15)`],
+    ['Tags', tagsText.length > 30 ? 15 : tagsText.length > 0 ? 8 : 0, 15, tagsText.length ? `${tagsText.length} chars of tags` : 'No tags'],
+    ['Keyword signal', KEYWORD_SIGNAL.test(title) ? 15 : 0, 15, 'Title has a search pattern: how to, guide, best, review, vs, a year or a number'],
+  ];
+}
+export const sumParts = (parts) => Math.min(100, parts.reduce((a, p) => a + p[1], 0));
+export const explainParts = (parts) => parts.map((p) => `${p[0]} ${p[1]}/${p[2]}`).join(' · ');
 export function scoreSEO(title, desc, hashtagCount, tagsText) {
-  let s = 0;
-  const tl = title.length;
-  if (tl >= 40 && tl <= 75) s += 25; else if (tl >= 30) s += 12;
-  const dl = desc.length;
-  if (dl >= 180) s += 25; else if (dl >= 100) s += 12;
-  if (hashtagCount >= 2 && hashtagCount <= 8) s += 20; else if (hashtagCount >= 1) s += 10;
-  if (tagsText.length > 30) s += 15; else if (tagsText.length > 0) s += 8;
-  if (KEYWORD_SIGNAL.test(title)) s += 15;
-  return Math.min(100, s);
+  return sumParts(seoParts(title, desc, hashtagCount, tagsText));
 }
 
+export function perfParts(views, vpd, er) {
+  return [
+    ['Reach', Math.min(72, Math.round(Math.log10(Math.max(1, views)) * 12)), 72, `${fmtNum(views)} views, on a log scale: 12 points per ×10 (1K = 36, 100K = 60, 1M+ = 72)`],
+    ['Momentum', Math.round(Math.min(40, vpd / 20)), 40, `${Math.round(vpd)} views/day since publishing (800+/day = full 40)`],
+    ['Engagement', Math.round(Math.min(30, er * 400)), 30, `${(er * 100).toFixed(2)}% (likes + comments) ÷ views (7.5%+ = full 30)`],
+  ];
+}
 export function scorePerformance(views, vpd, er) {
-  return Math.min(100, Math.round(Math.log10(Math.max(1, views)) * 12 + Math.min(40, vpd / 20) + Math.min(30, er * 400)));
+  return sumParts(perfParts(views, vpd, er));
 }
 
 export function performanceTier(s) {
@@ -122,12 +135,13 @@ export function analyzeCta(desc) {
   const fold = desc.split('\n').slice(0, 3).join('\n').slice(0, 150);
   const aboveFold = Object.values(CTA_TYPES).some((re) => re.test(fold));
   const links = (desc.match(/https?:\/\/\S+/g) || []).length;
-  let score = 0;
-  if (types.length) score += 40;
-  if (aboveFold) score += 30;
-  if (links) score += 15;
-  if (types.length >= 2) score += 15;
-  return { types, aboveFold, links, score: Math.min(100, score) };
+  const parts = [
+    ['Has a CTA', types.length ? 40 : 0, 40, types.length ? 'Found: ' + types.join(', ') : 'No subscribe, link, lead, shop or follow prompt found'],
+    ['Above the fold', aboveFold ? 30 : 0, 30, 'A CTA within the first 3 lines / 150 chars, visible before "...more"'],
+    ['Has a link', links ? 15 : 0, 15, `${links} link(s) in the description`],
+    ['Multiple CTA types', types.length >= 2 ? 15 : 0, 15, 'Combines two or more CTA types (e.g. subscribe + link)'],
+  ];
+  return { types, aboveFold, links, parts, score: sumParts(parts) };
 }
 
 // ── Utilities ────────────────────────────────────────────────
@@ -211,8 +225,10 @@ export function normalizeVideo(v, ch, now = Date.now()) {
   const vpd = views / ageDays;
   const thumbs = sn.thumbnails || {};
   const tags = sn.tags || [];
-  const seo = scoreSEO(title, desc, hashtags.length, tags.join(' '));
-  const perf = scorePerformance(views, vpd, eng);
+  const seoP = seoParts(title, desc, hashtags.length, tags.join(' '));
+  const perfP = perfParts(views, vpd, eng);
+  const seo = sumParts(seoP);
+  const perf = sumParts(perfP);
   const cta = analyzeCta(descRaw);
   return {
     id: v.id,
@@ -247,6 +263,8 @@ export function normalizeVideo(v, ch, now = Date.now()) {
     intent: classifyIntent(title, desc),
     lengthBucket: lengthBucket(sec),
     seoScore: seo,
+    seoParts: seoP,
+    perfParts: perfP,
     perfScore: perf,
     perfTier: performanceTier(perf),
     cta,
@@ -300,14 +318,16 @@ export function buildReports(channels, videos, now = Date.now()) {
 
   const ownCh = channels.find((c) => c.type === 'Own');
   const kpis = ownCh ? [
-    ['Subscribers', fmtNum(ownCh.subscribers)],
-    ['Videos analysed', own.length],
-    ['Long form', own.filter((v) => v.type === 'Long Form').length],
-    ['Shorts', own.filter((v) => v.type === 'Shorts').length],
-    ['Views (analysed)', fmtNum(sum(own, 'views'))],
-    ['Avg views / video', fmtNum(avg(own, 'views'))],
-    ['Engagement rate', (er(own) * 100).toFixed(2) + '%'],
-    ['Avg SEO score', Math.round(avg(own, 'seoScore'))],
+    ['Subscribers', fmtNum(ownCh.subscribers), 'Public subscriber count from YouTube'],
+    ['Videos analysed', own.length, 'Latest uploads fetched for this audit'],
+    ['Long form', own.filter((v) => v.type === 'Long Form').length, 'Videos longer than 60s (or 3 min without #shorts)'],
+    ['Shorts', own.filter((v) => v.type === 'Shorts').length, '≤ 60s, or ≤ 3 min tagged #shorts'],
+    ['Views (analysed)', fmtNum(sum(own, 'views')), 'Total views of the analysed videos'],
+    ['Avg views / video', fmtNum(avg(own, 'views')), 'Views ÷ analysed videos'],
+    ['Engagement rate', (er(own) * 100).toFixed(2) + '%', '(likes + comments) ÷ views. 1–3% typical, 5%+ strong'],
+    ['Avg SEO score', Math.round(avg(own, 'seoScore')), 'Out of 100. See "How Scores Work"'],
+    ['Avg CTA score', Math.round(avg(own.map((v) => ({ s: v.cta.score })), 's')), 'Out of 100. CTA present, above the fold, links'],
+    ['Avg performance', Math.round(avg(own, 'perfScore')), 'Out of 100. Reach + momentum + engagement'],
   ] : [];
 
   const topGroup = (key) => {
@@ -453,8 +473,8 @@ export function buildReports(channels, videos, now = Date.now()) {
     id: 'under', title: 'Underperforming',
     sections: [{
       title: 'Lowest performance score (older than 14 days)',
-      columns: [C('#', 'num'), C('Channel'), C('Title'), C('URL', 'url'), C('Views', 'num'), C('Eng. rate', 'pct'), C('SEO', 'num'), C('CTA', 'num'), C('Theme'), C('Action')],
-      rows: aged.map((v, i) => [i + 1, v.channel, v.title, v.url, v.views, v.er, v.seoScore, v.cta.score, v.theme,
+      columns: [C('#', 'num'), C('Channel'), C('Title'), C('URL', 'url'), C('Views', 'num'), C('Eng. rate', 'pct'), C('Perf score', 'num'), C('Why (performance points)'), C('SEO', 'num'), C('CTA', 'num'), C('Theme'), C('Action')],
+      rows: aged.map((v, i) => [i + 1, v.channel, v.title, v.url, v.views, v.er, v.perfScore, explainParts(v.perfParts), v.seoScore, v.cta.score, v.theme,
         v.type === 'Shorts' ? 'Review Shorts strategy for this topic' : v.seoScore < 50 ? 'Fix title, description and hashtags first' : !v.hasMaxresThumb ? 'Upload a custom HD thumbnail' : v.views < 500 ? 'Republish with a stronger title and thumbnail' : 'Review topic relevance and thumbnail']),
     }],
   });
@@ -496,7 +516,7 @@ export function buildReports(channels, videos, now = Date.now()) {
   // SEO + CTA audit
   const seoRows = videos.map((v) => {
     const ts = titleStatus(v.title), ds = descStatus(v.desc), hs = hashtagStatus(v.hashCount);
-    return [v.channel, v.title, v.url, v.titleLen, ts, KEYWORD_SIGNAL.test(v.title) ? 'Yes' : 'No', v.descLen, ds, v.hasChapters ? 'Yes' : 'No', v.cta.types.join(', ') || 'None', v.cta.aboveFold ? 'Yes' : 'No', v.cta.score, v.hashCount, hs, v.seoScore, overallStatus(ts, ds, hs)];
+    return [v.channel, v.title, v.url, v.titleLen, ts, KEYWORD_SIGNAL.test(v.title) ? 'Yes' : 'No', v.descLen, ds, v.hasChapters ? 'Yes' : 'No', v.cta.types.join(', ') || 'None', v.cta.aboveFold ? 'Yes' : 'No', v.cta.score, v.hashCount, hs, v.seoScore, overallStatus(ts, ds, hs), explainParts(v.seoParts), explainParts(v.cta.parts)];
   });
   const order = { Weak: 0, Average: 1, Strong: 2 };
   seoRows.sort((a, b) => order[a[15]] - order[b[15]]);
@@ -504,7 +524,7 @@ export function buildReports(channels, videos, now = Date.now()) {
     id: 'seo', title: 'SEO & CTA Audit',
     sections: [{
       title: 'Title, description, CTA and hashtag audit',
-      columns: [C('Channel'), C('Title'), C('URL', 'url'), C('Title len', 'num'), C('Title', 'status'), C('Keyword signal', 'status'), C('Desc len', 'num'), C('Description', 'status'), C('Chapters', 'status'), C('CTA types'), C('CTA above fold', 'status'), C('CTA score', 'num'), C('Hashtags', 'num'), C('Hashtag status', 'status'), C('SEO score', 'num'), C('Overall', 'status')],
+      columns: [C('Channel'), C('Title'), C('URL', 'url'), C('Title len', 'num'), C('Title', 'status'), C('Keyword signal', 'status'), C('Desc len', 'num'), C('Description', 'status'), C('Chapters', 'status'), C('CTA types'), C('CTA above fold', 'status'), C('CTA score', 'num'), C('Hashtags', 'num'), C('Hashtag status', 'status'), C('SEO score', 'num'), C('Overall', 'status'), C('Why (SEO points)'), C('Why (CTA points)')],
       rows: seoRows,
     }],
   });
@@ -526,5 +546,51 @@ export function buildReports(channels, videos, now = Date.now()) {
     sections: [{ title: 'Fixes for our channel (rule-based; use AI tab for rewrites)', columns: [C('URL', 'url'), C('Field'), C('Current'), C('Recommended'), C('Status', 'status'), C('Priority', 'status'), C('Notes')], rows: reco }],
   });
 
+  reports.push(scoringGuide());
   return reports;
+}
+
+// Plain-language explanation of every score and status, shown as its own tab.
+export function scoringGuide() {
+  const cols = [C('Score / part'), C('Points', 'num'), C('Rule'), C('Why it matters')];
+  return {
+    id: 'guide', title: 'How Scores Work',
+    sections: [
+      { title: 'SEO score (0–100), per video', columns: cols, rows: [
+        ['Title length', 25, '40–75 chars = 25 · 30–39 or 76+ = 12 · under 30 = 0', 'Room for the main keyword plus a hook, without being cut off in search and suggested videos.'],
+        ['Description length', 25, '180+ chars = 25 · 100–179 = 12 · less = 0 (hashtags excluded)', 'YouTube and Google read the description to understand the topic; short ones give them nothing.'],
+        ['Hashtags', 20, '2–8 = 20 · 1 = 10 · 0 or 9+ = 0', 'A few relevant hashtags add discovery pages; over 15 makes YouTube ignore them all.'],
+        ['Tags', 15, '30+ chars of tags = 15 · some = 8 · none = 0', 'A minor signal, mostly for misspellings and variants.'],
+        ['Keyword signal', 15, 'Title contains how to / guide / best / review / vs / year / number', 'These patterns match how people search, so the video is more likely to rank.'],
+      ] },
+      { title: 'Performance score (0–100), per video', columns: cols, rows: [
+        ['Reach', 72, '12 × log10(views): 1K = 36, 10K = 48, 100K = 60, 1M = 72', 'A log scale, so a 1M-view video does not drown out everything else.'],
+        ['Momentum', 40, 'views per day ÷ 20, capped at 40 (800+/day)', 'Rewards videos that are still pulling views, not just old ones.'],
+        ['Engagement', 30, 'engagement rate × 400, capped at 30 (7.5%+)', 'Likes and comments per view show how strongly the audience responded.'],
+        ['Tiers', '', '80+ Top Performer · 60–79 Above Average · 35–59 Average · <35 Low Performer', 'The total is capped at 100.'],
+      ] },
+      { title: 'CTA score (0–100), per video', columns: cols, rows: [
+        ['Has a CTA', 40, 'Description asks to subscribe, comment, click a link, sign up/book, buy, or follow', 'Without an ask, viewers leave without acting.'],
+        ['Above the fold', 30, 'A CTA within the first 3 lines / 150 characters', 'Only this part is visible before viewers tap "...more".'],
+        ['Has a link', 15, 'At least one http(s) link', 'Gives the CTA somewhere to send people.'],
+        ['Multiple CTA types', 15, 'Two or more CTA types', 'Covers viewers at different stages (subscribe now vs. buy later).'],
+      ] },
+      { title: 'Status labels', columns: [C('Label'), C('Strong', 'status'), C('Average', 'status'), C('Weak', 'status')], rows: [
+        ['Title', '40–75 chars', '30–39 or 76+', 'under 30'],
+        ['Description', '180+ chars', '80–179', 'under 80'],
+        ['Hashtags', '2–8', '1 or 9', '0 or 10+'],
+        ['Overall SEO', 'all three Strong', 'at least one Strong', 'none Strong'],
+      ] },
+      { title: 'Channel-level metrics', columns: [C('Metric'), C('Formula'), C('Meaning')], rows: [
+        ['Engagement rate', '(likes + comments) ÷ views, over analysed videos', 'Audience response per view. 1–3% is typical; 5%+ is strong.'],
+        ['Videos / month', 'videos ÷ months between first and latest analysed upload', 'Publishing cadence.'],
+        ['Consistency', 'videos per month × 20, capped at 100 (5+/month = 100)', 'How regularly the channel publishes.'],
+        ['Authority', '8 × log10(subscribers) + engagement (max 30) + cadence (max 20) + 10% of avg SEO', 'A blended 0–100 strength score for comparing channels.'],
+        ['Ranks', 'Perf = avg views · Publishing = videos/month · Engagement = engagement rate', '1 = best among the channels in this audit.'],
+        ['Shorts', '≤ 60s, or ≤ 3 min tagged #shorts', 'The API has no Shorts flag, so this is an estimate.'],
+        ['Content gap', 'title keyword overlap (Jaccard): ≥ 25% = both cover it; < 10% = we have not covered it', 'Finds competitor topics missing from our channel.'],
+        ['Opportunity', '12 × log10(views) + views/day ÷ 5 (max 40), capped at 100. High ≥ 70, Medium ≥ 45', 'How much demand a missing topic has shown.'],
+      ] },
+    ],
+  };
 }

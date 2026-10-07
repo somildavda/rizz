@@ -13,3 +13,8 @@ binding = "ASSETS"
 # Secrets (never commit these): run
 #   npx wrangler secret put YT_API_KEY
 #   npx wrangler secret put GEMINI_API_KEY
+
+# Open-source AI models on Cloudflare (free daily allowance, no API key):
+# Llama 3.3 (text), Llama 3.2 Vision (thumbnail review), FLUX.1 schnell (images).
+[ai]
+binding = "AI"
