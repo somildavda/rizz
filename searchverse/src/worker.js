@@ -8,6 +8,8 @@
 // - Real CC-licensed photos for thumbnail ideas via Openverse.
 // All scoring runs in the browser (public/analysis.js).
 
+import { authStart, authCallback, authLogout, getSession, oauthConfigured } from './auth.js';
+
 const YT = 'https://www.googleapis.com/youtube/v3/';
 const CACHE_TTL = 6 * 3600;
 
@@ -26,8 +28,13 @@ export default {
 };
 
 const ROUTES = {
-  'GET /api/health': async (req, env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY, openModels: !!env.AI }),
+  'GET /api/health': async (req, env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY, openModels: !!env.AI, googleSignIn: oauthConfigured(env) }),
   'GET /api/channel': getChannel,
+  'GET /api/auth/google': authStart,
+  'GET /api/auth/callback': authCallback,
+  'POST /api/auth/logout': authLogout,
+  'GET /api/me': me,
+  'GET /api/me/analytics': myAnalytics,
   'POST /api/ai/classify': aiClassify,
   'POST /api/ai/rewrite': aiRewrite,
   'POST /api/ai/thumbnail': aiThumbnail,
@@ -53,8 +60,11 @@ const geminiKey = (req, env) => env.GEMINI_API_KEY || req.headers.get('x-gemini-
 async function yt(path, params, key) {
   const u = new URL(YT + path);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-  u.searchParams.set('key', key);
-  const r = await fetch(u);
+  // `key` is an API key, or "Bearer <token>" when the user signed in with Google.
+  const headers = {};
+  if (key.startsWith('Bearer ')) headers.authorization = key;
+  else u.searchParams.set('key', key);
+  const r = await fetch(u, { headers });
   const body = await r.json();
   if (!r.ok) fail(`YouTube API ${r.status}: ${body.error?.message || 'error'}`, r.status === 403 ? 429 : 502);
   return body;
@@ -116,7 +126,11 @@ async function getChannel(req, env, ctx, url) {
   const hit = await cache.match(cacheKey);
   if (hit && url.searchParams.get('fresh') !== '1') return hit;
 
-  const key = ytKey(req, env);
+  let key = env.YT_API_KEY || req.headers.get('x-yt-key');
+  if (!key) {
+    const sess = await getSession(req, env);
+    key = sess ? 'Bearer ' + sess.token : ytKey(req, env);
+  }
   const channel = await resolveChannel(q, key);
 
   const ids = [];
@@ -292,4 +306,53 @@ async function photos(req, env, ctx, url) {
       creator: x.creator, license: `CC ${String(x.license).toUpperCase()} ${x.license_version || ''}`.trim(), licenseUrl: x.license_url, attribution: x.attribution,
     })),
   }, 200, { 'cache-control': 'public, max-age=86400' });
+}
+
+// ── Connected channel (owner data) ───────────────────────────
+async function requireSession(req, env) {
+  const s = await getSession(req, env);
+  if (!s) fail('Not connected. Click "Connect YouTube" first.', 401);
+  return s;
+}
+const withCookie = (res, s) => { if (s.setCookie) res.headers.append('set-cookie', s.setCookie); return res; };
+
+async function me(req, env) {
+  if (!oauthConfigured(env)) return json({ configured: false, connected: false });
+  const s = await getSession(req, env);
+  if (!s) return json({ configured: true, connected: false });
+  const d = await yt('channels', { part: 'snippet,statistics', mine: 'true', maxResults: '50' }, 'Bearer ' + s.token);
+  const channels = (d.items || []).map((it) => ({
+    id: it.id, title: it.snippet.title, handle: it.snippet.customUrl || '', thumb: it.snippet.thumbnails?.default?.url || '',
+    subscribers: +it.statistics.subscriberCount || 0, videoCount: +it.statistics.videoCount || 0,
+  }));
+  return withCookie(json({ configured: true, connected: true, channels }), s);
+}
+
+// YouTube Analytics API: watch time, retention, subscribers, traffic sources,
+// YouTube search terms and countries for a channel the user owns.
+async function myAnalytics(req, env, ctx, url) {
+  const s = await requireSession(req, env);
+  const channel = url.searchParams.get('channel') || 'MINE';
+  const days = Math.min(365, Math.max(7, +url.searchParams.get('days') || 90));
+  const end = new Date(Date.now() - 2 * 86400000); // analytics lag ~2 days
+  const start = new Date(end.getTime() - days * 86400000);
+  const base = { ids: channel === 'MINE' ? 'channel==MINE' : 'channel==' + channel, startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
+  const q = async (params) => {
+    const u = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+    for (const [k, v] of Object.entries({ ...base, ...params })) u.searchParams.set(k, v);
+    const r = await fetch(u, { headers: { authorization: 'Bearer ' + s.token } });
+    const d = await r.json();
+    if (!r.ok) fail(`YouTube Analytics ${r.status}: ${d.error?.message || 'error'}`, r.status === 403 ? 403 : 502);
+    const cols = (d.columnHeaders || []).map((c) => c.name);
+    return (d.rows || []).map((row) => Object.fromEntries(row.map((v, i) => [cols[i], v])));
+  };
+  const [totals, daily, videos, traffic, searchTerms, countries] = await Promise.all([
+    q({ metrics: 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost,likes,comments,shares' }),
+    q({ dimensions: 'day', metrics: 'views,estimatedMinutesWatched,subscribersGained', sort: 'day' }),
+    q({ dimensions: 'video', metrics: 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained', sort: '-views', maxResults: '200' }),
+    q({ dimensions: 'insightTrafficSourceType', metrics: 'views,estimatedMinutesWatched', sort: '-views' }),
+    q({ dimensions: 'insightTrafficSourceDetail', filters: 'insightTrafficSourceType==YT_SEARCH', metrics: 'views', sort: '-views', maxResults: '25' }),
+    q({ dimensions: 'country', metrics: 'views,estimatedMinutesWatched', sort: '-views', maxResults: '15' }),
+  ]);
+  return withCookie(json({ range: { start: base.startDate, end: base.endDate, days }, totals: totals[0] || {}, daily, videos, traffic, searchTerms, countries }), s);
 }

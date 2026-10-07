@@ -70,6 +70,39 @@ $('maxVideos').value = saved.max || '200';
 
 $('runBtn').onclick = runAudit;
 
+// ── Connect YouTube (Google sign-in, like GSC / GA4) ─────────
+let me = { configured: false, connected: false, channels: [] };
+async function loadMe() {
+  try { me = await api('/api/me'); } catch (e) { me = { configured: true, connected: false, error: e.message }; }
+  $('connectBtn').hidden = !me.configured || me.connected;
+  const acct = $('acct');
+  acct.hidden = !me.connected;
+  if (me.connected) {
+    const c = me.channels[0];
+    acct.innerHTML = `${c?.thumb ? `<img src="${esc(c.thumb)}" alt="">` : ''}<span>${esc(c?.title || 'Connected')}</span><button title="Disconnect">Disconnect</button>`;
+    acct.querySelector('button').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/'; };
+    const sel = $('myChannels');
+    if (me.channels.length) {
+      sel.hidden = false;
+      sel.innerHTML = me.channels.map((ch) => `<option value="${esc(ch.id)}">${esc(ch.title)} (connected · ${fmtNum(ch.subscribers)} subs)</option>`).join('') + '<option value="">Another channel (paste below)…</option>';
+      const syncOwn = () => { $('ownChannel').hidden = !!sel.value; if (sel.value) $('ownChannel').value = sel.value; };
+      sel.onchange = syncOwn;
+      if (!$('ownChannel').value || me.channels.some((ch) => ch.id === $('ownChannel').value)) { sel.value = me.channels.some((ch) => ch.id === $('ownChannel').value) ? $('ownChannel').value : me.channels[0].id; }
+      else sel.value = '';
+      syncOwn();
+    }
+  }
+}
+const connectMsg = new URLSearchParams(location.search).get('connect');
+if (connectMsg) {
+  const n = $('connectNote');
+  n.hidden = false;
+  if (connectMsg === 'ok') n.textContent = '✓ YouTube connected. Your channel is selected; the audit will include owner analytics (watch time, retention, traffic sources, search terms).';
+  else { n.className = 'connect-note err'; n.textContent = `Couldn't connect YouTube (${connectMsg}). Try again, and make sure your Google account is added as a test user.`; }
+  history.replaceState(null, '', '/');
+}
+loadMe();
+
 async function runAudit() {
   const cfg = {
     brand: $('brand').value.trim(),
@@ -118,9 +151,53 @@ async function runAudit() {
   state = { ...state, cfg, channels, videos, reports: buildReports(channels, videos, now), active: 'dashboard', ai: {} };
   $('resTitle').textContent = (cfg.brand || channels[0].title) + ' audit';
   $('resMeta').textContent = `${channels.length} channels · ${videos.length} videos · ${secs}s · ${new Date().toLocaleString()}${cfg.market ? ' · ' + cfg.market : ''}`;
+  const ownCh = channels.find((c) => c.type === 'Own');
+  if (ownCh && me.connected && me.channels.some((c) => c.id === ownCh.id)) {
+    const line = document.createElement('div');
+    line.textContent = '⏳ Owner analytics (last 90 days)…';
+    prog.appendChild(line);
+    try {
+      const a = await api(`/api/me/analytics?channel=${ownCh.id}&days=90`);
+      state.reports.splice(1, 0, ownerReport(a, videos));
+      line.className = 'ok'; line.textContent = `✓ Owner analytics: ${a.range.start} → ${a.range.end}`;
+    } catch (e) { line.className = 'err'; line.textContent = `✗ Owner analytics: ${e.message}`; }
+  }
   $('results').hidden = false;
   render();
   $('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ── Owner analytics report (connected channel only) ──────────
+const TRAFFIC = { YT_SEARCH: 'YouTube search', SUGGESTED: 'Suggested videos', BROWSE: 'Browse / Home', EXT_URL: 'External sites', NO_LINK_OTHER: 'Direct / unknown', PLAYLIST: 'Playlists', NOTIFICATION: 'Notifications', SUBSCRIBER: 'Subscriptions feed', SHORTS: 'Shorts feed', CHANNEL: 'Channel pages', YT_OTHER_PAGE: 'Other YouTube pages', END_SCREEN: 'End screens', ANNOTATION: 'Cards / annotations', HASHTAGS: 'Hashtag pages', RELATED_VIDEO: 'Related videos', SOUND_PAGE: 'Sound pages', LIVE_REDIRECT: 'Live redirect', CAMPAIGN_CARD: 'Campaign cards', ADVERTISING: 'YouTube ads', PRODUCT_PAGE: 'Product pages', VIDEO_REMIXES: 'Remixes' };
+function ownerReport(a, videos) {
+  const t = a.totals;
+  const byId = new Map(videos.map((v) => [v.id, v]));
+  const C = (l, f = 'text') => [l, f];
+  const totalTrafficViews = a.traffic.reduce((x, r) => x + r.views, 0) || 1;
+  const fmtDur = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  return {
+    id: 'owner', title: 'Owner Analytics',
+    kpis: [
+      ['Views (90d)', fmtNum(t.views), 'From YouTube Analytics, owner-only data'],
+      ['Watch hours', fmtNum((t.estimatedMinutesWatched || 0) / 60), 'Estimated minutes watched ÷ 60'],
+      ['Avg view duration', fmtDur(t.averageViewDuration || 0), 'How long a typical view lasts'],
+      ['Avg % viewed', (t.averageViewPercentage || 0).toFixed(1) + '%', 'Retention: share of the video watched on average'],
+      ['Net subscribers', fmtNum((t.subscribersGained || 0) - (t.subscribersLost || 0)), `+${fmtNum(t.subscribersGained)} / −${fmtNum(t.subscribersLost)}`],
+      ['Search share', ((a.traffic.find((r) => r.insightTrafficSourceType === 'YT_SEARCH')?.views || 0) / totalTrafficViews * 100).toFixed(1) + '%', 'Share of views from YouTube search'],
+    ],
+    sections: [
+      { title: `Per-video retention & watch time (${a.range.start} → ${a.range.end})`, columns: [C('Title'), C('URL', 'url'), C('Views', 'num'), C('Watch hours', 'num'), C('Avg duration'), C('Avg % viewed', 'num'), C('Subs gained', 'num'), C('Retention', 'status')],
+        rows: a.videos.map((r) => { const v = byId.get(r.video); const p = r.averageViewPercentage;
+          return [v?.title || r.video, 'https://youtu.be/' + r.video, r.views, Math.round(r.estimatedMinutesWatched / 60), fmtDur(r.averageViewDuration), Math.round(p * 10) / 10, r.subscribersGained, p >= 50 ? 'Strong' : p >= 30 ? 'Average' : 'Weak']; }),
+        note: 'Retention: Strong ≥ 50% viewed, Average 30–49%, Weak < 30% (Shorts usually run higher). Impressions and click-through rate are only in YouTube Studio; Google does not expose them in the Analytics API.' },
+      { title: 'Traffic sources', columns: [C('Source'), C('Views', 'num'), C('Share', 'pct'), C('Watch hours', 'num')],
+        rows: a.traffic.map((r) => [TRAFFIC[r.insightTrafficSourceType] || r.insightTrafficSourceType, r.views, r.views / totalTrafficViews, Math.round(r.estimatedMinutesWatched / 60)]) },
+      { title: 'Top YouTube search terms bringing viewers', columns: [C('Search term'), C('Views', 'num')],
+        rows: a.searchTerms.map((r) => [r.insightTrafficSourceDetail, r.views]), note: 'Real queries people typed on YouTube before watching. Use them in titles, descriptions and new videos.' },
+      { title: 'Top countries', columns: [C('Country'), C('Views', 'num'), C('Watch hours', 'num')], rows: a.countries.map((r) => [r.country, r.views, Math.round(r.estimatedMinutesWatched / 60)]) },
+      { title: 'Daily trend', columns: [C('Day', 'date'), C('Views', 'num'), C('Watch hours', 'num'), C('Subs gained', 'num')], rows: a.daily.map((r) => [r.day, r.views, Math.round(r.estimatedMinutesWatched / 60), r.subscribersGained]) },
+    ],
+  };
 }
 
 // ── Rendering ────────────────────────────────────────────────
@@ -144,7 +221,7 @@ function cell(v, fmt) {
 }
 
 function render() {
-  const dash = state.reports.find((r) => r.id === 'dashboard');
+  const dash = state.reports.find((r) => r.id === state.active && r.kpis) || state.reports.find((r) => r.id === 'dashboard');
   $('kpis').innerHTML = (dash.kpis || []).map(([k, v, h]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${h ? `<div class="h">${esc(h)}</div>` : ''}</div>`).join('');
 
   const tabs = [...state.reports.map((r) => [r.id, r.title]), ['ai', 'AI Review']];

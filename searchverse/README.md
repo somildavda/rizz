@@ -65,8 +65,27 @@ npm run deploy                            # → https://searchverse-yt-audit.<yo
 
 Restrict the YouTube key to the YouTube Data API in Google Cloud. Anyone with the Workers URL can spend its quota, so put the tool behind Cloudflare Access (free for up to 50 users) before sharing it.
 
+## Connect YouTube (Google sign-in, same as GSC / GA4)
+
+Once this is set up, people click **Connect YouTube**, pick their Google account, and their channel is selected automatically. The audit then adds an **Owner Analytics** tab with 90-day views, watch hours, average view duration, % viewed (retention), net subscribers, traffic sources, the **YouTube search terms** that brought viewers, countries and a daily trend. Impressions and CTR are not available, because Google keeps them in Studio only.
+
+One-time setup in Google Cloud (the same screens you used for GSC/GA4):
+1. **APIs & Services → Library**: enable **YouTube Data API v3** and **YouTube Analytics API**.
+2. **OAuth consent screen**: user type **External**, app name "Searchverse YouTube Audit", your support email. Add the scopes `youtube.readonly` and `yt-analytics.readonly`. Under **Test users**, add every Google account that will connect (up to 100, no Google review needed while in Testing).
+3. **Credentials → Create credentials → OAuth client ID → Web application**.
+   Authorised redirect URI: `https://searchverse-yt-audit.<you>.workers.dev/api/auth/callback`
+   (and `http://localhost:8787/api/auth/callback` for local testing).
+4. Add the secrets to Cloudflare:
+   ```bash
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   npx wrangler secret put SESSION_SECRET     # any long random string, e.g. from: openssl rand -base64 32
+   ```
+
+Tokens are stored only in an encrypted, HttpOnly cookie in the user's browser, and **Disconnect** revokes them. When someone is connected, public channel data can also be fetched with their sign-in, so `YT_API_KEY` becomes optional.
+
 ## Roadmap
 1. **YouTube audit** (this release).
-2. **Connect channel (owner mode):** Google sign-in with the YouTube Analytics API for CTR, impressions and retention. This needs an OAuth client in Google Cloud.
+2. ~~Connect channel (owner mode)~~ done; see above.
 3. **AI search / citation tracker:** which prompts people ask, and which YouTube videos ChatGPT, Gemini, Perplexity and AI Overviews cite. Before building it, compare open-source GitHub projects for accuracy.
 4. Save audits over time in D1 and schedule weekly re-audits with Cron.

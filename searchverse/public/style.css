@@ -50,6 +50,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0; color: var(--text); font: 14px/1.55 Inter, system-ui, sans-serif;
   background: radial-gradient(900px 500px at 10% -10%, var(--bg-glow-1), transparent 60%),
@@ -119,6 +120,16 @@ label.check input { width: auto; margin: 0; box-shadow: none; }
 .progress { margin-top: 18px; border-top: 1px dashed var(--border); padding-top: 12px; }
 .progress div { padding: 3px 0; font-size: 13px; }
 .ok { color: var(--good); } .err { color: var(--bad); }
+
+/* Connect YouTube */
+.btn.google { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.acct { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 4px 6px 4px 4px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--inset); }
+.acct img { width: 26px; height: 26px; border-radius: 50%; }
+.acct button { border: 0; background: none; color: var(--muted); cursor: pointer; font: 600 12px Inter, sans-serif; }
+.connect-note { margin-top: 14px; padding: 12px 14px; border-radius: 12px; font-size: 13px; background: var(--good-bg); color: var(--good); box-shadow: var(--inset); }
+.connect-note.err { background: var(--bad-bg); color: var(--bad); }
+#myChannels { margin-bottom: 6px; }
 
 /* Results */
 #results { margin-top: 32px; }
