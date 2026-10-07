@@ -1,0 +1,30 @@
+name = "searchverse-youtube"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "searchverse-youtube"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+# Admins: full access (add/remove users, send invites). Comma separated.
+# If left empty, the first person to sign in becomes admin.
+ADMIN_EMAILS = ""
+# Optional: let anyone matching these emails / "@domain.com" self-join as a member.
+# Leave empty so only users an admin adds can sign in.
+ALLOWED_EMAILS = ""
+# GEMINI_MODEL = "gemini-2.5-flash"
+
+# Secrets (set with `npx wrangler secret put NAME`, never commit them):
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, APP_SECRET (encrypts tokens; never change it),
+#   YT_API_KEY, GEMINI_API_KEY (optional), BREVO_API_KEY + MAIL_FROM (optional invite emails)
+
+# Open-source AI models on Cloudflare (free daily allowance, no API key):
+# Llama 3.3 (text), Llama 3.2 Vision (thumbnail review), FLUX.1 schnell (images).
+[ai]
+binding = "AI"

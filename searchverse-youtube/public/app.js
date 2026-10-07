@@ -70,38 +70,120 @@ $('maxVideos').value = saved.max || '200';
 
 $('runBtn').onclick = runAudit;
 
-// ── Connect YouTube (Google sign-in, like GSC / GA4) ─────────
-let me = { configured: false, connected: false, channels: [] };
-async function loadMe() {
-  try { me = await api('/api/me'); } catch (e) { me = { configured: true, connected: false, error: e.message }; }
-  $('connectBtn').hidden = !me.configured || me.connected;
-  const acct = $('acct');
-  acct.hidden = !me.connected;
-  if (me.connected) {
-    const c = me.channels[0];
-    acct.innerHTML = `${c?.thumb ? `<img src="${esc(c.thumb)}" alt="">` : ''}<span>${esc(c?.title || 'Connected')}</span><button title="Disconnect">Disconnect</button>`;
-    acct.querySelector('button').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/'; };
-    const sel = $('myChannels');
-    if (me.channels.length) {
-      sel.hidden = false;
-      sel.innerHTML = me.channels.map((ch) => `<option value="${esc(ch.id)}">${esc(ch.title)} (connected · ${fmtNum(ch.subscribers)} subs)</option>`).join('') + '<option value="">Another channel (paste below)…</option>';
-      const syncOwn = () => { $('ownChannel').hidden = !!sel.value; if (sel.value) $('ownChannel').value = sel.value; };
-      sel.onchange = syncOwn;
-      if (!$('ownChannel').value || me.channels.some((ch) => ch.id === $('ownChannel').value)) { sel.value = me.channels.some((ch) => ch.id === $('ownChannel').value) ? $('ownChannel').value : me.channels[0].id; }
-      else sel.value = '';
-      syncOwn();
-    }
-  }
+// ── Session: sign-in page, Connect YouTube, Team ─────────────
+let session = { signedIn: false };
+let me = { connected: false, channels: [] };
+async function apiReq(method, path, body) {
+  const r = await fetch(path, { method, headers: { 'content-type': 'application/json', ...keyHeaders() }, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
 }
-const connectMsg = new URLSearchParams(location.search).get('connect');
-if (connectMsg) {
+function toast(msg, bad) {
   const n = $('connectNote');
   n.hidden = false;
-  if (connectMsg === 'ok') n.textContent = '✓ YouTube connected. Your channel is selected; the audit will include owner analytics (watch time, retention, traffic sources, search terms).';
-  else { n.className = 'connect-note err'; n.textContent = `Couldn't connect YouTube (${connectMsg}). Try again, and make sure your Google account is added as a test user.`; }
-  history.replaceState(null, '', '/');
+  n.className = 'connect-note' + (bad ? ' err' : '');
+  n.textContent = msg;
 }
-loadMe();
+
+async function boot() {
+  const notice = new URLSearchParams(location.search).get('notice');
+  if (notice) history.replaceState(null, '', '/');
+  session = await apiReq('GET', '/api/session').catch(() => ({ signedIn: false }));
+  if (!session.signedIn) {
+    $('login').hidden = false;
+    $('app').hidden = true;
+    $('loginNotice').hidden = !notice && session.signInReady !== false;
+    $('loginNotice').textContent = notice || 'Google sign-in is not set up on this server yet (see GO-LIVE-GUIDE.md).';
+    return;
+  }
+  $('login').hidden = true;
+  $('app').hidden = false;
+  if (notice) toast(notice, !notice.startsWith('✓'));
+  const u = session.user;
+  $('userChip').hidden = false;
+  $('userChip').innerHTML = `${u.picture ? `<img src="${esc(u.picture)}" alt="" referrerpolicy="no-referrer">` : ''}<span>${esc(u.name || u.email)}</span>`;
+  $('teamBtn').hidden = u.role !== 'admin';
+  $('signOutBtn').hidden = !!u.local;
+  renderYtStatus();
+  await loadMe();
+}
+
+function renderYtStatus() {
+  const yt = session.youtube;
+  const box = $('acct');
+  $('connectBtn').hidden = !!(yt && !yt.expired) || session.user.local;
+  box.hidden = !yt;
+  if (!yt) return;
+  box.innerHTML = yt.expired
+    ? `<span class="err">YouTube access expired</span><a class="btn small" href="/auth/youtube">Reconnect</a>`
+    : `<span title="${esc(yt.googleEmail)}">▶ ${esc(yt.googleEmail)}</span><span class="muted small">${yt.expiresInDays}d left</span><button title="Disconnect">✕</button>`;
+  box.querySelector('button')?.addEventListener('click', async () => { await apiReq('POST', '/api/youtube/disconnect'); location.reload(); });
+}
+
+async function loadMe() {
+  try { me = await apiReq('GET', '/api/me'); } catch { me = { connected: false, channels: [] }; }
+  const sel = $('myChannels');
+  sel.hidden = !me.channels.length;
+  if (!me.channels.length) { $('ownChannel').hidden = false; return; }
+  sel.innerHTML = me.channels.map((ch) => `<option value="${esc(ch.id)}">${esc(ch.title)} (connected · ${fmtNum(ch.subscribers)} subs)</option>`).join('') + '<option value="">Another channel (paste a URL below)…</option>';
+  const syncOwn = () => { $('ownChannel').hidden = !!sel.value; if (sel.value) $('ownChannel').value = sel.value; };
+  sel.onchange = syncOwn;
+  sel.value = me.channels.some((ch) => ch.id === $('ownChannel').value) || !$('ownChannel').value ? ($('ownChannel').value && me.channels.some((ch) => ch.id === $('ownChannel').value) ? $('ownChannel').value : me.channels[0].id) : '';
+  syncOwn();
+}
+
+$('signOutBtn').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); location.href = '/'; };
+
+// Team page (admins): add people, choose a role, send the invite email.
+$('teamBtn').onclick = () => { $('team').showModal(); loadTeam(); };
+async function loadTeam() {
+  const mb = session.mailbox;
+  $('mailStatus').innerHTML = mb && !mb.expired
+    ? `✉️ Invites are emailed from <b>${esc(mb.googleEmail)}</b> (${mb.expiresInDays}d left). <button class="btn ghost small" id="mailOff">Disconnect</button>`
+    : `${mb?.expired ? '⚠️ Mailbox access expired. ' : ''}${session.brevo ? '✉️ Invites are emailed via Brevo. ' : 'Without a mailbox, invites open in your own mail app. '}<a class="btn small" href="/auth/mail">${mb?.expired ? 'Reconnect' : 'Connect my mailbox'}</a>`;
+  $('mailOff')?.addEventListener('click', async () => { await apiReq('POST', '/api/mail/disconnect'); session.mailbox = null; loadTeam(); });
+  const { users } = await apiReq('GET', '/api/users');
+  $('teamList').innerHTML = `<table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th></th></tr></thead><tbody>${users.map((u) => `
+    <tr data-email="${esc(u.email)}"><td><b>${esc(u.name && u.name !== u.email ? u.name : '')}</b> <span class="muted">${esc(u.email)}</span>${u.disabled ? ' <span class="pill bad">Disabled</span>' : ''}</td>
+    <td><select data-act="role" style="margin:0;padding:5px 8px;width:auto"><option value="member" ${u.role === 'member' ? 'selected' : ''}>Member</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option></select></td>
+    <td class="muted small">${u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never: invite pending'}</td>
+    <td style="white-space:nowrap"><button class="btn ghost small" data-act="invite">Resend invite</button> <button class="btn ghost small" data-act="${u.disabled ? 'enable' : 'disable'}">${u.disabled ? 'Enable' : 'Disable'}</button> <button class="btn ghost small" data-act="remove">Remove</button></td></tr>`).join('')}</tbody></table>`;
+}
+function deliverInvite(res) {
+  const inv = res.invite;
+  if (!inv) return;
+  if (inv.emailed) { $('teamMsg').textContent = `✓ Invite emailed to ${res.email} (from ${inv.from}).`; return; }
+  $('teamMsg').textContent = `Added ${res.email}. Your mail app is opening with the invite ready to send.`;
+  location.href = `mailto:${encodeURIComponent(res.email)}?subject=${encodeURIComponent(inv.subject)}&body=${encodeURIComponent(inv.text)}`;
+}
+$('addUserBtn').onclick = async (e) => {
+  e.preventDefault();
+  try {
+    const res = await apiReq('POST', '/api/users', { email: $('newEmail').value, role: $('newRole').value, invite: $('newInvite').checked });
+    $('newEmail').value = '';
+    deliverInvite(res);
+    loadTeam();
+  } catch (err) { $('teamMsg').textContent = err.message; }
+};
+$('teamList').onclick = async (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const email = b.closest('tr').dataset.email;
+  try {
+    if (b.dataset.act === 'invite') deliverInvite(await apiReq('POST', '/api/invite', { email }));
+    if (b.dataset.act === 'disable' || b.dataset.act === 'enable') await apiReq('PATCH', '/api/users', { email, disabled: b.dataset.act === 'disable' });
+    if (b.dataset.act === 'remove' && confirm(`Remove ${email}?`)) await apiReq('DELETE', '/api/users?email=' + encodeURIComponent(email));
+    loadTeam();
+  } catch (err) { $('teamMsg').textContent = err.message; }
+};
+$('teamList').onchange = async (e) => {
+  if (e.target.dataset.act !== 'role') return;
+  try { await apiReq('PATCH', '/api/users', { email: e.target.closest('tr').dataset.email, role: e.target.value }); }
+  catch (err) { $('teamMsg').textContent = err.message; loadTeam(); }
+};
+
+boot();
 
 async function runAudit() {
   const cfg = {

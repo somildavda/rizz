@@ -1,5 +1,7 @@
 # Searchverse YouTube Audit
 
+👉 **Taking it live? Follow [GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md) step by step.**
+
 Audits your YouTube channel against up to 10 competitors and scores titles, descriptions, CTAs, hashtags, thumbnails, engagement, publishing cadence, length, themes, formats, funnel intent and content gaps. It is the web version of the "Search Indicators" Google Sheets Apps Script. The rules and the report tabs are the same, and it adds CTA and thumbnail checks.
 
 Running cost: **₹0**. It uses the Cloudflare Workers free plan, the YouTube Data API free quota, open-source AI models on Workers AI (free daily allowance), and optionally the Gemini free tier.
@@ -45,9 +47,10 @@ Every score is built from named parts (for example, SEO = title 25 + description
 ## Run locally
 
 ```bash
-cd searchverse
+cd searchverse-youtube
 npm install
-echo 'YT_API_KEY=your-key' > .dev.vars    # optional second line: GEMINI_API_KEY=…
+printf 'YT_API_KEY=your-key\nOPEN_ACCESS=1\n' > .dev.vars   # or GOOGLE_CLIENT_ID/SECRET + APP_SECRET to test sign-in
+npm run db:init:local
 npm run dev                               # http://localhost:8787
 npm test                                  # analysis unit tests
 ```
@@ -55,37 +58,17 @@ npm test                                  # analysis unit tests
 The AI models need a Cloudflare login even locally (`npx wrangler login`, or a `CLOUDFLARE_API_TOKEN`).
 
 ## Deploy to Cloudflare (free)
+See **[GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md)**: `wrangler login` → `d1 create` → `db:init` → secrets → `deploy`.
 
-```bash
-npx wrangler login
-npx wrangler secret put YT_API_KEY        # Google Cloud → enable "YouTube Data API v3" → create API key
-npx wrangler secret put GEMINI_API_KEY    # optional, from aistudio.google.com
-npm run deploy                            # → https://searchverse-yt-audit.<you>.workers.dev
-```
-
-Restrict the YouTube key to the YouTube Data API in Google Cloud. Anyone with the Workers URL can spend its quota, so put the tool behind Cloudflare Access (free for up to 50 users) before sharing it.
-
-## Connect YouTube (Google sign-in, same as GSC / GA4)
-
-Once this is set up, people click **Connect YouTube**, pick their Google account, and their channel is selected automatically. The audit then adds an **Owner Analytics** tab with 90-day views, watch hours, average view duration, % viewed (retention), net subscribers, traffic sources, the **YouTube search terms** that brought viewers, countries and a daily trend. Impressions and CTR are not available, because Google keeps them in Studio only.
-
-One-time setup in Google Cloud (the same screens you used for GSC/GA4):
-1. **APIs & Services → Library**: enable **YouTube Data API v3** and **YouTube Analytics API**.
-2. **OAuth consent screen**: user type **External**, app name "Searchverse YouTube Audit", your support email. Add the scopes `youtube.readonly` and `yt-analytics.readonly`. Under **Test users**, add every Google account that will connect (up to 100, no Google review needed while in Testing).
-3. **Credentials → Create credentials → OAuth client ID → Web application**.
-   Authorised redirect URI: `https://searchverse-yt-audit.<you>.workers.dev/api/auth/callback`
-   (and `http://localhost:8787/api/auth/callback` for local testing).
-4. Add the secrets to Cloudflare:
-   ```bash
-   npx wrangler secret put GOOGLE_CLIENT_ID
-   npx wrangler secret put GOOGLE_CLIENT_SECRET
-   npx wrangler secret put SESSION_SECRET     # any long random string, e.g. from: openssl rand -base64 32
-   ```
-
-Tokens are stored only in an encrypted, HttpOnly cookie in the user's browser, and **Disconnect** revokes them. When someone is connected, public channel data can also be fetched with their sign-in, so `YT_API_KEY` becomes optional.
+## Sign-in, team and Connect YouTube (same setup as the GSC/GA tool)
+- **Sign in with Google** is required. Admins come from `ADMIN_EMAILS`; if that's empty, the first person to sign in becomes admin. Everyone else must be added on the **Team** page (or match `ALLOWED_EMAILS`).
+- **Team** (admins only): add, remove or disable users, set Admin or Member, and send invite emails. Invites go out from the admin's own Gmail (gmail.send), or through Brevo; otherwise your mail app opens with the invite text ready.
+- **Connect YouTube**: each user can connect the Google account that owns their channel (youtube.readonly + yt-analytics.readonly). This adds the **Owner Analytics** tab: watch time, retention, traffic sources, YouTube search terms, countries and a daily trend. Impressions and CTR are not in Google's API.
+- All of this is stored in D1 (`schema.sql`). Tokens are encrypted with `APP_SECRET`. While the Google app is in Testing mode, connections need a 10-second Reconnect every 7 days.
+- Local testing without Google: put `OPEN_ACCESS=1` in `.dev.vars`.
 
 ## Roadmap
 1. **YouTube audit** (this release).
-2. ~~Connect channel (owner mode)~~ done; see above.
+2. ~~Connect channel (owner mode), sign-in, team, invites~~ done; see above.
 3. **AI search / citation tracker:** which prompts people ask, and which YouTube videos ChatGPT, Gemini, Perplexity and AI Overviews cite. Before building it, compare open-source GitHub projects for accuracy.
 4. Save audits over time in D1 and schedule weekly re-audits with Cron.

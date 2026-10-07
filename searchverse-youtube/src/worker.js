@@ -8,7 +8,10 @@
 // - Real CC-licensed photos for thumbnail ideas via Openverse.
 // All scoring runs in the browser (public/analysis.js).
 
-import { authStart, authCallback, authLogout, getSession, oauthConfigured } from './auth.js';
+import {
+  authConfigured, authStart, authCallback, logout, currentUser, tokenFor, connectionStatus, disconnect,
+  listUsers, addUser, updateUser, removeUser, sendInvite,
+} from './auth.js';
 
 const YT = 'https://www.googleapis.com/youtube/v3/';
 const CACHE_TTL = 6 * 3600;
@@ -16,25 +19,69 @@ const CACHE_TTL = 6 * 3600;
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
-    if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
-      const route = ROUTES[`${req.method} ${url.pathname}`];
+      if (url.pathname === '/auth/login') return await authStart(req, env, 'login');
+      if (url.pathname === '/auth/youtube') return await authStart(req, env, 'youtube');
+      if (url.pathname === '/auth/mail') return await authStart(req, env, 'mail');
+      if (url.pathname === '/auth/callback') return await authCallback(req, env);
+      if (url.pathname === '/auth/logout' && req.method === 'POST') return await logout(req, env);
+      if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+
+      const key = `${req.method} ${url.pathname}`;
+      if (key === 'GET /api/health') return health(env);
+      // Everything else needs a signed-in user (Sign in with Google). For local
+      // testing without Google set up, put OPEN_ACCESS=1 in .dev.vars.
+      let user = await currentUser(req, env);
+      if (!user && env.OPEN_ACCESS === '1' && !authConfigured(env)) user = { email: 'local@dev', name: 'Local', role: 'admin', local: true };
+      if (key === 'GET /api/session') return await session(env, user);
+      if (!user) return json({ error: 'Please sign in.' }, 401);
+      const route = ROUTES[key];
       if (!route) return json({ error: 'Not found' }, 404);
-      return await route(req, env, ctx, url);
+      if (ADMIN_ONLY.has(key) && user.role !== 'admin') return json({ error: 'Only admins can do this.' }, 403);
+      return await route(req, env, ctx, url, user);
     } catch (e) {
       return json({ error: e.message || String(e) }, e.status || 500);
     }
   },
 };
 
+const health = (env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY, openModels: !!env.AI, signIn: authConfigured(env) });
+
+async function session(env, user) {
+  if (!user) return json({ signedIn: false, signInReady: authConfigured(env) });
+  const local = user.local;
+  return json({
+    signedIn: true,
+    user,
+    youtube: local ? null : await connectionStatus(env, 'yt_connections', user.email),
+    mailbox: local || user.role !== 'admin' ? null : await connectionStatus(env, 'mail_senders', user.email),
+    brevo: !!(env.BREVO_API_KEY && env.MAIL_FROM),
+  });
+}
+
+const ADMIN_ONLY = new Set(['GET /api/users', 'POST /api/users', 'PATCH /api/users', 'DELETE /api/users', 'POST /api/invite', 'POST /api/mail/disconnect']);
+
 const ROUTES = {
-  'GET /api/health': async (req, env) => json({ ok: true, youtube: !!env.YT_API_KEY, gemini: !!env.GEMINI_API_KEY, openModels: !!env.AI, googleSignIn: oauthConfigured(env) }),
   'GET /api/channel': getChannel,
-  'GET /api/auth/google': authStart,
-  'GET /api/auth/callback': authCallback,
-  'POST /api/auth/logout': authLogout,
   'GET /api/me': me,
   'GET /api/me/analytics': myAnalytics,
+  'POST /api/youtube/disconnect': async (req, env, ctx, url, user) => { await disconnect(env, 'yt_connections', user.email); return json({ ok: true }); },
+  'POST /api/mail/disconnect': async (req, env, ctx, url, user) => { await disconnect(env, 'mail_senders', user.email); return json({ ok: true }); },
+  'GET /api/users': async (req, env) => json({ users: await listUsers(env) }),
+  'POST /api/users': async (req, env, ctx, url, user) => {
+    const { email, role, invite = true } = await req.json();
+    const added = await addUser(env, user.email, email, role);
+    const sent = invite ? await sendInvite(env, url.origin, added, user.email, role) : null;
+    return json({ ok: true, email: added, invite: sent });
+  },
+  'PATCH /api/users': async (req, env, ctx, url, user) => { const b = await req.json(); await updateUser(env, user.email, b.email, b); return json({ ok: true }); },
+  'DELETE /api/users': async (req, env, ctx, url, user) => { await removeUser(env, user.email, url.searchParams.get('email')); return json({ ok: true }); },
+  'POST /api/invite': async (req, env, ctx, url, user) => {
+    const { email } = await req.json();
+    const u = await env.DB.prepare('SELECT role FROM users WHERE email = ?').bind(email).first();
+    if (!u) fail('User not found.', 404);
+    return json({ ok: true, email, invite: await sendInvite(env, url.origin, email, user.email, u.role) });
+  },
   'POST /api/ai/classify': aiClassify,
   'POST /api/ai/rewrite': aiRewrite,
   'POST /api/ai/thumbnail': aiThumbnail,
@@ -117,7 +164,7 @@ async function resolveChannel(input, key) {
   };
 }
 
-async function getChannel(req, env, ctx, url) {
+async function getChannel(req, env, ctx, url, user) {
   const q = url.searchParams.get('q') || fail('Missing ?q=');
   const max = Math.min(500, Math.max(1, +url.searchParams.get('max') || 200));
 
@@ -128,8 +175,8 @@ async function getChannel(req, env, ctx, url) {
 
   let key = env.YT_API_KEY || req.headers.get('x-yt-key');
   if (!key) {
-    const sess = await getSession(req, env);
-    key = sess ? 'Bearer ' + sess.token : ytKey(req, env);
+    const yt = user && !user.local ? await tokenFor(env, 'yt_connections', user.email) : null;
+    key = yt ? 'Bearer ' + yt.token : ytKey(req, env);
   }
   const channel = await resolveChannel(q, key);
 
@@ -297,7 +344,7 @@ async function photos(req, env, ctx, url) {
   u.searchParams.set('license_type', 'commercial,modification');
   u.searchParams.set('aspect_ratio', 'wide');
   u.searchParams.set('page_size', '8');
-  const r = await fetch(u, { headers: { 'user-agent': 'searchverse-yt-audit' } });
+  const r = await fetch(u, { headers: { 'user-agent': 'searchverse-youtube' } });
   if (!r.ok) fail(`Openverse ${r.status}`, 502);
   const d = await r.json();
   return json({
@@ -309,29 +356,27 @@ async function photos(req, env, ctx, url) {
 }
 
 // ── Connected channel (owner data) ───────────────────────────
-async function requireSession(req, env) {
-  const s = await getSession(req, env);
-  if (!s) fail('Not connected. Click "Connect YouTube" first.', 401);
-  return s;
+async function ytToken(env, user) {
+  const t = user.local ? null : await tokenFor(env, 'yt_connections', user.email);
+  if (!t) fail('YouTube is not connected (or the 7-day Google testing access expired). Click "Connect YouTube".', 401);
+  return t;
 }
-const withCookie = (res, s) => { if (s.setCookie) res.headers.append('set-cookie', s.setCookie); return res; };
 
-async function me(req, env) {
-  if (!oauthConfigured(env)) return json({ configured: false, connected: false });
-  const s = await getSession(req, env);
-  if (!s) return json({ configured: true, connected: false });
-  const d = await yt('channels', { part: 'snippet,statistics', mine: 'true', maxResults: '50' }, 'Bearer ' + s.token);
+async function me(req, env, ctx, url, user) {
+  const t = user.local ? null : await tokenFor(env, 'yt_connections', user.email);
+  if (!t) return json({ connected: false, channels: [] });
+  const d = await yt('channels', { part: 'snippet,statistics', mine: 'true', maxResults: '50' }, 'Bearer ' + t.token);
   const channels = (d.items || []).map((it) => ({
     id: it.id, title: it.snippet.title, handle: it.snippet.customUrl || '', thumb: it.snippet.thumbnails?.default?.url || '',
     subscribers: +it.statistics.subscriberCount || 0, videoCount: +it.statistics.videoCount || 0,
   }));
-  return withCookie(json({ configured: true, connected: true, channels }), s);
+  return json({ connected: true, googleEmail: t.googleEmail, channels });
 }
 
 // YouTube Analytics API: watch time, retention, subscribers, traffic sources,
 // YouTube search terms and countries for a channel the user owns.
-async function myAnalytics(req, env, ctx, url) {
-  const s = await requireSession(req, env);
+async function myAnalytics(req, env, ctx, url, user) {
+  const s = await ytToken(env, user);
   const channel = url.searchParams.get('channel') || 'MINE';
   const days = Math.min(365, Math.max(7, +url.searchParams.get('days') || 90));
   const end = new Date(Date.now() - 2 * 86400000); // analytics lag ~2 days
@@ -354,5 +399,5 @@ async function myAnalytics(req, env, ctx, url) {
     q({ dimensions: 'insightTrafficSourceDetail', filters: 'insightTrafficSourceType==YT_SEARCH', metrics: 'views', sort: '-views', maxResults: '25' }),
     q({ dimensions: 'country', metrics: 'views,estimatedMinutesWatched', sort: '-views', maxResults: '15' }),
   ]);
-  return withCookie(json({ range: { start: base.startDate, end: base.endDate, days }, totals: totals[0] || {}, daily, videos, traffic, searchTerms, countries }), s);
+  return json({ range: { start: base.startDate, end: base.endDate, days }, totals: totals[0] || {}, daily, videos, traffic, searchTerms, countries });
 }
