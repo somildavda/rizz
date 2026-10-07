@@ -1,4 +1,4 @@
-import { normalizeVideo, buildReports, fmtNum, keywords } from './analysis.js';
+import { normalizeVideo, buildReports, buildStory, fmtNum, keywords } from './analysis.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_COMPS = 10;
@@ -64,7 +64,7 @@ const saved = store.get('config', {});
 $('brand').value = saved.brand || '';
 $('market').value = saved.market || '';
 $('ownChannel').value = saved.own || '';
-$('maxVideos').value = saved.max || '200';
+$('maxVideos').value = saved.max && [...$('maxVideos').options].some((o) => o.value === saved.max) ? saved.max : 'all';
 (saved.comps?.length ? saved.comps : ['', '']).forEach(addCompRow);
 
 $('runBtn').onclick = runAudit;
@@ -217,6 +217,7 @@ $('teamList').onchange = async (e) => {
   catch (err) { $('teamMsg').textContent = err.message; loadTeam(); }
 };
 
+route();
 boot();
 
 async function runAudit() {
@@ -247,14 +248,25 @@ async function runAudit() {
     prog.appendChild(line);
     try {
       const fresh = $('fresh').checked ? '&fresh=1' : '';
-      const d = await api(`/api/channel?q=${encodeURIComponent(job.q)}&max=${cfg.max}${fresh}`);
+      // Fetch in batches of 500 until every video (or the chosen max) is in.
+      let d = await api(`/api/channel?q=${encodeURIComponent(job.q)}&max=${cfg.max}${fresh}`);
       if (seen.has(d.channel.id)) { line.textContent = `↷ ${d.channel.title}: already added`; continue; }
       seen.add(d.channel.id);
-      raw.push({ channel: { ...d.channel, type: job.type, input: job.q }, videos: d.videos, fetchedAt: d.fetchedAt });
-      units += d.unitsUsed || 0;
-      if (d.cached) cachedCount++;
+      const vids = [...d.videos];
+      let chUnits = d.unitsUsed || 0, allCached = !!d.cached;
+      const total = d.channel.videoCount;
+      while (d.nextPage) {
+        line.textContent = `⏳ ${d.channel.title}: ${vids.length.toLocaleString()} / ${total.toLocaleString()} videos…`;
+        d = await api(`/api/channel?q=${encodeURIComponent(d.channel.id)}&max=${cfg.max}&page=${encodeURIComponent(d.nextPage)}&have=${vids.length}${fresh}`);
+        vids.push(...d.videos);
+        chUnits += d.unitsUsed || 0;
+        allCached = allCached && !!d.cached;
+      }
+      raw.push({ channel: { ...d.channel, type: job.type, input: job.q }, videos: vids, fetchedAt: d.fetchedAt });
+      units += chUnits;
+      if (allCached) cachedCount++;
       line.className = 'ok';
-      line.textContent = `✓ ${d.channel.title}: ${d.videos.length} videos ${d.cached ? '(from cache · 0 units)' : `(${d.unitsUsed} units)`}`;
+      line.textContent = `✓ ${d.channel.title}: ${vids.length.toLocaleString()} videos ${allCached ? '(from cache · 0 units)' : `(${chUnits} units)`}`;
     } catch (e) {
       line.className = 'err';
       line.textContent = `✗ ${job.q}: ${e.message}`;
@@ -297,6 +309,9 @@ function showAudit(payload, meta = {}) {
   const videos = payload.raw.flatMap((r) => r.videos.map((v) => normalizeVideo(v, r.channel, at)));
   state = { ...state, cfg: payload.cfg, payload, channels, videos, reports: buildReports(channels, videos, at), active: 'dashboard', ai: payload.ai || {} };
   if (payload.owner) state.reports.splice(1, 0, ownerReport(payload.owner, videos));
+  state.story = buildStory(channels, videos);
+  state.reports.unshift({ id: 'story', title: "🏆 Who's winning", story: state.story, kpis: state.reports.find((r) => r.id === 'dashboard').kpis });
+  state.active = 'story';
   const cfg = payload.cfg || {};
   $('resTitle').textContent = (cfg.brand || channels[0].title) + ' audit';
   $('resMeta').textContent = [
@@ -307,10 +322,21 @@ function showAudit(payload, meta = {}) {
     cfg.market || null,
     meta.saved ? 'saved audit' : null,
   ].filter(Boolean).join(' · ');
-  $('results').hidden = false;
   render();
-  $('results').scrollIntoView({ behavior: 'smooth' });
+  if (location.hash !== '#/audit') location.hash = '#/audit';
+  else route();
 }
+
+// Two pages: #/ (set up, limits, saved audits) and #/audit (results).
+function route() {
+  const onAudit = location.hash === '#/audit' && state.payload;
+  $('home').hidden = !!onAudit;
+  $('results').hidden = !onAudit;
+  if (!onAudit && location.hash === '#/audit') location.hash = '#/';
+  scrollTo({ top: 0 });
+}
+addEventListener('hashchange', route);
+$('backBtn').onclick = () => { location.hash = '#/'; };
 
 // Save (or re-save, e.g. after AI review) the audit on screen.
 async function saveCurrent() {
@@ -324,8 +350,12 @@ async function saveCurrent() {
     ai: Object.keys(p.ai).length,
   };
   const name = (p.cfg?.brand || state.channels[0]?.title || 'Audit');
+  // Compress in the browser; the server just stores the bytes.
+  const gz = await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  const res = await fetch(`/api/audits?name=${encodeURIComponent(name)}&summary=${encodeURIComponent(JSON.stringify(summary))}`, { method: 'POST', headers: { 'content-type': 'application/gzip' }, body: gz });
+  const r = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) throw new Error(r.error || `HTTP ${res.status}`);
   if (state.auditId) await apiReq('DELETE', '/api/audits/' + state.auditId).catch(() => {});
-  const r = await apiReq('POST', '/api/audits', { name, summary, payload: p });
   state.auditId = r.id;
   loadAudits();
   loadUsage();
@@ -352,8 +382,10 @@ $('savedList').onclick = async (e) => {
   if (b.dataset.act === 'open') {
     b.disabled = true; b.textContent = 'Opening…';
     try {
-      const a = await apiReq('GET', '/api/audits/' + id);
-      showAudit(a.payload, { saved: true });
+      const res = await fetch('/api/audits/' + id);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+      const payload = JSON.parse(await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).text());
+      showAudit(payload, { saved: true });
       state.auditId = id;
     } catch (err) { alert(err.message); }
     b.disabled = false; b.textContent = 'Open';
@@ -381,14 +413,15 @@ async function loadUsage() {
   try {
     const u = await apiReq('GET', '/api/usage');
     const reset = new Date(u.resetsAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' });
-    const max = +$('maxVideos').value || 200;
+    const all = $('maxVideos').value === 'all';
+    const max = all ? 500 : +$('maxVideos').value;
     const perCh = 2 + 2 * Math.ceil(max / 50);
     const left = Math.max(0, u.youtube.limit - u.youtube.used);
     state.usage = u;
     $('usage').innerHTML = `
       <div class="section-head"><h3>Today's limits</h3><span class="muted small">Reset ${esc(reset)} IST (midnight US Pacific)</span></div>
       <div class="meters">
-        ${meter('YouTube API units', u.youtube.used, u.youtube.limit, `≈ ${Math.floor(left / perCh).toLocaleString()} more channels at ${max} videos (${perCh} units each) · ≈ ${Math.floor(left / 410)} competitor suggestions · cached channels are free`)}
+        ${meter('YouTube API units', u.youtube.used, u.youtube.limit, `≈ ${Math.floor(left / 2 * 50).toLocaleString()} more videos today (2 units per 50 videos) · e.g. ${Math.floor(left / perCh).toLocaleString()} channels of ${max} videos · ≈ ${Math.floor(left / 410)} competitor suggestions · cached channels are free`)}
         ${u.ai.filter((a) => a.kind !== 'gemini' || a.used).map((a) => meter(AI_LABELS[a.kind], a.used, a.limit)).join('')}
         ${meter('Saved data', Math.round(u.storage.used / 1048576), Math.round(u.storage.cap / 1048576), `MB used across ${u.storage.databases.length} database${u.storage.databases.length > 1 ? 's' : ''} · free maximum ${Math.round(u.storage.maxCap / 1073741824)} GB (admin: npm run add-storage)`)}
       </div>
@@ -400,9 +433,12 @@ function updateEstimate() {
   const u = state.usage;
   if (!u) return;
   const n = (($('ownChannel').value.trim() ? 1 : 0) + [...$('compList').querySelectorAll('input')].filter((i) => i.value.trim()).length);
-  const cost = n * (2 + 2 * Math.ceil((+$('maxVideos').value || 200) / 50));
   const left = u.youtube.limit - u.youtube.used;
-  $('quotaNote').textContent = n ? `Up to ${cost} of ${left.toLocaleString()} YouTube units left today (channels fetched in the last 24h are free).` : '';
+  const mv = $('maxVideos').value;
+  const cost = mv === 'all' ? 0 : n * (2 + 2 * Math.ceil(+mv / 50));
+  $('quotaNote').textContent = !n ? '' : mv === 'all'
+    ? `All videos costs about 2 units per 50 videos (a 1,000-video channel ≈ 42 units). ${left.toLocaleString()} units left today; channels fetched in the last 24h are free.`
+    : `Up to ${cost} of ${left.toLocaleString()} YouTube units left today (channels fetched in the last 24h are free).`;
   $('quotaNote').className = 'small ' + (cost > left ? 'err' : 'muted');
 }
 $('maxVideos').addEventListener('change', loadUsage);
@@ -463,7 +499,11 @@ function cell(v, fmt) {
 
 function render() {
   const dash = state.reports.find((r) => r.id === state.active && r.kpis) || state.reports.find((r) => r.id === 'dashboard');
-  $('kpis').innerHTML = (dash.kpis || []).map(([k, v, h]) => `<div class="kpi"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${h ? `<div class="h">${esc(h)}</div>` : ''}</div>`).join('');
+  $('kpis').innerHTML = (dash.kpis || []).map(([k, v, h]) => {
+    const key = KPI_METRIC[k];
+    return `<div class="kpi ${key ? 'click' : ''}" ${key ? `data-metric="${key}" title="Click: what this means and who's winning"` : ''}><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div>${h ? `<div class="h">${esc(h)}</div>` : ''}</div>`;
+  }).join('');
+  $('kpis').querySelectorAll('[data-metric]').forEach((el) => { el.onclick = () => explain(el.dataset.metric); });
 
   const tabs = [...state.reports.map((r) => [r.id, r.title]), ['ai', 'AI Review']];
   $('tabs').innerHTML = tabs.map(([id, t]) => `<button class="tab" role="tab" data-id="${id}" aria-selected="${id === state.active}">${esc(t)}</button>`).join('');
@@ -473,8 +513,53 @@ function render() {
   panel.innerHTML = '';
   if (state.active === 'ai') return renderAi(panel);
   const rep = state.reports.find((r) => r.id === state.active);
+  if (rep.story) return renderStory(panel, rep.story);
   if (rep.gallery) panel.appendChild(renderGallery(rep.sections[0]));
   else rep.sections.forEach((s) => panel.appendChild(renderSection(s)));
+}
+
+// Score cards → the plain-language metric they belong to.
+const KPI_METRIC = {
+  'Subscribers': 'subs', 'Videos analysed': 'uploads', 'Long form': 'shorts', 'Shorts': 'shorts',
+  'Views (analysed)': 'avgViews', 'Avg views / video': 'avgViews', 'Engagement rate': 'engagement',
+  'Avg SEO score': 'seo', 'Avg CTA score': 'cta', 'Avg performance': 'momentum',
+};
+const VERDICT = { you: ['good', '✅ You win'], them: ['bad', '⚠️ They win'], tie: ['warn', '🤝 Close'], info: ['warn', 'ℹ️ Mix'], none: ['', ''] };
+
+function bars(item) {
+  const max = Math.max(...item.values.map((v) => v.value), 0) || 1;
+  return `<div class="cbars">${[...item.values].sort((a, b) => b.value - a.value).map((v) => `
+    <div class="cbar ${v.type === 'Own' ? 'own' : ''}"><span>${v.type === 'Own' ? '⭐ ' : ''}${esc(v.name)}</span><div class="bar"><i style="width:${(v.value / max) * 100}%"></i></div><span class="val">${esc(item.show(v.value))}</span></div>`).join('')}</div>`;
+}
+
+function renderStory(panel, story) {
+  const el = document.createElement('div');
+  el.innerHTML = `<div class="card story-head"><h2>${esc(story.headline)}</h2>
+    <div class="score-pill"><span class="pill good">✅ You win ${story.youWin}</span><span class="pill bad">⚠️ Competitors win ${story.theyWin}</span></div>
+    <p class="muted" style="margin:10px 0 0">Each card compares your channel (⭐) with competitors in plain words. Tap a card to see everyone's numbers and what to do.</p></div>
+    <div class="story-grid">${story.items.map((it) => {
+      const [cls, label] = VERDICT[it.winner];
+      return `<div class="card story ${it.winner}" data-metric="${it.key}"><div class="top"><span class="title">${it.icon} ${esc(it.title)}</span>${label ? `<span class="pill ${cls}">${label}</span>` : ''}</div>
+        <div class="say">${esc(it.sentence)}</div><div class="tip">👉 ${esc(it.tip)}</div></div>`;
+    }).join('')}</div>`;
+  el.querySelectorAll('[data-metric]').forEach((c) => { c.onclick = () => explain(c.dataset.metric); });
+  panel.appendChild(el);
+}
+
+function explain(key) {
+  const it = state.story?.items.find((i) => i.key === key);
+  if (!it) return;
+  const [cls, label] = VERDICT[it.winner];
+  const tabName = state.reports.find((r) => r.id === it.tab)?.title;
+  $('explainBody').innerHTML = `<div class="section-head"><h3><span class="big">${it.icon}</span> ${esc(it.title)}</h3><form method="dialog"><button class="btn ghost small">Close</button></form></div>
+    ${label ? `<span class="pill ${cls}">${label}</span>` : ''}
+    <div class="box"><b>What is it?</b><br>${esc(it.what)}</div>
+    <div class="box"><b>Why does it matter?</b><br>${esc(it.why)}</div>
+    <div class="box"><b>Who's winning?</b><br>${esc(it.sentence)}${bars(it)}</div>
+    <div class="box"><b>👉 What to do</b><br>${esc(it.tip)}</div>
+    ${tabName ? `<div class="actions"><button class="btn primary" id="goTab">See the details: ${esc(tabName)} →</button></div>` : ''}`;
+  $('explain').showModal();
+  $('goTab')?.addEventListener('click', () => { $('explain').close(); state.active = it.tab; render(); });
 }
 
 function renderSection(sec) {

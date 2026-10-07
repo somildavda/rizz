@@ -41,7 +41,10 @@ export default {
       if (key === 'GET /api/session') return await session(env, user);
       if (!user) return json({ error: 'Please sign in.' }, 401);
       const m = url.pathname.match(/^\/api\/audits\/([\w-]{36})$/);
-      if (m && req.method === 'GET') return json(await loadAudit(env, m[1]));
+      if (m && req.method === 'GET') {
+        const a = await loadAudit(env, m[1]);
+        return new Response(a.bytes, { headers: { 'content-type': 'application/gzip', 'x-audit-name': encodeURIComponent(a.name) } });
+      }
       if (m && req.method === 'DELETE') { await deleteAudit(env, user, m[1]); return json({ ok: true }); }
       const route = ROUTES[key];
       if (!route) return json({ error: 'Not found' }, 404);
@@ -121,7 +124,12 @@ const ROUTES = {
   'POST /api/ai/image': aiMetered('image', aiImage),
   'GET /api/usage': usage,
   'GET /api/audits': async (req, env) => json({ audits: await listAudits(env) }),
-  'POST /api/audits': async (req, env, ctx, url, user) => json(await saveAudit(env, user, await req.json())),
+  'POST /api/audits': async (req, env, ctx, url, user) => {
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    if (!bytes.length) fail('Empty audit.');
+    if (bytes.length > 90 * 1024 * 1024) fail('This audit is too large to save (over 90 MB compressed).', 413);
+    return json(await saveAudit(env, user, { name: url.searchParams.get('name'), summary: JSON.parse(url.searchParams.get('summary') || '{}'), bytes }));
+  },
   'GET /api/photos': photos,
 };
 
@@ -273,50 +281,60 @@ async function suggestCompetitors(req, env, ctx, url, user) {
   });
 }
 
+// Fetch a channel's videos in batches of up to 500 per request (keeps each
+// call under the free plan's 50-subrequest limit). The browser keeps calling
+// with ?page=<nextPage> until it has every video ("All videos") or its max.
+const BATCH = 500;
 async function getChannel(req, env, ctx, url, user) {
   const q = url.searchParams.get('q') || fail('Missing ?q=');
-  const max = Math.min(500, Math.max(1, +url.searchParams.get('max') || 200));
+  const page = url.searchParams.get('page') || '';
+  const maxRaw = url.searchParams.get('max') || 'all';
+  const max = maxRaw === 'all' ? 20000 : Math.min(20000, Math.max(1, +maxRaw || 200));
+  const already = Math.max(0, +url.searchParams.get('have') || 0);
+  const want = Math.min(BATCH, max - already);
+  if (want <= 0) fail('Nothing left to fetch.');
 
-  // Shared 24h cache: re-auditing a channel anyone fetched today costs 0 units.
-  const cacheKey = `channel:${q.trim().toLowerCase()}:${max}`;
+  // Shared 24h cache per batch: re-auditing a channel anyone fetched today costs 0 units.
+  const cacheKey = `ch2:${q.trim().toLowerCase()}:${page || 'first'}:${want}`;
   const hit = await cacheGet(env, cacheKey);
   if (hit && url.searchParams.get('fresh') !== '1') return json({ ...hit, cached: true, unitsUsed: 0 });
 
-  // Cost: ~2 to resolve + 1 per 50 video IDs + 1 per 50 video details.
-  await ensureBudget(env, 'yt_units', 2 + 2 * Math.ceil(max / 50));
+  // Cost: ~1–2 to resolve + 1 per 50 video IDs + 1 per 50 video details.
+  await ensureBudget(env, 'yt_units', 2 + 2 * Math.ceil(want / 50));
   const key = await ytAuth(req, env, user);
   return metered(env, key, async () => {
-  const channel = await resolveChannel(q, key);
+    const channel = await resolveChannel(q, key);
+    const ids = [];
+    let token = page;
+    do {
+      const params = { part: 'contentDetails', maxResults: '50', playlistId: channel.uploads };
+      if (token) params.pageToken = token;
+      const d = await yt('playlistItems', params, key);
+      for (const it of d.items || []) ids.push(it.contentDetails.videoId);
+      token = d.nextPageToken || '';
+    } while (token && ids.length < want);
 
-  const ids = [];
-  let token = '';
-  while (ids.length < max) {
-    const params = { part: 'contentDetails', maxResults: '50', playlistId: channel.uploads };
-    if (token) params.pageToken = token;
-    const d = await yt('playlistItems', params, key);
-    for (const it of d.items || []) ids.push(it.contentDetails.videoId);
-    token = d.nextPageToken;
-    if (!token) break;
-  }
-
-  const videos = [];
-  const wanted = ids.slice(0, max);
-  for (let i = 0; i < wanted.length; i += 50) {
-    const d = await yt('videos', { part: 'snippet,statistics,contentDetails', id: wanted.slice(i, i + 50).join(',') }, key);
-    for (const v of d.items || []) {
-      // Keep only what the analysis needs to keep responses small.
-      videos.push({
-        id: v.id,
-        snippet: { title: v.snippet.title, description: v.snippet.description, publishedAt: v.snippet.publishedAt, tags: v.snippet.tags, thumbnails: v.snippet.thumbnails },
-        statistics: v.statistics,
-        contentDetails: { duration: v.contentDetails.duration },
-      });
+    const videos = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const d = await yt('videos', { part: 'snippet,statistics,contentDetails', id: ids.slice(i, i + 50).join(',') }, key);
+      for (const v of d.items || []) {
+        const t = v.snippet.thumbnails || {};
+        // Keep only what the analysis needs, to keep responses and storage small.
+        videos.push({
+          id: v.id,
+          snippet: {
+            title: v.snippet.title, description: v.snippet.description, publishedAt: v.snippet.publishedAt, tags: v.snippet.tags,
+            thumbnails: Object.fromEntries(['maxres', 'high', 'medium'].filter((k) => t[k]).map((k) => [k, { url: t[k].url }])),
+          },
+          statistics: v.statistics,
+          contentDetails: { duration: v.contentDetails.duration },
+        });
+      }
     }
-  }
-
-  const out = { channel, videos, fetchedAt: new Date().toISOString() };
-  await cachePut(env, cacheKey, out, 864e5);
-  return json({ ...out, unitsUsed: key.units });
+    const nextPage = token && already + ids.length < max ? token : null;
+    const out = { channel, videos, nextPage, fetchedAt: new Date().toISOString() };
+    await cachePut(env, cacheKey, out, 864e5);
+    return json({ ...out, unitsUsed: key.units });
   });
 }
 

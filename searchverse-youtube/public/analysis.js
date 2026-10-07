@@ -594,3 +594,117 @@ export function scoringGuide() {
     ],
   };
 }
+
+// ── "Who's winning & why": plain-language comparison ─────────
+// Compares our channel with each competitor on a few simple measures and
+// explains each one in words a child could follow.
+const pct = (x) => Math.round(x * 100) + '%';
+const times = (a, b) => (b > 0 ? a / b : Infinity);
+function sayTimes(r) {
+  if (!isFinite(r)) return 'way more';
+  if (r >= 1.95) return `${Math.round(r * 10) / 10}× more`;
+  return `${Math.round((r - 1) * 100)}% more`;
+}
+
+export const STORY_METRICS = [
+  {
+    key: 'avgViews', icon: '👀', title: 'Views per video', tab: 'top',
+    value: (rows) => avg(rows, 'views'), show: (v) => fmtNum(v),
+    what: 'How many people watch each video, on average.',
+    why: 'More views per video means people like the topics and click on the videos.',
+    tip: 'Copy what works: look at their top videos (Top Content tab) and make your own version of those topics.',
+  },
+  {
+    key: 'uploads', icon: '📅', title: 'Videos per month', tab: 'publishing',
+    value: (rows) => videosPerMonth(rows), show: (v) => (Math.round(v * 10) / 10).toString(),
+    what: 'How often the channel posts a new video.',
+    why: 'Every new video is another ticket in the YouTube lottery. More tickets, more chances to be found.',
+    tip: 'Pick a steady rhythm, like 2 videos every week, and stick to it.',
+  },
+  {
+    key: 'engagement', icon: '❤️', title: 'Likes & comments', tab: 'top',
+    value: (rows) => er(rows), show: (v) => (v * 100).toFixed(2) + '%',
+    what: 'Out of every 100 viewers, how many like or comment.',
+    why: 'When people like and comment, YouTube thinks "people love this!" and shows it to more people.',
+    tip: 'Ask a simple question in the video and pin a comment. Reply to comments in the first hour.',
+  },
+  {
+    key: 'momentum', icon: '🚀', title: 'Fresh video speed', tab: 'top',
+    value: (rows) => avg([...rows].sort((a, b) => b.ts - a.ts).slice(0, 10), 'vpd'), show: (v) => fmtNum(v) + '/day',
+    what: 'How fast the newest 10 videos are collecting views each day.',
+    why: 'This shows who is growing right now, not just who was big in the past.',
+    tip: 'Make more of what your newest best video did, while the topic is hot.',
+  },
+  {
+    key: 'seo', icon: '🔎', title: 'Title & description score', tab: 'seo',
+    value: (rows) => avg(rows, 'seoScore'), show: (v) => Math.round(v) + '/100',
+    what: 'How well titles, descriptions and hashtags help people find the video in search.',
+    why: 'YouTube and Google read the words. Good words = shown for more searches.',
+    tip: 'Titles of 40–75 letters with the main words first, a 2–3 line description, and 2–8 hashtags.',
+  },
+  {
+    key: 'cta', icon: '👉', title: 'Asking viewers to act', tab: 'seo',
+    value: (rows) => avg(rows.map((r) => ({ s: r.cta.score })), 's'), show: (v) => Math.round(v) + '/100',
+    what: 'Does the description tell viewers what to do next (subscribe, click, buy) right at the top?',
+    why: 'If you don\'t ask, people just leave. Asking early turns viewers into customers.',
+    tip: 'Put one clear ask with a link in the first 2 lines of every description.',
+  },
+  {
+    key: 'thumbs', icon: '🖼️', title: 'HD custom thumbnails', tab: 'thumbnails',
+    value: (rows) => (rows.length ? rows.filter((r) => r.hasMaxresThumb).length / rows.length : 0), show: pct,
+    what: 'How many videos have a sharp, custom-made cover picture.',
+    why: 'The thumbnail is the shop window. A clear, bright picture gets more clicks.',
+    tip: 'Make a custom 1280×720 thumbnail for every video: big face, 3–4 big words, bright colours.',
+  },
+  {
+    key: 'shorts', icon: '⚡', title: 'Shorts usage', tab: 'length',
+    value: (rows) => (rows.length ? rows.filter((r) => r.type === 'Shorts').length / rows.length : 0), show: pct, neutral: true,
+    what: 'What share of uploads are Shorts (quick vertical videos).',
+    why: 'Shorts bring new people cheaply; long videos build trust. Winners usually do both.',
+    tip: 'Cut 2–3 Shorts from every long video and link back to it.',
+  },
+  {
+    key: 'subs', icon: '👥', title: 'Subscribers', tab: 'dashboard', channelValue: (c) => c.subscribers,
+    value: () => 0, show: (v) => fmtNum(v),
+    what: 'How many people follow the channel.',
+    why: 'Subscribers see new videos first, so each upload starts strong.',
+    tip: 'Ask for the subscribe at the moment you deliver value, not at the very start.',
+  },
+];
+
+export function buildStory(channels, videos) {
+  const own = channels.find((c) => c.type === 'Own');
+  const comps = channels.filter((c) => c.type !== 'Own');
+  const rowsOf = (c) => videos.filter((v) => v.channelId === c.id);
+  const items = STORY_METRICS.map((m) => {
+    const values = channels.map((c) => ({ name: c.title, type: c.type, value: m.channelValue ? m.channelValue(c) : m.value(rowsOf(c)) }));
+    const you = own ? values.find((v) => v.type === 'Own') : null;
+    const others = values.filter((v) => v.type !== 'Own');
+    const best = others.reduce((a, b) => (b.value > (a?.value ?? -Infinity) ? b : a), null);
+    let winner = 'none', sentence;
+    if (!you || !best) {
+      sentence = `${m.what}`;
+    } else if (m.neutral) {
+      winner = 'info';
+      sentence = `You: ${m.show(you.value)} of uploads are Shorts. ${best.name}: ${m.show(best.value)}.`;
+    } else if (best.value > you.value * 1.1) {
+      winner = 'them';
+      sentence = `${best.name} gets ${sayTimes(times(best.value, you.value))} than you (${m.show(best.value)} vs ${m.show(you.value)}).`;
+    } else if (you.value > best.value * 1.1) {
+      winner = 'you';
+      sentence = `You beat everyone here: ${m.show(you.value)} vs ${best.name}'s ${m.show(best.value)}.`;
+    } else {
+      winner = 'tie';
+      sentence = `Neck and neck: you ${m.show(you.value)}, ${best.name} ${m.show(best.value)}.`;
+    }
+    return { key: m.key, icon: m.icon, title: m.title, what: m.what, why: m.why, tip: m.tip, tab: m.tab, winner, sentence, values, show: m.show };
+  });
+  const youWin = items.filter((i) => i.winner === 'you').length;
+  const theyWin = items.filter((i) => i.winner === 'them').length;
+  const headline = !own ? 'Add your own channel to see who is winning.'
+    : !comps.length ? 'Add competitors to see who is winning.'
+    : youWin > theyWin ? `🏆 You're ahead! You win ${youWin} of ${youWin + theyWin} contests.`
+    : youWin === theyWin ? `🤝 It's close: you win ${youWin}, competitors win ${theyWin}.`
+    : `📈 Competitors are ahead in ${theyWin} of ${youWin + theyWin} contests. Here's how to catch up.`;
+  return { headline, youWin, theyWin, items };
+}

@@ -42,6 +42,7 @@
   </header>
 
   <main>
+    <div id="home">
     <section class="card setup" id="setup">
       <h1>Audit <span class="grad">YouTube channels</span></h1>
       <p class="muted">Paste a channel URL, @handle, or any video link. Add up to 10 competitors to compare against.</p>
@@ -68,10 +69,11 @@
       <div class="grid2 mt">
         <label>Videos per channel
           <select id="maxVideos">
+            <option value="all" selected>All videos (every upload)</option>
             <option value="50">Latest 50</option>
-            <option value="100">Latest 100</option>
-            <option value="200" selected>Latest 200</option>
+            <option value="200">Latest 200</option>
             <option value="500">Latest 500</option>
+            <option value="1000">Latest 1,000</option>
           </select>
         </label>
         <label class="check"><input type="checkbox" id="fresh"> Skip cache (fetch fresh data)</label>
@@ -91,7 +93,10 @@
       <div class="table-wrap" id="savedList" style="max-height:340px"></div>
     </section>
 
+    </div>
+
     <section id="results" hidden>
+      <button class="btn ghost small back" id="backBtn">← New audit</button>
       <div class="results-head">
         <div>
           <h2 id="resTitle">Audit</h2>
@@ -111,6 +116,10 @@
   </main>
 
   </div>
+
+  <dialog id="explain">
+    <div class="dialog explain" id="explainBody"></div>
+  </dialog>
 
   <dialog id="team">
     <div class="dialog" style="min-width:min(760px,94vw)">

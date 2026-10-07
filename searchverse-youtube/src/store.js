@@ -103,9 +103,10 @@ export async function cachePut(env, key, value, ttlMs) {
 }
 
 // ── Saved audits ─────────────────────────────────────────────
-export async function saveAudit(env, user, { name, summary, payload }) {
+// `bytes` is the gzip-compressed audit, compressed by the browser to keep the
+// Worker well inside the free plan's CPU limit.
+export async function saveAudit(env, user, { name, summary, bytes }) {
   const id = crypto.randomUUID();
-  const bytes = await gzip(JSON.stringify(payload));
   const shard = await pickShard(env);
   const stmts = [];
   for (let i = 0, n = 0; i < bytes.length; i += CHUNK, n++) {
@@ -128,7 +129,7 @@ export async function loadAudit(env, id) {
   const all = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
   let o = 0;
   for (const p of parts) { all.set(p, o); o += p.length; }
-  return { id, name: row.name, created_at: row.created_at, owner_email: row.owner_email, payload: JSON.parse(await gunzip(all)) };
+  return { id, name: row.name, created_at: row.created_at, owner_email: row.owner_email, bytes: all };
 }
 export async function deleteAudit(env, user, id) {
   const row = await env.DB.prepare('SELECT owner_email, shard FROM audits WHERE id = ?').bind(id).first();
