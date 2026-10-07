@@ -13,6 +13,8 @@ import {
   listUsers, addUser, updateUser, removeUser, sendInvite,
 } from './auth.js';
 
+import { keywords } from '../public/analysis.js';
+
 const YT = 'https://www.googleapis.com/youtube/v3/';
 const CACHE_TTL = 6 * 3600;
 
@@ -63,6 +65,7 @@ const ADMIN_ONLY = new Set(['GET /api/users', 'POST /api/users', 'PATCH /api/use
 
 const ROUTES = {
   'GET /api/channel': getChannel,
+  'GET /api/suggest-competitors': suggestCompetitors,
   'GET /api/me': me,
   'GET /api/me/analytics': myAnalytics,
   'POST /api/youtube/disconnect': async (req, env, ctx, url, user) => { await disconnect(env, 'yt_connections', user.email); return json({ ok: true }); },
@@ -164,6 +167,68 @@ async function resolveChannel(input, key) {
   };
 }
 
+async function ytAuth(req, env, user) {
+  const key = env.YT_API_KEY || req.headers.get('x-yt-key');
+  if (key) return key;
+  const t = user && !user.local ? await tokenFor(env, 'yt_connections', user.email) : null;
+  return t ? 'Bearer ' + t.token : ytKey(req, env);
+}
+
+// Auto competitor list: take the channel's best-performing topics, search
+// YouTube for them, and rank the other channels that keep appearing.
+// Cost: ~4 searches × 100 units + a few 1-unit calls (of 10,000/day free).
+async function suggestCompetitors(req, env, ctx, url, user) {
+  const q = url.searchParams.get('q') || fail('Add your channel first.');
+  const cache = caches.default;
+  const cacheKey = new Request(`https://cache.searchverse/suggest?q=${encodeURIComponent(q.toLowerCase())}`);
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+
+  const key = await ytAuth(req, env, user);
+  const channel = await resolveChannel(q, key);
+  const pl = await yt('playlistItems', { part: 'contentDetails', maxResults: '50', playlistId: channel.uploads }, key);
+  const ids = (pl.items || []).map((it) => it.contentDetails.videoId);
+  if (!ids.length) fail('This channel has no public videos to learn topics from.', 404);
+  const vids = (await yt('videos', { part: 'snippet,statistics', id: ids.join(',') }, key)).items || [];
+  vids.sort((a, b) => (+b.statistics.viewCount || 0) - (+a.statistics.viewCount || 0));
+
+  // Queries: the top 3 videos' main keywords, plus the channel's most common keywords.
+  const freq = new Map();
+  for (const v of vids) for (const w of keywords(v.snippet.title)) freq.set(w, (freq.get(w) || 0) + 1);
+  const common = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => w).join(' ');
+  const queries = [...new Set([...vids.slice(0, 3).map((v) => [...keywords(v.snippet.title)].slice(0, 4).join(' ')), common].filter(Boolean))].slice(0, 4);
+
+  const region = /^[A-Z]{2}$/.test(channel.country) ? channel.country : '';
+  const tally = new Map();
+  for (const query of queries) {
+    const params = { part: 'snippet', type: 'video', maxResults: '25', q: query };
+    if (region) params.regionCode = region;
+    const res = await yt('search', params, key);
+    for (const it of res.items || []) {
+      const id = it.snippet.channelId;
+      if (id === channel.id) continue;
+      const t = tally.get(id) || { id, title: it.snippet.channelTitle, hits: 0, queries: new Set() };
+      t.hits++;
+      t.queries.add(query);
+      tally.set(id, t);
+    }
+  }
+  const top = [...tally.values()].sort((a, b) => b.queries.size - a.queries.size || b.hits - a.hits).slice(0, 12);
+  const details = top.length ? (await yt('channels', { part: 'snippet,statistics', id: top.map((t) => t.id).join(',') }, key)).items || [] : [];
+  const byId = new Map(details.map((d) => [d.id, d]));
+  const suggestions = top.map((t) => {
+    const d = byId.get(t.id);
+    return {
+      id: t.id, title: d?.snippet?.title || t.title, handle: d?.snippet?.customUrl || '', thumb: d?.snippet?.thumbnails?.default?.url || '',
+      subscribers: +d?.statistics?.subscriberCount || 0, videoCount: +d?.statistics?.videoCount || 0,
+      hits: t.hits, matched: [...t.queries],
+    };
+  });
+  const res = json({ channel: { id: channel.id, title: channel.title }, queries, suggestions }, 200, { 'cache-control': 'public, max-age=86400' });
+  ctx.waitUntil(cache.put(cacheKey, res.clone()));
+  return res;
+}
+
 async function getChannel(req, env, ctx, url, user) {
   const q = url.searchParams.get('q') || fail('Missing ?q=');
   const max = Math.min(500, Math.max(1, +url.searchParams.get('max') || 200));
@@ -173,11 +238,7 @@ async function getChannel(req, env, ctx, url, user) {
   const hit = await cache.match(cacheKey);
   if (hit && url.searchParams.get('fresh') !== '1') return hit;
 
-  let key = env.YT_API_KEY || req.headers.get('x-yt-key');
-  if (!key) {
-    const yt = user && !user.local ? await tokenFor(env, 'yt_connections', user.email) : null;
-    key = yt ? 'Bearer ' + yt.token : ytKey(req, env);
-  }
+  const key = await ytAuth(req, env, user);
   const channel = await resolveChannel(q, key);
 
   const ids = [];

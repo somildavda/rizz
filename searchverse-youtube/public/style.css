@@ -143,6 +143,17 @@ label.check input { width: auto; margin: 0; box-shadow: none; }
 .connect-note.err { background: var(--bad-bg); color: var(--bad); }
 #myChannels { margin-bottom: 6px; }
 
+/* Competitor suggestions */
+.suggest-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.suggest-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.sug { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; cursor: pointer; font-weight: 500;
+  background: linear-gradient(180deg, var(--surface-top), var(--surface)); border: 1px solid var(--border); box-shadow: var(--inset), 0 2px 6px -3px rgba(22,19,46,.2); }
+.sug:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.sug input { width: auto; margin: 0; box-shadow: none; }
+.sug img { width: 32px; height: 32px; border-radius: 50%; }
+.sug .t { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.sug .m { font-size: 11px; color: var(--muted); }
+
 /* Results */
 #results { margin-top: 32px; }
 .results-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }

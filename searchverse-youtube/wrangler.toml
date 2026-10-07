@@ -9,12 +9,12 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "searchverse-youtube"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "f0c38946-6a49-4a2a-b6e5-a2a7cff3c125"
 
 [vars]
 # Admins: full access (add/remove users, send invites). Comma separated.
 # If left empty, the first person to sign in becomes admin.
-ADMIN_EMAILS = ""
+ADMIN_EMAILS = "somil@infidigit.com"
 # Optional: let anyone matching these emails / "@domain.com" self-join as a member.
 # Leave empty so only users an admin adds can sign in.
 ALLOWED_EMAILS = ""

@@ -70,6 +70,39 @@ $('maxVideos').value = saved.max || '200';
 
 $('runBtn').onclick = runAudit;
 
+// ── Auto competitor list ─────────────────────────────────────
+$('suggestBtn').onclick = async () => {
+  const own = $('ownChannel').value.trim();
+  if (!own) { $('suggestNote').textContent = 'Add your channel first (connect YouTube or paste its URL).'; return; }
+  $('suggestBtn').disabled = true;
+  $('suggestNote').textContent = 'Searching YouTube for your top topics…';
+  try {
+    const d = await apiReq('GET', '/api/suggest-competitors?q=' + encodeURIComponent(own));
+    const existing = new Set([...$('compList').querySelectorAll('input')].map((i) => i.value.trim()));
+    const box = $('suggestList');
+    box.hidden = false;
+    box.innerHTML = d.suggestions.length ? d.suggestions.map((c) => `<label class="sug" title="Ranks for: ${esc(c.matched.join(' · '))}">
+        <input type="checkbox" value="${esc(c.handle || c.id)}" ${existing.has(c.id) || existing.has(c.handle) ? 'checked disabled' : ''}>
+        ${c.thumb ? `<img src="${esc(c.thumb)}" alt="" referrerpolicy="no-referrer">` : ''}
+        <span><span class="t">${esc(c.title)}</span><br><span class="m">${fmtNum(c.subscribers)} subs · ${c.matched.length}/${d.queries.length} topics</span></span></label>`).join('')
+      + '<div class="actions" style="margin:4px 0 0"><button class="btn primary small" id="addSuggested">Add selected</button></div>'
+      : '<div class="muted small">No clear competitors found for this channel\'s topics.</div>';
+    $('suggestNote').textContent = `Based on: ${d.queries.map((q) => `"${q}"`).join(', ')}. Hover a channel to see which topics it ranks for.`;
+    $('addSuggested')?.addEventListener('click', () => {
+      for (const cb of box.querySelectorAll('input:checked:not(:disabled)')) {
+        const empty = [...$('compList').querySelectorAll('input')].find((i) => !i.value.trim());
+        if (empty) empty.value = cb.value;
+        else if ($('compList').children.length < MAX_COMPS) addCompRow(cb.value);
+        cb.disabled = true;
+      }
+      updateCount();
+    });
+  } catch (e) {
+    $('suggestNote').textContent = e.message;
+  }
+  $('suggestBtn').disabled = false;
+};
+
 // ── Session: sign-in page, Connect YouTube, Team ─────────────
 let session = { signedIn: false };
 let me = { connected: false, channels: [] };
