@@ -22,6 +22,7 @@
   </section>
 
   <div id="app" hidden>
+  <div id="updateBar" class="notice-bar" hidden>✨ A new version of Searchverse is available. <button class="btn small primary" onclick="location.reload()">Reload</button></div>
   <header class="topbar">
     <div class="brand">
       <span class="logo" aria-hidden="true">SV</span>
@@ -103,12 +104,14 @@
           <div class="muted small" id="resMeta"></div>
         </div>
         <div class="actions">
+          <button class="btn ghost" id="refreshBtn" title="Fetch the latest videos and numbers from YouTube">🔄 Refresh data</button>
           <button class="btn ghost" id="saveBtn" title="Save again, including AI review results">💾 Save</button>
           <button class="btn ghost" id="exportJson">Export JSON</button>
           <button class="btn ghost" id="exportAll">Export all CSV</button>
           <button class="btn ghost" id="printBtn">Print / PDF</button>
         </div>
       </div>
+      <div id="freshBar" class="notice-bar inline" hidden></div>
       <div class="kpis" id="kpis"></div>
       <nav class="tabs" id="tabs" role="tablist"></nav>
       <div id="panel"></div>

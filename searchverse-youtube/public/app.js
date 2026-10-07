@@ -220,6 +220,52 @@ $('teamList').onchange = async (e) => {
 route();
 boot();
 
+// ── "Something new" notices ──────────────────────────────────
+// 1) A new version of the tool was deployed → offer Reload.
+let loadedVersion = null;
+async function checkVersion() {
+  try {
+    const { version } = await (await fetch('/version.json', { cache: 'no-store' })).json();
+    if (loadedVersion == null) loadedVersion = version;
+    else if (version !== loadedVersion) $('updateBar').hidden = false;
+  } catch { /* offline: try again later */ }
+}
+checkVersion();
+setInterval(checkVersion, 5 * 60e3);
+addEventListener('focus', checkVersion);
+
+// 2) A channel in this audit posted new videos since it was fetched → offer Refresh.
+async function checkNewUploads() {
+  const bar = $('freshBar');
+  bar.hidden = true;
+  const p = state.payload;
+  if (!p?.raw?.length) return;
+  try {
+    const ids = p.raw.map((r) => r.channel.id).join(',');
+    const { counts } = await apiReq('GET', '/api/channel-counts?ids=' + ids);
+    const news = p.raw.map((r) => ({ name: r.channel.title, diff: (counts[r.channel.id] ?? r.channel.videoCount) - r.channel.videoCount })).filter((x) => x.diff > 0);
+    if (!news.length) return;
+    bar.innerHTML = `<span>🆕 ${news.map((n) => `<b>${esc(n.name)}</b> posted ${n.diff} new video${n.diff > 1 ? 's' : ''}`).join(' · ')} since this audit.</span>
+      <button class="btn small primary" id="refreshAudit">Refresh audit</button>`;
+    bar.hidden = false;
+    $('refreshAudit').onclick = () => refreshAudit();
+  } catch { /* quota or network: skip the check */ }
+}
+// Re-run the same audit with fresh data from YouTube.
+function refreshAudit() {
+  const c = state.payload?.cfg;
+  if (!c) return;
+  $('brand').value = c.brand || '';
+  $('market').value = c.market || '';
+  $('ownChannel').value = c.own || '';
+  $('compList').innerHTML = '';
+  (c.comps?.length ? c.comps : ['']).forEach(addCompRow);
+  if (c.max && [...$('maxVideos').options].some((o) => o.value === c.max)) $('maxVideos').value = c.max;
+  $('fresh').checked = true;
+  location.hash = '#/';
+  runAudit().finally(() => { $('fresh').checked = false; });
+}
+
 async function runAudit() {
   const cfg = {
     brand: $('brand').value.trim(),
@@ -304,6 +350,7 @@ async function runAudit() {
 
 // Build the reports from raw API data (a new audit, or a saved one).
 function showAudit(payload, meta = {}) {
+  $('freshBar').hidden = true;
   const at = payload.savedAt || Date.now();
   const channels = payload.raw.map((r) => r.channel);
   const videos = payload.raw.flatMap((r) => r.videos.map((v) => normalizeVideo(v, r.channel, at)));
@@ -337,6 +384,7 @@ function route() {
 }
 addEventListener('hashchange', route);
 $('backBtn').onclick = () => { location.hash = '#/'; };
+$('refreshBtn').onclick = () => { if (confirm('Fetch fresh data from YouTube for every channel in this audit?')) refreshAudit(); };
 
 // Save (or re-save, e.g. after AI review) the audit on screen.
 async function saveCurrent() {
@@ -387,6 +435,7 @@ $('savedList').onclick = async (e) => {
       const payload = JSON.parse(await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).text());
       showAudit(payload, { saved: true });
       state.auditId = id;
+      checkNewUploads();
     } catch (err) { alert(err.message); }
     b.disabled = false; b.textContent = 'Open';
   }

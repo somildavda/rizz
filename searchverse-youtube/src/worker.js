@@ -99,6 +99,7 @@ const ADMIN_ONLY = new Set(['GET /api/users', 'POST /api/users', 'PATCH /api/use
 const ROUTES = {
   'GET /api/channel': getChannel,
   'GET /api/suggest-competitors': suggestCompetitors,
+  'GET /api/channel-counts': channelCounts,
   'GET /api/me': me,
   'GET /api/me/analytics': myAnalytics,
   'POST /api/youtube/disconnect': async (req, env, ctx, url, user) => { await disconnect(env, 'yt_connections', user.email); return json({ ok: true }); },
@@ -222,6 +223,16 @@ async function ytAuth(req, env, user) {
 // Run YouTube work and always record the units it spent, even if it failed.
 async function metered(env, key, fn) {
   try { return await fn(); } finally { await addUsage(env, 'yt_units', key.units).catch(() => {}); }
+}
+
+// Cheap "anything new?" check: current video counts for up to 50 channels (1 unit).
+async function channelCounts(req, env, ctx, url, user) {
+  const ids = (url.searchParams.get('ids') || '').split(',').filter((x) => /^UC[\w-]{22}$/.test(x)).slice(0, 50);
+  if (!ids.length) fail('No channel ids.');
+  await ensureBudget(env, 'yt_units', 1);
+  const key = await ytAuth(req, env, user);
+  const d = await metered(env, key, () => yt('channels', { part: 'statistics', id: ids.join(',') }, key));
+  return json({ counts: Object.fromEntries((d.items || []).map((it) => [it.id, +it.statistics.videoCount || 0])) });
 }
 
 // Auto competitor list: take the channel's best-performing topics, search
