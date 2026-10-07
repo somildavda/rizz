@@ -2,7 +2,7 @@
 
 Audits your YouTube channel against up to 10 competitors and scores titles, descriptions, CTAs, hashtags, thumbnails, engagement, publishing cadence, length, themes, formats, funnel intent and content gaps. It is the web version of the "Search Indicators" Google Sheets Apps Script. The rules and the report tabs are the same, and it adds CTA and thumbnail checks.
 
-Running cost: **₹0**. It uses the Cloudflare Workers free plan, the YouTube Data API free quota and the Gemini free tier, which is optional.
+Running cost: **₹0**. It uses the Cloudflare Workers free plan, the YouTube Data API free quota, open-source AI models on Workers AI (free daily allowance), and optionally the Gemini free tier.
 
 ## How it works
 
@@ -17,7 +17,7 @@ Browser (public/)                          Cloudflare Worker (src/worker.js)
 
 - **Input:** channel URL, `@handle`, `/channel/UC…`, or any video link from the channel.
 - **Quota:** about 1 unit per 50 videos. One channel with 200 videos costs about 10 of the 10,000 free daily units. Only legacy `/c/name` URLs fall back to search, which costs 100 units.
-- **Report tabs:** Dashboard (KPIs and benchmark with ranks), Publishing Frequency, Video Length, Themes, Formats, Intent / Funnel, Thumbnails (gallery), Top Content, Underperforming, Content Gaps, SEO & CTA Audit, Recommendations, and AI Review.
+- **Report tabs:** Dashboard (KPIs and benchmark with ranks), Publishing Frequency, Video Length, Themes, Formats, Intent / Funnel, Thumbnails (gallery), Top Content, Underperforming, Content Gaps, SEO & CTA Audit, Recommendations, How Scores Work, and AI Review.
 
 ### Changes from the Apps Script
 - Competitor subscriber counts are real. The sheet showed `—`.
@@ -27,7 +27,7 @@ Browser (public/)                          Cloudflare Worker (src/worker.js)
 - Thumbnails get an HD custom-thumbnail check plus an optional AI visual review.
 - Shorts are detected for videos of 60 seconds or less, and for videos up to 3 minutes tagged `#shorts`.
 - Video-length recommendations are relative to the analysed average instead of fixed view counts.
-- The OpenAI call (paid) is replaced by Gemini (free tier).
+- The paid OpenAI call is replaced by free open-source models (Llama, FLUX) with Gemini as an option.
 
 ## AI: open source by default
 | Job | Default (free, open source, Cloudflare Workers AI) | Optional |
