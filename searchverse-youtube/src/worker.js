@@ -12,11 +12,14 @@ import {
   authConfigured, authStart, authCallback, logout, currentUser, tokenFor, connectionStatus, disconnect,
   listUsers, addUser, updateUser, removeUser, sendInvite,
 } from './auth.js';
+import {
+  ensureBudget, addUsage, usageToday, limits, nextPacificMidnight, storageStatus, cacheGet, cachePut,
+  saveAudit, listAudits, loadAudit, deleteAudit,
+} from './store.js';
 
 import { keywords } from '../public/analysis.js';
 
 const YT = 'https://www.googleapis.com/youtube/v3/';
-const CACHE_TTL = 6 * 3600;
 
 export default {
   async fetch(req, env, ctx) {
@@ -37,6 +40,9 @@ export default {
       if (!user && env.OPEN_ACCESS === '1' && !authConfigured(env)) user = { email: 'local@dev', name: 'Local', role: 'admin', local: true };
       if (key === 'GET /api/session') return await session(env, user);
       if (!user) return json({ error: 'Please sign in.' }, 401);
+      const m = url.pathname.match(/^\/api\/audits\/([\w-]{36})$/);
+      if (m && req.method === 'GET') return json(await loadAudit(env, m[1]));
+      if (m && req.method === 'DELETE') { await deleteAudit(env, user, m[1]); return json({ ok: true }); }
       const route = ROUTES[key];
       if (!route) return json({ error: 'Not found' }, 404);
       if (ADMIN_ONLY.has(key) && user.role !== 'admin') return json({ error: 'Only admins can do this.' }, 403);
@@ -58,6 +64,30 @@ async function session(env, user) {
     youtube: local ? null : await connectionStatus(env, 'yt_connections', user.email),
     mailbox: local || user.role !== 'admin' ? null : await connectionStatus(env, 'mail_senders', user.email),
     brevo: !!(env.BREVO_API_KEY && env.MAIL_FROM),
+  });
+}
+
+// AI calls count against a daily limit per feature. Gemini calls count as 'gemini'.
+function aiMetered(kind, handler) {
+  return async (req, env, ctx, url, user) => {
+    const body = await req.clone().json().catch(() => ({}));
+    const counter = kind !== 'image' && (body.provider === 'gemini' || (!env.AI && body.provider !== 'open')) ? 'gemini' : 'ai_' + kind;
+    await ensureBudget(env, counter, 1);
+    const res = await handler(req, env, ctx, url, user);
+    await addUsage(env, counter, 1);
+    return res;
+  };
+}
+
+async function usage(req, env) {
+  const used = await usageToday(env);
+  const cap = limits(env);
+  const storage = await storageStatus(env);
+  return json({
+    resetsAt: nextPacificMidnight(),
+    youtube: { used: used.yt_units || 0, limit: cap.yt_units, hardLimit: 10000 },
+    ai: ['ai_text', 'ai_vision', 'ai_image', 'gemini'].map((k) => ({ kind: k, used: used[k] || 0, limit: cap[k] })),
+    storage,
   });
 }
 
@@ -85,10 +115,13 @@ const ROUTES = {
     if (!u) fail('User not found.', 404);
     return json({ ok: true, email, invite: await sendInvite(env, url.origin, email, user.email, u.role) });
   },
-  'POST /api/ai/classify': aiClassify,
-  'POST /api/ai/rewrite': aiRewrite,
-  'POST /api/ai/thumbnail': aiThumbnail,
-  'POST /api/ai/image': aiImage,
+  'POST /api/ai/classify': aiMetered('text', aiClassify),
+  'POST /api/ai/rewrite': aiMetered('text', aiRewrite),
+  'POST /api/ai/thumbnail': aiMetered('vision', aiThumbnail),
+  'POST /api/ai/image': aiMetered('image', aiImage),
+  'GET /api/usage': usage,
+  'GET /api/audits': async (req, env) => json({ audits: await listAudits(env) }),
+  'POST /api/audits': async (req, env, ctx, url, user) => json(await saveAudit(env, user, await req.json())),
   'GET /api/photos': photos,
 };
 
@@ -110,10 +143,13 @@ const geminiKey = (req, env) => env.GEMINI_API_KEY || req.headers.get('x-gemini-
 async function yt(path, params, key) {
   const u = new URL(YT + path);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
-  // `key` is an API key, or "Bearer <token>" when the user signed in with Google.
+  // `key` is { auth, units }: auth is an API key, or "Bearer <token>" when the
+  // user connected YouTube. Every call adds its quota cost to key.units.
+  if (typeof key === 'string') key = { auth: key, units: 0 };
+  key.units += path === 'search' ? 100 : 1;
   const headers = {};
-  if (key.startsWith('Bearer ')) headers.authorization = key;
-  else u.searchParams.set('key', key);
+  if (key.auth.startsWith('Bearer ')) headers.authorization = key.auth;
+  else u.searchParams.set('key', key.auth);
   const r = await fetch(u, { headers });
   const body = await r.json();
   if (!r.ok) fail(`YouTube API ${r.status}: ${body.error?.message || 'error'}`, r.status === 403 ? 429 : 502);
@@ -168,10 +204,16 @@ async function resolveChannel(input, key) {
 }
 
 async function ytAuth(req, env, user) {
-  const key = env.YT_API_KEY || req.headers.get('x-yt-key');
-  if (key) return key;
-  const t = user && !user.local ? await tokenFor(env, 'yt_connections', user.email) : null;
-  return t ? 'Bearer ' + t.token : ytKey(req, env);
+  let auth = env.YT_API_KEY || req.headers.get('x-yt-key');
+  if (!auth) {
+    const t = user && !user.local ? await tokenFor(env, 'yt_connections', user.email) : null;
+    auth = t ? 'Bearer ' + t.token : ytKey(req, env);
+  }
+  return { auth, units: 0 };
+}
+// Run YouTube work and always record the units it spent, even if it failed.
+async function metered(env, key, fn) {
+  try { return await fn(); } finally { await addUsage(env, 'yt_units', key.units).catch(() => {}); }
 }
 
 // Auto competitor list: take the channel's best-performing topics, search
@@ -179,12 +221,13 @@ async function ytAuth(req, env, user) {
 // Cost: ~4 searches × 100 units + a few 1-unit calls (of 10,000/day free).
 async function suggestCompetitors(req, env, ctx, url, user) {
   const q = url.searchParams.get('q') || fail('Add your channel first.');
-  const cache = caches.default;
-  const cacheKey = new Request(`https://cache.searchverse/suggest?q=${encodeURIComponent(q.toLowerCase())}`);
-  const hit = await cache.match(cacheKey);
-  if (hit) return hit;
+  const cacheKey = 'suggest:' + q.trim().toLowerCase();
+  const hit = await cacheGet(env, cacheKey);
+  if (hit && url.searchParams.get('fresh') !== '1') return json({ ...hit, cached: true });
 
+  await ensureBudget(env, 'yt_units', 410);
   const key = await ytAuth(req, env, user);
+  return metered(env, key, async () => {
   const channel = await resolveChannel(q, key);
   const pl = await yt('playlistItems', { part: 'contentDetails', maxResults: '50', playlistId: channel.uploads }, key);
   const ids = (pl.items || []).map((it) => it.contentDetails.videoId);
@@ -224,21 +267,25 @@ async function suggestCompetitors(req, env, ctx, url, user) {
       hits: t.hits, matched: [...t.queries],
     };
   });
-  const res = json({ channel: { id: channel.id, title: channel.title }, queries, suggestions }, 200, { 'cache-control': 'public, max-age=86400' });
-  ctx.waitUntil(cache.put(cacheKey, res.clone()));
-  return res;
+  const out = { channel: { id: channel.id, title: channel.title }, queries, suggestions };
+  await cachePut(env, cacheKey, out, 7 * 864e5);
+  return json({ ...out, unitsUsed: key.units });
+  });
 }
 
 async function getChannel(req, env, ctx, url, user) {
   const q = url.searchParams.get('q') || fail('Missing ?q=');
   const max = Math.min(500, Math.max(1, +url.searchParams.get('max') || 200));
 
-  const cache = caches.default;
-  const cacheKey = new Request(`https://cache.searchverse/channel?q=${encodeURIComponent(q.toLowerCase())}&max=${max}`);
-  const hit = await cache.match(cacheKey);
-  if (hit && url.searchParams.get('fresh') !== '1') return hit;
+  // Shared 24h cache: re-auditing a channel anyone fetched today costs 0 units.
+  const cacheKey = `channel:${q.trim().toLowerCase()}:${max}`;
+  const hit = await cacheGet(env, cacheKey);
+  if (hit && url.searchParams.get('fresh') !== '1') return json({ ...hit, cached: true, unitsUsed: 0 });
 
+  // Cost: ~2 to resolve + 1 per 50 video IDs + 1 per 50 video details.
+  await ensureBudget(env, 'yt_units', 2 + 2 * Math.ceil(max / 50));
   const key = await ytAuth(req, env, user);
+  return metered(env, key, async () => {
   const channel = await resolveChannel(q, key);
 
   const ids = [];
@@ -267,9 +314,10 @@ async function getChannel(req, env, ctx, url, user) {
     }
   }
 
-  const res = json({ channel, videos, fetchedAt: new Date().toISOString() }, 200, { 'cache-control': `public, max-age=${CACHE_TTL}` });
-  ctx.waitUntil(cache.put(cacheKey, res.clone()));
-  return res;
+  const out = { channel, videos, fetchedAt: new Date().toISOString() };
+  await cachePut(env, cacheKey, out, 864e5);
+  return json({ ...out, unitsUsed: key.units });
+  });
 }
 
 // ── AI providers ─────────────────────────────────────────────
@@ -426,7 +474,8 @@ async function ytToken(env, user) {
 async function me(req, env, ctx, url, user) {
   const t = user.local ? null : await tokenFor(env, 'yt_connections', user.email);
   if (!t) return json({ connected: false, channels: [] });
-  const d = await yt('channels', { part: 'snippet,statistics', mine: 'true', maxResults: '50' }, 'Bearer ' + t.token);
+  const key = { auth: 'Bearer ' + t.token, units: 0 };
+  const d = await metered(env, key, () => yt('channels', { part: 'snippet,statistics', mine: 'true', maxResults: '50' }, key));
   const channels = (d.items || []).map((it) => ({
     id: it.id, title: it.snippet.title, handle: it.snippet.customUrl || '', thumb: it.snippet.thumbnails?.default?.url || '',
     subscribers: +it.statistics.subscriberCount || 0, videoCount: +it.statistics.videoCount || 0,

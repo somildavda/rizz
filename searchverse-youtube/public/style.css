@@ -154,6 +154,15 @@ label.check input { width: auto; margin: 0; box-shadow: none; }
 .sug .t { font-size: 13px; font-weight: 600; line-height: 1.2; }
 .sug .m { font-size: 11px; color: var(--muted); }
 
+/* Usage + saved audits */
+.usage, .saved { max-width: 780px; margin: 16px auto 0; padding: 18px 20px; }
+.meters { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.meter { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; box-shadow: inset 0 1px 3px rgba(0,0,0,.08); }
+.meter-top { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; margin-bottom: 6px; gap: 8px; }
+.meter .bar { margin-bottom: 6px; }
+.meter.warn .bar > i { background: linear-gradient(90deg, var(--c4), #f97316); }
+.meter.bad .bar > i { background: linear-gradient(90deg, var(--c3), var(--bad)); }
+
 /* Results */
 #results { margin-top: 32px; }
 .results-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }

@@ -44,3 +44,37 @@ CREATE TABLE IF NOT EXISTS mail_senders (
   connected_at INTEGER,
   expired INTEGER DEFAULT 0
 );
+
+-- Daily usage counters (day = Pacific date, when YouTube quota resets)
+CREATE TABLE IF NOT EXISTS usage_daily (
+  day TEXT NOT NULL,
+  kind TEXT NOT NULL,                    -- yt_units | ai_text | ai_vision | ai_image | gemini
+  amount INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, kind)
+);
+
+-- Shared cache of YouTube responses (gzip), so repeat audits cost 0 units
+CREATE TABLE IF NOT EXISTS yt_cache (
+  key TEXT PRIMARY KEY,
+  data BLOB,
+  expires_at INTEGER NOT NULL
+);
+
+-- Saved audits; the compressed data lives in audit_blobs on the chosen shard
+CREATE TABLE IF NOT EXISTS audits (
+  id TEXT PRIMARY KEY,
+  owner_email TEXT NOT NULL,
+  name TEXT,
+  created_at INTEGER,
+  summary_json TEXT,
+  bytes INTEGER,
+  shard TEXT NOT NULL DEFAULT 'DB'
+);
+CREATE INDEX IF NOT EXISTS idx_audits_created ON audits (created_at);
+
+CREATE TABLE IF NOT EXISTS audit_blobs (
+  audit_id TEXT NOT NULL,
+  chunk INTEGER NOT NULL,
+  data BLOB,
+  PRIMARY KEY (audit_id, chunk)
+);

@@ -23,7 +23,6 @@ let server = { youtube: false, gemini: false, openModels: false };
 fetch('/api/health').then((r) => r.json()).then((h) => {
   server = h;
   $('serverKeys').textContent = `Server: YouTube key ${h.youtube ? '✓' : '✗'} · Open-source models (Workers AI) ${h.openModels ? '✓' : '✗'} · Gemini key ${h.gemini ? '✓' : '✗'}`;
-  if (!h.youtube && !store.get('ytKey')) $('quotaNote').textContent = 'Add a YouTube API key in Settings first.';
 }).catch(() => {});
 $('settingsBtn').onclick = () => { $('ytKey').value = store.get('ytKey', ''); $('gemKey').value = store.get('gemKey', ''); $('settings').showModal(); };
 $('saveKeys').onclick = () => { store.set('ytKey', $('ytKey').value.trim()); store.set('gemKey', $('gemKey').value.trim()); $('quotaNote').textContent = ''; };
@@ -139,6 +138,8 @@ async function boot() {
   $('teamBtn').hidden = u.role !== 'admin';
   $('signOutBtn').hidden = !!u.local;
   renderYtStatus();
+  loadUsage();
+  loadAudits();
   await loadMe();
 }
 
@@ -236,9 +237,9 @@ async function runAudit() {
   $('runBtn').disabled = true;
   const started = performance.now();
 
-  const channels = [], videos = [];
-  const now = Date.now();
+  const raw = [];
   const seen = new Set();
+  let units = 0, cachedCount = 0;
   // One channel per request: keeps each Worker call small and shows progress.
   for (const job of jobs) {
     const line = document.createElement('div');
@@ -249,38 +250,163 @@ async function runAudit() {
       const d = await api(`/api/channel?q=${encodeURIComponent(job.q)}&max=${cfg.max}${fresh}`);
       if (seen.has(d.channel.id)) { line.textContent = `↷ ${d.channel.title}: already added`; continue; }
       seen.add(d.channel.id);
-      const ch = { ...d.channel, type: job.type, input: job.q };
-      channels.push(ch);
-      for (const v of d.videos) videos.push(normalizeVideo(v, ch, now));
+      raw.push({ channel: { ...d.channel, type: job.type, input: job.q }, videos: d.videos, fetchedAt: d.fetchedAt });
+      units += d.unitsUsed || 0;
+      if (d.cached) cachedCount++;
       line.className = 'ok';
-      line.textContent = `✓ ${ch.title}: ${d.videos.length} videos`;
+      line.textContent = `✓ ${d.channel.title}: ${d.videos.length} videos ${d.cached ? '(from cache · 0 units)' : `(${d.unitsUsed} units)`}`;
     } catch (e) {
       line.className = 'err';
       line.textContent = `✗ ${job.q}: ${e.message}`;
+      if (/limit/i.test(e.message)) break;
     }
   }
   $('runBtn').disabled = false;
-  if (!channels.length) return;
+  loadUsage();
+  if (!raw.length) return;
 
-  const secs = ((performance.now() - started) / 1000).toFixed(1);
-  state = { ...state, cfg, channels, videos, reports: buildReports(channels, videos, now), active: 'dashboard', ai: {} };
-  $('resTitle').textContent = (cfg.brand || channels[0].title) + ' audit';
-  $('resMeta').textContent = `${channels.length} channels · ${videos.length} videos · ${secs}s · ${new Date().toLocaleString()}${cfg.market ? ' · ' + cfg.market : ''}`;
-  const ownCh = channels.find((c) => c.type === 'Own');
+  let owner = null;
+  const ownCh = raw.find((r) => r.channel.type === 'Own')?.channel;
   if (ownCh && me.connected && me.channels.some((c) => c.id === ownCh.id)) {
     const line = document.createElement('div');
     line.textContent = '⏳ Owner analytics (last 90 days)…';
     prog.appendChild(line);
     try {
-      const a = await api(`/api/me/analytics?channel=${ownCh.id}&days=90`);
-      state.reports.splice(1, 0, ownerReport(a, videos));
-      line.className = 'ok'; line.textContent = `✓ Owner analytics: ${a.range.start} → ${a.range.end}`;
+      owner = await api(`/api/me/analytics?channel=${ownCh.id}&days=90`);
+      line.className = 'ok'; line.textContent = `✓ Owner analytics: ${owner.range.start} → ${owner.range.end}`;
     } catch (e) { line.className = 'err'; line.textContent = `✗ Owner analytics: ${e.message}`; }
   }
+
+  const payload = { cfg, raw, owner, ai: {}, savedAt: Date.now() };
+  showAudit(payload, { secs: ((performance.now() - started) / 1000).toFixed(1), units, cachedCount });
+  // Save automatically, like runs in the GSC/GA tool.
+  const sv = document.createElement('div');
+  sv.textContent = '⏳ Saving audit…';
+  prog.appendChild(sv);
+  try {
+    await saveCurrent();
+    sv.className = 'ok';
+    sv.textContent = '✓ Saved. Find it any time under "Saved audits".';
+  } catch (e) { sv.className = 'err'; sv.textContent = `✗ Not saved: ${e.message}`; }
+}
+
+// Build the reports from raw API data (a new audit, or a saved one).
+function showAudit(payload, meta = {}) {
+  const at = payload.savedAt || Date.now();
+  const channels = payload.raw.map((r) => r.channel);
+  const videos = payload.raw.flatMap((r) => r.videos.map((v) => normalizeVideo(v, r.channel, at)));
+  state = { ...state, cfg: payload.cfg, payload, channels, videos, reports: buildReports(channels, videos, at), active: 'dashboard', ai: payload.ai || {} };
+  if (payload.owner) state.reports.splice(1, 0, ownerReport(payload.owner, videos));
+  const cfg = payload.cfg || {};
+  $('resTitle').textContent = (cfg.brand || channels[0].title) + ' audit';
+  $('resMeta').textContent = [
+    `${channels.length} channels · ${videos.length} videos`,
+    meta.secs ? `${meta.secs}s` : null,
+    meta.units != null ? `${meta.units} YouTube units${meta.cachedCount ? ` (${meta.cachedCount} from cache)` : ''}` : null,
+    new Date(at).toLocaleString(),
+    cfg.market || null,
+    meta.saved ? 'saved audit' : null,
+  ].filter(Boolean).join(' · ');
   $('results').hidden = false;
   render();
   $('results').scrollIntoView({ behavior: 'smooth' });
 }
+
+// Save (or re-save, e.g. after AI review) the audit on screen.
+async function saveCurrent() {
+  const p = state.payload;
+  if (!p) return;
+  p.ai = state.ai || {};
+  const summary = {
+    channels: state.channels.map((c) => ({ title: c.title, type: c.type })),
+    videos: state.videos.length,
+    market: p.cfg?.market || '',
+    ai: Object.keys(p.ai).length,
+  };
+  const name = (p.cfg?.brand || state.channels[0]?.title || 'Audit');
+  if (state.auditId) await apiReq('DELETE', '/api/audits/' + state.auditId).catch(() => {});
+  const r = await apiReq('POST', '/api/audits', { name, summary, payload: p });
+  state.auditId = r.id;
+  loadAudits();
+  loadUsage();
+  return r;
+}
+
+// ── Saved audits ─────────────────────────────────────────────
+const fmtBytes = (b) => (b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB');
+async function loadAudits() {
+  try {
+    const { audits } = await apiReq('GET', '/api/audits');
+    $('savedCount').textContent = audits.length ? `(${audits.length})` : '';
+    $('savedList').innerHTML = audits.length ? `<table><thead><tr><th>Name</th><th>Saved</th><th>Channels</th><th class="num">Videos</th><th class="num">Size</th><th>By</th><th></th></tr></thead><tbody>${audits.map((a) => `
+      <tr data-id="${esc(a.id)}"><td><b>${esc(a.name)}</b>${a.summary.ai ? ' <span class="pill good">AI</span>' : ''}</td><td class="muted small">${new Date(a.created_at).toLocaleString()}</td>
+      <td class="small">${esc((a.summary.channels || []).map((c) => c.title).join(', '))}</td><td class="num">${a.summary.videos ?? ''}</td><td class="num">${fmtBytes(a.bytes)}</td>
+      <td class="muted small">${esc(a.owner_email)}</td><td style="white-space:nowrap"><button class="btn small primary" data-act="open">Open</button> <button class="btn ghost small" data-act="del">Delete</button></td></tr>`).join('')}</tbody></table>`
+      : '<div class="empty">No saved audits yet. Every audit you run is saved here automatically.</div>';
+  } catch (e) { $('savedList').innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+$('savedList').onclick = async (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const id = b.closest('tr').dataset.id;
+  if (b.dataset.act === 'open') {
+    b.disabled = true; b.textContent = 'Opening…';
+    try {
+      const a = await apiReq('GET', '/api/audits/' + id);
+      showAudit(a.payload, { saved: true });
+      state.auditId = id;
+    } catch (err) { alert(err.message); }
+    b.disabled = false; b.textContent = 'Open';
+  }
+  if (b.dataset.act === 'del' && confirm('Delete this saved audit?')) {
+    try { await apiReq('DELETE', '/api/audits/' + id); if (state.auditId === id) state.auditId = null; loadAudits(); loadUsage(); }
+    catch (err) { alert(err.message); }
+  }
+};
+$('saveBtn').onclick = async () => {
+  $('saveBtn').disabled = true;
+  try { await saveCurrent(); $('saveBtn').textContent = '✓ Saved'; } catch (e) { alert(e.message); }
+  setTimeout(() => { $('saveBtn').textContent = '💾 Save'; $('saveBtn').disabled = false; }, 1500);
+};
+
+// ── Daily limits ─────────────────────────────────────────────
+const AI_LABELS = { ai_text: 'AI titles & CTA', ai_vision: 'AI thumbnail reviews', ai_image: 'AI thumbnail images', gemini: 'Gemini calls' };
+function meter(label, used, limit, note) {
+  const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
+  const cls = pct >= 90 ? 'bad' : pct >= 70 ? 'warn' : '';
+  return `<div class="meter ${cls}"><div class="meter-top"><span>${esc(label)}</span><span class="num">${used.toLocaleString()} / ${limit.toLocaleString()}</span></div>
+    <div class="bar"><i style="width:${pct}%"></i></div>${note ? `<div class="muted small">${note}</div>` : ''}</div>`;
+}
+async function loadUsage() {
+  try {
+    const u = await apiReq('GET', '/api/usage');
+    const reset = new Date(u.resetsAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' });
+    const max = +$('maxVideos').value || 200;
+    const perCh = 2 + 2 * Math.ceil(max / 50);
+    const left = Math.max(0, u.youtube.limit - u.youtube.used);
+    state.usage = u;
+    $('usage').innerHTML = `
+      <div class="section-head"><h3>Today's limits</h3><span class="muted small">Reset ${esc(reset)} IST (midnight US Pacific)</span></div>
+      <div class="meters">
+        ${meter('YouTube API units', u.youtube.used, u.youtube.limit, `≈ ${Math.floor(left / perCh).toLocaleString()} more channels at ${max} videos (${perCh} units each) · ≈ ${Math.floor(left / 410)} competitor suggestions · cached channels are free`)}
+        ${u.ai.filter((a) => a.kind !== 'gemini' || a.used).map((a) => meter(AI_LABELS[a.kind], a.used, a.limit)).join('')}
+        ${meter('Saved data', Math.round(u.storage.used / 1048576), Math.round(u.storage.cap / 1048576), `MB used across ${u.storage.databases.length} database${u.storage.databases.length > 1 ? 's' : ''} · free maximum ${Math.round(u.storage.maxCap / 1073741824)} GB (admin: npm run add-storage)`)}
+      </div>
+      <p class="muted small" style="margin:8px 0 0">Need more YouTube quota? Google raises it for free after a short form: <a href="https://support.google.com/youtube/contact/yt_api_form" target="_blank" rel="noopener">YouTube API quota extension</a>.</p>`;
+    updateEstimate();
+  } catch { /* usage panel is optional */ }
+}
+function updateEstimate() {
+  const u = state.usage;
+  if (!u) return;
+  const n = (($('ownChannel').value.trim() ? 1 : 0) + [...$('compList').querySelectorAll('input')].filter((i) => i.value.trim()).length);
+  const cost = n * (2 + 2 * Math.ceil((+$('maxVideos').value || 200) / 50));
+  const left = u.youtube.limit - u.youtube.used;
+  $('quotaNote').textContent = n ? `Up to ${cost} of ${left.toLocaleString()} YouTube units left today (channels fetched in the last 24h are free).` : '';
+  $('quotaNote').className = 'small ' + (cost > left ? 'err' : 'muted');
+}
+$('maxVideos').addEventListener('change', loadUsage);
+$('setup').addEventListener('input', updateEstimate);
 
 // ── Owner analytics report (connected channel only) ──────────
 const TRAFFIC = { YT_SEARCH: 'YouTube search', SUGGESTED: 'Suggested videos', BROWSE: 'Browse / Home', EXT_URL: 'External sites', NO_LINK_OTHER: 'Direct / unknown', PLAYLIST: 'Playlists', NOTIFICATION: 'Notifications', SUBSCRIBER: 'Subscriptions feed', SHORTS: 'Shorts feed', CHANNEL: 'Channel pages', YT_OTHER_PAGE: 'Other YouTube pages', END_SCREEN: 'End screens', ANNOTATION: 'Cards / annotations', HASHTAGS: 'Hashtag pages', RELATED_VIDEO: 'Related videos', SOUND_PAGE: 'Sound pages', LIVE_REDIRECT: 'Live redirect', CAMPAIGN_CARD: 'Campaign cards', ADVERTISING: 'YouTube ads', PRODUCT_PAGE: 'Product pages', VIDEO_REMIXES: 'Remixes' };
@@ -509,6 +635,7 @@ function renderAi(panel) {
     }
     delete a.busy;
     redrawCard(v);
+    loadUsage();
   }
 
   list.onclick = (e) => {
@@ -579,7 +706,6 @@ $('exportAll').onclick = () => {
   download('searchverse-audit.csv', parts.join('\n\n'), 'text/csv');
 };
 $('exportJson').onclick = () => {
-  const { cfg, channels, videos, ai } = state;
-  download('searchverse-audit.json', JSON.stringify({ cfg, channels, videos: videos.map(({ descRaw, ...v }) => v), ai }, null, 2), 'application/json');
+  download('searchverse-audit.json', JSON.stringify({ ...state.payload, ai: state.ai }, null, 2), 'application/json');
 };
 $('printBtn').onclick = () => window.print();

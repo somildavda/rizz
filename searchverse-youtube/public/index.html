@@ -84,6 +84,13 @@
       <div id="progress" class="progress" hidden></div>
     </section>
 
+    <section class="card usage" id="usage"></section>
+
+    <section class="card saved" id="saved">
+      <div class="section-head"><h3>Saved audits <span class="muted small" id="savedCount"></span></h3><button class="btn ghost small" onclick="document.getElementById('savedList').hidden=!document.getElementById('savedList').hidden">Show / hide</button></div>
+      <div class="table-wrap" id="savedList" style="max-height:340px"></div>
+    </section>
+
     <section id="results" hidden>
       <div class="results-head">
         <div>
@@ -91,6 +98,7 @@
           <div class="muted small" id="resMeta"></div>
         </div>
         <div class="actions">
+          <button class="btn ghost" id="saveBtn" title="Save again, including AI review results">💾 Save</button>
           <button class="btn ghost" id="exportJson">Export JSON</button>
           <button class="btn ghost" id="exportAll">Export all CSV</button>
           <button class="btn ghost" id="printBtn">Print / PDF</button>

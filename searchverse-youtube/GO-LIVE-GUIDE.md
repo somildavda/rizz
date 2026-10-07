@@ -139,8 +139,23 @@ You can **reuse the same Google Cloud project as the GSC tool** (easiest). Open 
 ## Every 7 days (because the app stays in Testing mode)
 Google switches off the **YouTube connection** and the **mailbox connection** 7 days after you connect them. The top bar shows "N days left", then a **Reconnect** button. Click it, pick the same account and tick the boxes. That takes 10 seconds and nothing is lost. Signing in itself is not affected.
 
-## Updating the app later
-Download the new code, put your `database_id` and `ADMIN_EMAILS` back into `wrangler.toml`, then run `npm run deploy`.
+## Updating the app later (one command)
+`wrangler.toml` already contains your database id and admin email, so updating is:
+1. Download the new ZIP from GitHub (branch `claude/vibrant-curie-taum1m`) and unzip it.
+2. In Terminal, go into the new `searchverse-youtube` folder and run:
+   ```
+   npm run update
+   ```
+   This installs, adds any new database tables (safe to re-run; nothing is deleted) and deploys. Your secrets stay in Cloudflare.
+⚠️ If you ran `npm run add-storage`, copy your current `wrangler.toml` into the new folder first, because it holds the extra databases.
+
+## Daily limits & storage
+- **Today's limits** (on the home page) shows the YouTube units used out of 9,500 (Google gives 10,000 a day; 500 are kept as a safety margin), the AI calls per feature, and the saved data. Everything resets at midnight US Pacific (12:30 PM IST, or 1:30 PM IST in winter).
+- One channel at 200 videos costs about 10 units, so about 900 channel fetches a day. **✨ Suggest competitors** costs about 410 units. Any channel fetched by anyone in the last 24 hours costs 0, and suggestions are reused for 7 days.
+- When a limit is reached the tool stops and tells you when it resets. Saved audits still open.
+- Change the limits in `wrangler.toml` (`YT_DAILY_LIMIT`, `AI_*_DAILY`) and run `npm run deploy`. For more YouTube quota, ask Google (free): https://support.google.com/youtube/contact/yt_api_form
+- **Saved audits**: every audit is saved automatically, compressed (about 1 MB per large audit), and can be reopened any time. Use 💾 Save after an AI review to keep the AI results too.
+- **More storage (free, up to 5 GB):** `npm run add-storage`, then `npm run deploy`. Each run adds a 500 MB database (maximum 9 extra). New audits go to the database with the most room.
 
 ## Problems?
 | You see | Do this |

@@ -67,6 +67,12 @@ See **[GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md)**: `wrangler login` â†’ `d1 create` â
 - All of this is stored in D1 (`schema.sql`). Tokens are encrypted with `APP_SECRET`. While the Google app is in Testing mode, connections need a 10-second Reconnect every 7 days.
 - Local testing without Google: put `OPEN_ACCESS=1` in `.dev.vars`.
 
+## Limits, cache and storage
+- Every YouTube call is counted (search = 100 units, everything else = 1) in `usage_daily`, keyed to the Pacific day. Requests are refused before they would cross `YT_DAILY_LIMIT` (default 9,500 of Google's 10,000). AI calls have per-feature daily caps.
+- Channel fetches are cached in D1 for 24h and competitor suggestions for 7 days (gzip, shared by the whole team), so repeats cost 0 units.
+- Audits are saved automatically: gzip JSON in `audit_blobs`, chunked under D1's 2 MB row limit, on whichever database has the most room (main + `DATA1..DATA9` via `npm run add-storage`, up to 5 GB free).
+- `npm run update` = install + apply schema (idempotent) + deploy.
+
 ## Roadmap
 1. **YouTube audit** (this release).
 2. ~~Connect channel (owner mode), sign-in, team, invites~~ done; see above.
