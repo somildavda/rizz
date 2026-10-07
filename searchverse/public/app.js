@@ -1418,7 +1418,33 @@ async function urlQueries(pid, project, x, per, prev, isBranded) {
       </div>
       ${project.brand_terms ? '' : '<div class="banner">Add brand terms in project settings to tag branded queries.</div>'}
       <div class="card section"><div class="seg" style="margin-bottom:12px"><button class="on" data-qf="nb">Non-branded (${fmt(split.nonBranded.n)})</button><button data-qf="b">Branded (${fmt(split.branded.n)})</button><button data-qf="all">All</button></div>
+        <div class="row" style="margin-bottom:10px"><span class="small muted">Export all ${fmt(rows.length)} queries:</span><button class="btn sm" data-qx="xlsx">⬇ Excel</button><button class="btn sm" data-qx="csv">⬇ CSV</button></div>
         <div id="qf-box">${qTable(rows.filter((r) => !r.b))}</div><p class="hint">Brackets show the ${esc(prevL)} position. <b>Click a query</b> to audit this page for it.</p></div>`);
+    const slug = (() => { try { return new URL(x.url).pathname.replace(/^\/|\/$/g, '').replace(/[^\w-]+/g, '_') || 'home'; } catch { return 'page'; } })();
+    const exportRows = () => rows.map((r) => ({ Query: r.q, Type: r.b ? 'Branded' : 'Non-branded', [`Clicks ${curL}`]: r.c, [`Clicks ${prevL}`]: r.pc, 'Clicks change': r.c - r.pc, 'Clicks change %': r.pc ? +((r.c - r.pc) / r.pc).toFixed(4) : null,
+      [`Impressions ${curL}`]: r.i, [`Impressions ${prevL}`]: r.pi, CTR: +Number(r.ctr || 0).toFixed(4), [`Position ${curL}`]: +Number(r.pos || 0).toFixed(1), [`Position ${prevL}`]: r.ppos == null ? null : +r.ppos.toFixed(1) }));
+    document.querySelectorAll('[data-qx]').forEach((btn) => (btn.onclick = async () => {
+      const data = exportRows(), name = `${project.name}-${slug}-queries-${per.start}-to-${per.end}`;
+      if (btn.dataset.qx === 'csv') {
+        const head = Object.keys(data[0] || { Query: '' });
+        const qv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['\ufeff' + [head, ...data.map((d) => head.map((h) => d[h]))].map((l) => l.map(qv).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = name + '.csv'; a.click();
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const X = await loadXlsx();
+        const wb = X.utils.book_new();
+        const sheet = (list, title) => { const ws = X.utils.json_to_sheet(list.length ? list : [{ Query: '' }]); ws['!cols'] = Object.keys(list[0] || { Query: '' }).map((k, i) => ({ wch: i === 0 ? 45 : Math.max(12, k.length + 2) })); X.utils.book_append_sheet(wb, ws, title); };
+        sheet([{ Page: x.url, Period: `${curL} vs ${prevL}`, 'Non-branded queries': split.nonBranded.n, 'Non-branded clicks': split.nonBranded.c, 'Branded queries': split.branded.n, 'Branded clicks': split.branded.c }], 'Summary');
+        sheet(data.filter((d) => d.Type === 'Non-branded'), 'Non-branded');
+        sheet(data.filter((d) => d.Type === 'Branded'), 'Branded');
+        sheet(data, 'All queries');
+        X.writeFile(wb, name + '.xlsx');
+      } catch (e) { toast('Export failed: ' + e.message); } finally { btn.disabled = false; }
+    }));
     document.querySelectorAll('[data-qf]').forEach((btn) => (btn.onclick = () => {
       document.querySelectorAll('[data-qf]').forEach((x2) => x2.classList.toggle('on', x2 === btn));
       const f = btn.dataset.qf;
