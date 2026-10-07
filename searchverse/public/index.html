@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Searchverse YouTube Audit</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235B3DF5'/%3E%3Cpath d='M12 9l12 7-12 7z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">SV</span>
+      <div>
+        <div class="brand-name">Searchverse</div>
+        <div class="brand-sub">YouTube Audit</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn ghost" id="themeBtn" title="Toggle theme">◐</button>
+      <button class="btn ghost" id="settingsBtn">Settings</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card setup" id="setup">
+      <h1>Audit YouTube channels</h1>
+      <p class="muted">Paste a channel URL, @handle, or any video link. Add up to 10 competitors to compare against.</p>
+
+      <div class="grid2">
+        <label>Project / brand name<input id="brand" placeholder="e.g. Airtel"></label>
+        <label>Market<input id="market" placeholder="e.g. India"></label>
+      </div>
+
+      <label class="mt">Your channel
+        <input id="ownChannel" placeholder="https://www.youtube.com/@yourchannel">
+      </label>
+
+      <div class="mt">
+        <div class="label-row"><span class="label">Competitors</span><span class="muted small" id="compCount">0 / 10</span></div>
+        <div id="compList"></div>
+        <button class="btn ghost small" id="addComp">+ Add competitor</button>
+      </div>
+
+      <div class="grid2 mt">
+        <label>Videos per channel
+          <select id="maxVideos">
+            <option value="50">Latest 50</option>
+            <option value="100">Latest 100</option>
+            <option value="200" selected>Latest 200</option>
+            <option value="500">Latest 500</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="fresh"> Skip cache (fetch fresh data)</label>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="runBtn">Run audit</button>
+        <span class="muted small" id="quotaNote"></span>
+      </div>
+      <div id="progress" class="progress" hidden></div>
+    </section>
+
+    <section id="results" hidden>
+      <div class="results-head">
+        <div>
+          <h2 id="resTitle">Audit</h2>
+          <div class="muted small" id="resMeta"></div>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="exportJson">Export JSON</button>
+          <button class="btn ghost" id="exportAll">Export all CSV</button>
+          <button class="btn ghost" id="printBtn">Print / PDF</button>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <nav class="tabs" id="tabs" role="tablist"></nav>
+      <div id="panel"></div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" class="dialog">
+      <h3>Settings</h3>
+      <p class="muted small" id="serverKeys"></p>
+      <label>YouTube Data API key (only if the server has none)
+        <input id="ytKey" type="password" autocomplete="off" placeholder="AIza…">
+      </label>
+      <label>Gemini API key (optional, for AI review)
+        <input id="gemKey" type="password" autocomplete="off" placeholder="AIza…">
+      </label>
+      <p class="muted small">Keys typed here stay in this browser only and are sent just to this tool's own API.</p>
+      <div class="actions"><button class="btn primary" value="save" id="saveKeys">Save</button><button class="btn ghost" value="cancel">Close</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

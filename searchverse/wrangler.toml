@@ -1,0 +1,15 @@
+name = "searchverse-yt-audit"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Optional: override the Gemini model used for AI review.
+# [vars]
+# GEMINI_MODEL = "gemini-2.5-flash"
+
+# Secrets (never commit these): run
+#   npx wrangler secret put YT_API_KEY
+#   npx wrangler secret put GEMINI_API_KEY

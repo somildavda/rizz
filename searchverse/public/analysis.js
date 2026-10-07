@@ -1,0 +1,530 @@
+// Searchverse analysis engine.
+// Port of the "Search Indicators" Apps Script rules (classification, SEO and
+// performance scoring, all 14 report sheets) into plain functions over JSON.
+// Runs in the browser and in Node (tests), so the Worker only proxies YouTube.
+
+const DAY = 86400000;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+export const DAY_ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+export const LENGTH_BUCKETS = ['0–30 sec', '31–60 sec', '1–3 min', '3–5 min', '5–8 min', '8–12 min', '12–20 min', '20+ min'];
+export const INTENT_ORDER = ['Awareness', 'Educational', 'Consideration', 'Comparison', 'Decision', 'Proof / Case Study'];
+
+// ── Classification ───────────────────────────────────────────
+export function classifyTheme(title, desc, type) {
+  if (type === 'Shorts') return 'Shorts';
+  const x = (title + ' ' + desc).toLowerCase();
+  if (/\bgeo\b|generative engine|ai overview|ai search|search generative|llm search|answer engine|\baeo\b/.test(x)) return 'GEO / AI Search';
+  if (/\bseo\b|search engine optimi[sz]|\brank(ing)?\b|serp|backlink|keyword research|on.?page|off.?page/.test(x)) return 'SEO';
+  if (/\bai\b|artificial intelligence|machine learning|chatgpt|openai|gemini|claude|\bllm\b|large language/.test(x)) return 'AI';
+  if (/\bppc\b|pay.per.click|google ads|paid search|paid media|ad campaign|display ads|performance max/.test(x)) return 'PPC';
+  if (/\bcro\b|conversion rate|landing page|a\/b test|split test|ab test/.test(x)) return 'CRO';
+  if (/analytics|\bga4\b|data studio|looker|reporting|tracking|attribution/.test(x)) return 'Analytics';
+  if (/content marketing|content strategy|content plan|editorial|\bblog\b|content calendar/.test(x)) return 'Content Marketing';
+  if (/social media|instagram|tiktok|linkedin|twitter|facebook|meta ads/.test(x)) return 'Social Media';
+  if (/ecommerce|e-commerce|shopify|woocommerce|product page|online store|amazon|marketplace/.test(x)) return 'Ecommerce';
+  if (/\bbranding\b|brand identity|brand strategy|brand voice|\blogo\b|positioning/.test(x)) return 'Branding';
+  if (/lead gen|inbound|outbound|prospecting|sales funnel|pipeline/.test(x)) return 'Lead Generation';
+  if (/email marketing|newsletter|drip campaign|klaviyo|mailchimp/.test(x)) return 'Email Marketing';
+  if (/webinar|live stream|podcast/.test(x)) return 'Podcast / Webinar';
+  return 'Other';
+}
+
+export function classifyFormat(title, desc, type) {
+  if (type === 'Shorts') return 'Shorts';
+  const x = (title + ' ' + desc).toLowerCase();
+  if (/podcast|episode \d|\bep\s*\d|hosted by/.test(x)) return 'Podcast';
+  if (/interview|sit down with|talking to|spoke with|chat with/.test(x)) return 'Interview';
+  if (/\bvs\b|versus|compare|comparison|which is better|head to head/.test(x)) return 'Comparison';
+  if (/how to|step by step|tutorial|walkthrough|beginners? guide/.test(x)) return 'How To';
+  if (/\d+\s*(tip|reason|way|mistake|tool|thing|example|hack|idea|strateg|step)/.test(x)) return 'Listicle';
+  if (/review|my verdict|tested|testing|we tried/.test(x)) return 'Review';
+  if (/testimonial|client story|what our client|customer success/.test(x)) return 'Testimonial';
+  if (/case study|real result|how we|how i |how they|grew from|went from/.test(x)) return 'Case Study';
+  if (/webinar|live training|workshop/.test(x)) return 'Webinar';
+  if (/\bdemo\b|product tour|platform overview|software walkthrough/.test(x)) return 'Product Demo';
+  if (/explainer|explained|what is|what are|definition|overview|introduction to/.test(x)) return 'Explainer';
+  if (/\bnews\b|update|breaking|announced|revealed/.test(x)) return 'News / Update';
+  if (/my opinion|i think|unpopular opinion|hot take|controversial|\brant\b/.test(x)) return 'Opinion';
+  if (/behind the scenes|day in the life|\bvlog\b|office tour/.test(x)) return 'Behind The Scenes';
+  return 'Other';
+}
+
+export function classifyIntent(title, desc) {
+  const x = (title + ' ' + desc).toLowerCase();
+  if (/\bbuy\b|pricing|book a demo|\bhire\b|get started|sign up|free trial|schedule a/.test(x)) return 'Decision';
+  if (/\bbest\b|\btop \d|review|compare|\bvs\b|versus|which.*better|alternative/.test(x)) return 'Comparison';
+  if (/case study|real result|success story|\bproof\b/.test(x)) return 'Proof / Case Study';
+  if (/solution|\btools?\b|platform|software|\bfix\b|solve/.test(x)) return 'Consideration';
+  if (/how to|tutorial|guide|learn|step|walkthrough|beginner|explained|tips/.test(x)) return 'Educational';
+  return 'Awareness';
+}
+
+export function lengthBucket(sec) {
+  if (sec <= 30) return LENGTH_BUCKETS[0];
+  if (sec <= 60) return LENGTH_BUCKETS[1];
+  if (sec <= 180) return LENGTH_BUCKETS[2];
+  if (sec <= 300) return LENGTH_BUCKETS[3];
+  if (sec <= 480) return LENGTH_BUCKETS[4];
+  if (sec <= 720) return LENGTH_BUCKETS[5];
+  if (sec <= 1200) return LENGTH_BUCKETS[6];
+  return LENGTH_BUCKETS[7];
+}
+
+// ── Scoring ──────────────────────────────────────────────────
+const KEYWORD_SIGNAL = /how to|guide|best|tutorial|review|\bvs\b|20\d\d|\d+/i;
+
+export function scoreSEO(title, desc, hashtagCount, tagsText) {
+  let s = 0;
+  const tl = title.length;
+  if (tl >= 40 && tl <= 75) s += 25; else if (tl >= 30) s += 12;
+  const dl = desc.length;
+  if (dl >= 180) s += 25; else if (dl >= 100) s += 12;
+  if (hashtagCount >= 2 && hashtagCount <= 8) s += 20; else if (hashtagCount >= 1) s += 10;
+  if (tagsText.length > 30) s += 15; else if (tagsText.length > 0) s += 8;
+  if (KEYWORD_SIGNAL.test(title)) s += 15;
+  return Math.min(100, s);
+}
+
+export function scorePerformance(views, vpd, er) {
+  return Math.min(100, Math.round(Math.log10(Math.max(1, views)) * 12 + Math.min(40, vpd / 20) + Math.min(30, er * 400)));
+}
+
+export function performanceTier(s) {
+  if (s >= 80) return 'Top Performer';
+  if (s >= 60) return 'Above Average';
+  if (s >= 35) return 'Average';
+  return 'Low Performer';
+}
+
+export const titleStatus = (t) => (t.length >= 40 && t.length <= 75 ? 'Strong' : t.length >= 30 ? 'Average' : 'Weak');
+export const descStatus = (d) => (d.length >= 180 ? 'Strong' : d.length >= 80 ? 'Average' : 'Weak');
+export const hashtagStatus = (n) => (n >= 2 && n <= 8 ? 'Strong' : n === 1 || n === 9 ? 'Average' : 'Weak');
+export function overallStatus(...s) {
+  const strong = s.filter((x) => x === 'Strong').length;
+  return strong === s.length ? 'Strong' : strong >= 1 ? 'Average' : 'Weak';
+}
+
+// CTA detection: which kinds of call to action a description contains, and
+// whether one appears "above the fold" (first ~150 chars / 3 lines, visible
+// without expanding the description).
+const CTA_TYPES = {
+  Subscribe: /subscribe|hit the bell|turn on notifications/i,
+  Engage: /comment below|let us know|like this video|drop a comment|share this/i,
+  Link: /click the link|link (in|below)|check out|visit|learn more|read more|https?:\/\//i,
+  Lead: /book a|sign up|get in touch|contact us|free trial|download|register|whatsapp|call us/i,
+  Shop: /\bshop\b|buy now|order now|use code|discount|coupon|\bsale\b/i,
+  Follow: /follow us|instagram\.com|linkedin\.com|twitter\.com|x\.com\//i,
+};
+
+export function analyzeCta(desc) {
+  const types = Object.keys(CTA_TYPES).filter((k) => CTA_TYPES[k].test(desc));
+  const fold = desc.split('\n').slice(0, 3).join('\n').slice(0, 150);
+  const aboveFold = Object.values(CTA_TYPES).some((re) => re.test(fold));
+  const links = (desc.match(/https?:\/\/\S+/g) || []).length;
+  let score = 0;
+  if (types.length) score += 40;
+  if (aboveFold) score += 30;
+  if (links) score += 15;
+  if (types.length >= 2) score += 15;
+  return { types, aboveFold, links, score: Math.min(100, score) };
+}
+
+// ── Utilities ────────────────────────────────────────────────
+export function isoDurationToSeconds(iso) {
+  const m = String(iso || '').match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0);
+}
+export function formatSeconds(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const p = (n) => String(n).padStart(2, '0');
+  return h ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
+}
+const extractHashtags = (t) => [...new Set(String(t).match(/#[\p{L}\p{N}_]+/gu) || [])];
+const stripHashtags = (t) => String(t).replace(/#[\p{L}\p{N}_]+/gu, '').replace(/[ \t]+/g, ' ').trim();
+function isoWeek(d) {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date - yearStart) / DAY + 1) / 7);
+}
+const sum = (rows, k) => rows.reduce((a, r) => a + (+r[k] || 0), 0);
+const avg = (rows, k) => (rows.length ? sum(rows, k) / rows.length : 0);
+const er = (rows) => { const v = sum(rows, 'views'); return v ? (sum(rows, 'likes') + sum(rows, 'comments')) / v : 0; };
+const round1 = (v) => Math.round((+v || 0) * 10) / 10;
+const byViewsDesc = (a, b) => b.views - a.views;
+export function groupBy(rows, key) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = r[key] || 'Other';
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  }
+  return m;
+}
+export function fmtNum(n) {
+  n = +n || 0;
+  if (n >= 1e7) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(Math.round(n));
+}
+function videosPerMonth(rows) {
+  if (!rows.length) return 0;
+  const t = rows.map((r) => r.ts);
+  const months = Math.max(1, (Math.max(...t) - Math.min(...t)) / (DAY * 30));
+  return rows.length / months;
+}
+
+// Topic similarity by title keywords (replaces the random "similarity" proxy
+// in the Apps Script version).
+const STOP = new Set('the a an and or of to in on for with your you how what why is are this that from by at it its my our we i vs be can do does will best new video 2024 2025 2026'.split(' '));
+export function keywords(title) {
+  return new Set(String(title).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w)));
+}
+export function similarity(a, b) {
+  if (!a.size || !b.size) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+
+// ── Normalisation ────────────────────────────────────────────
+// `v` is a YouTube API videos.list item, `ch` a channels.list summary.
+export function normalizeVideo(v, ch, now = Date.now()) {
+  const sn = v.snippet || {}, st = v.statistics || {}, cd = v.contentDetails || {};
+  const title = sn.title || '';
+  const descRaw = sn.description || '';
+  const hashtags = extractHashtags(title + ' ' + descRaw);
+  const desc = stripHashtags(descRaw);
+  const pub = new Date(sn.publishedAt);
+  const sec = isoDurationToSeconds(cd.duration);
+  // Shorts can be up to 3 min since Oct 2024; the API has no Shorts flag, so
+  // 61–180s counts as Shorts only when tagged #shorts.
+  const isShort = sec > 0 && (sec <= 60 || (sec <= 180 && /#shorts?\b/i.test(title + ' ' + descRaw)));
+  const type = isShort ? 'Shorts' : 'Long Form';
+  const views = +st.viewCount || 0, likes = +st.likeCount || 0, comments = +st.commentCount || 0;
+  const ageDays = Math.max(1, Math.floor((now - pub) / DAY));
+  const eng = views ? (likes + comments) / views : 0;
+  const vpd = views / ageDays;
+  const thumbs = sn.thumbnails || {};
+  const tags = sn.tags || [];
+  const seo = scoreSEO(title, desc, hashtags.length, tags.join(' '));
+  const perf = scorePerformance(views, vpd, eng);
+  const cta = analyzeCta(descRaw);
+  return {
+    id: v.id,
+    url: 'https://youtu.be/' + v.id,
+    channel: ch.title,
+    channelId: ch.id,
+    channelType: ch.type,
+    thumb: (thumbs.maxres || thumbs.high || thumbs.medium || thumbs.default || {}).url || '',
+    hasMaxresThumb: !!thumbs.maxres,
+    title,
+    desc,
+    descRaw,
+    hashtags,
+    tags,
+    published: pub.toISOString().slice(0, 10),
+    ts: pub.getTime(),
+    year: pub.getUTCFullYear(),
+    month: MONTHS[pub.getUTCMonth()],
+    monthKey: pub.toISOString().slice(0, 7),
+    quarter: 'Q' + Math.ceil((pub.getUTCMonth() + 1) / 3),
+    week: isoWeek(pub),
+    day: DAYS[pub.getUTCDay()],
+    durationSec: sec,
+    duration: formatSeconds(sec),
+    type,
+    views, likes, comments,
+    er: eng,
+    vpd,
+    ageDays,
+    theme: classifyTheme(title, desc, type),
+    format: classifyFormat(title, desc, type),
+    intent: classifyIntent(title, desc),
+    lengthBucket: lengthBucket(sec),
+    seoScore: seo,
+    perfScore: perf,
+    perfTier: performanceTier(perf),
+    cta,
+    hasChapters: /(^|\n)\s*\(?\d{1,2}:\d{2}/.test(descRaw),
+    titleLen: title.length,
+    descLen: desc.length,
+    hashCount: hashtags.length,
+  };
+}
+
+// ── Recommendations (rule-based; AI rewrites are a separate step) ──
+function titleRec(t) {
+  t = t.trim();
+  if (!t) return 'Add a keyword-led title under 70 characters with a clear benefit.';
+  if (t.length > 75) return t.slice(0, 65).replace(/\s+\S*$/, '') + ' (Complete Guide)';
+  if (!/how to|guide|best|\d+/i.test(t)) return t + ' — Complete Guide';
+  return t;
+}
+function descRec(title, desc) {
+  const topic = title.split(/[:|\-–]/)[0].trim();
+  const body = `In this video, we cover ${topic} with practical examples and clear steps.\n\n⏱ Chapters\n0:00 Intro\n\n👉 Subscribe for more.`;
+  return desc.length >= 80 ? desc.slice(0, 160) + '\n\n' + body : body;
+}
+function hashtagRec(title) {
+  const words = [...keywords(title)].slice(0, 3);
+  return words.map((w) => '#' + w.replace(/\s/g, '')).join(' ');
+}
+
+// ── Reports ──────────────────────────────────────────────────
+// Each report: { id, title, sections: [{ title, columns, rows, note? }] }.
+// Column specs: [label, format] where format ∈ text|num|pct|date|url|status|thumb.
+const C = (label, fmt = 'text') => [label, fmt];
+
+export function buildReports(channels, videos, now = Date.now()) {
+  const own = videos.filter((v) => v.channelType === 'Own');
+  const comps = videos.filter((v) => v.channelType === 'Competitor');
+  const chNames = channels.map((c) => c.title);
+  const perChannel = (fn) => channels.map((c) => fn(c, videos.filter((v) => v.channelId === c.id)));
+
+  // Channel benchmark (with real subscriber counts and three rankings)
+  const bench = perChannel((c, rows) => ({
+    c, rows, tv: sum(rows, 'views'), avgV: avg(rows, 'views'), er: er(rows), vpm: videosPerMonth(rows),
+    seo: avg(rows, 'seoScore'), perf: avg(rows, 'perfScore'), cta: avg(rows.map((r) => ({ s: r.cta.score })), 's'),
+  }));
+  const rank = (key) => {
+    const sorted = [...bench].sort((a, b) => b[key] - a[key]);
+    return (b) => sorted.indexOf(b) + 1;
+  };
+  const rPerf = rank('avgV'), rPub = rank('vpm'), rEng = rank('er');
+  const authority = (b) => Math.round(Math.min(100, Math.log10(Math.max(1, b.c.subscribers)) * 8 + Math.min(30, b.er * 600) + Math.min(20, b.vpm * 3) + b.seo * 0.1));
+
+  const ownCh = channels.find((c) => c.type === 'Own');
+  const kpis = ownCh ? [
+    ['Subscribers', fmtNum(ownCh.subscribers)],
+    ['Videos analysed', own.length],
+    ['Long form', own.filter((v) => v.type === 'Long Form').length],
+    ['Shorts', own.filter((v) => v.type === 'Shorts').length],
+    ['Views (analysed)', fmtNum(sum(own, 'views'))],
+    ['Avg views / video', fmtNum(avg(own, 'views'))],
+    ['Engagement rate', (er(own) * 100).toFixed(2) + '%'],
+    ['Avg SEO score', Math.round(avg(own, 'seoScore'))],
+  ] : [];
+
+  const topGroup = (key) => {
+    let best = { k: '—', v: 0 };
+    for (const [k, rows] of groupBy(videos, key)) { const v = sum(rows, 'views'); if (v > best.v) best = { k, v }; }
+    return best;
+  };
+
+  const reports = [];
+
+  reports.push({
+    id: 'dashboard', title: 'Executive Dashboard', kpis,
+    sections: [
+      {
+        title: 'Channel benchmark',
+        columns: [C('Channel'), C('Type'), C('Subscribers', 'num'), C('Videos', 'num'), C('Views', 'num'), C('Avg views', 'num'), C('Eng. rate', 'pct'), C('Videos/mo', 'num'), C('Avg SEO', 'num'), C('Avg CTA', 'num'), C('Authority', 'num'), C('Perf rank', 'num'), C('Publishing rank', 'num'), C('Engagement rank', 'num')],
+        rows: bench.map((b) => [b.c.title, b.c.type, b.c.subscribers, b.rows.length, b.tv, Math.round(b.avgV), b.er, round1(b.vpm), Math.round(b.seo), Math.round(b.cta), authority(b), rPerf(b), rPub(b), rEng(b)]),
+      },
+      {
+        title: 'Content intelligence summary',
+        columns: [C('Metric'), C('Value'), C('Context')],
+        rows: [
+          ['Winning theme', topGroup('theme').k, fmtNum(topGroup('theme').v) + ' views'],
+          ['Winning format', topGroup('format').k, fmtNum(topGroup('format').v) + ' views'],
+          ['Winning length', topGroup('lengthBucket').k, fmtNum(topGroup('lengthBucket').v) + ' views'],
+          ['Top intent', topGroup('intent').k, fmtNum(topGroup('intent').v) + ' views'],
+          ['Top performer videos', videos.filter((v) => v.perfTier === 'Top Performer').length, 'Performance score 80+'],
+          ['Videos analysed', videos.length, `${own.length} own | ${comps.length} competitor`],
+        ],
+      },
+    ],
+  });
+
+  // Publishing frequency
+  const overview = [], monthly = [], dow = [], insights = [];
+  for (const c of channels) {
+    const rows = videos.filter((v) => v.channelId === c.id);
+    if (!rows.length) continue;
+    const ts = rows.map((r) => r.ts);
+    const first = Math.min(...ts), last = Math.max(...ts);
+    const activeMonths = Math.max(1, (last - first) / (DAY * 30));
+    const vpm = rows.length / activeMonths;
+    const gap = rows.length > 1 ? Math.round((last - first) / (DAY * (rows.length - 1))) : 0;
+    const byMonthKey = [...groupBy(rows, 'monthKey')].sort((a, b) => a[0].localeCompare(b[0]));
+    const monthViews = byMonthKey.map(([k, r]) => ({ k, v: sum(r, 'views'), n: r.length }));
+    const bestM = monthViews.reduce((a, b) => (b.v > a.v ? b : a), { k: '—', v: -1 });
+    const weakM = monthViews.reduce((a, b) => (b.v < a.v ? b : a), { k: '—', v: Infinity });
+    const days = DAY_ORDER.map((d) => { const r = rows.filter((x) => x.day === d); return { d, n: r.length, avgV: avg(r, 'views'), er: er(r) }; });
+    const bestDay = [...days].sort((a, b) => b.avgV - a.avgV)[0];
+    const cadence = vpm >= 4 ? 'Weekly or more' : vpm >= 2 ? '2–3 per month' : vpm >= 1 ? 'Monthly' : 'Irregular';
+    overview.push([c.title, new Date(first).toISOString().slice(0, 10), new Date(last).toISOString().slice(0, 10), Math.round(activeMonths), rows.length, round1(vpm), gap, rows.filter((r) => r.type === 'Long Form').length, rows.filter((r) => r.type === 'Shorts').length, Math.min(100, Math.round(vpm * 20)), bestM.k, weakM.k, bestDay.d, cadence]);
+
+    let prev = 0;
+    byMonthKey.forEach(([k, r], i) => {
+      const tv = sum(r, 'views');
+      const win = (n) => { const s = byMonthKey.slice(Math.max(0, i - n + 1), i + 1); return Math.round(s.reduce((a, [, x]) => a + sum(x, 'views'), 0) / s.length); };
+      monthly.push([c.title, k, r.length, r.filter((x) => x.type === 'Long Form').length, r.filter((x) => x.type === 'Shorts').length, tv, Math.round(avg(r, 'views')), er(r), prev ? (tv - prev) / prev : 0, win(3), win(6)]);
+      prev = tv;
+    });
+
+    [...days].sort((a, b) => b.avgV - a.avgV).forEach((d, i) => {
+      dow.push([c.title, d.d, d.n, Math.round(d.avgV), d.er, i + 1, i === 0 ? 'Best day — prioritise' : i === 1 ? 'Strong day' : i >= 5 ? 'Avoid' : '']);
+    });
+
+    if (bestM.v >= 0) insights.push([c.title, 'Best month', `${bestM.k}: ${fmtNum(bestM.v)} views from ${bestM.n} videos`, 'High', 'Replicate the cadence and topic mix from this month.']);
+    insights.push([c.title, 'Cadence', `${round1(vpm)} videos/month, ~${gap} days between uploads`, vpm >= 3 ? 'Low' : 'High',
+      vpm >= 4 ? 'Maintain weekly publishing.' : vpm >= 2 ? 'Move to weekly publishing.' : 'Publishing is low. Aim for at least 2 videos per month.']);
+  }
+  reports.push({
+    id: 'publishing', title: 'Publishing Frequency',
+    sections: [
+      { title: 'Channel overview', columns: [C('Channel'), C('First upload', 'date'), C('Latest upload', 'date'), C('Active months', 'num'), C('Videos', 'num'), C('Videos/mo', 'num'), C('Days between', 'num'), C('Long form', 'num'), C('Shorts', 'num'), C('Consistency', 'num'), C('Best month'), C('Weakest month'), C('Best day'), C('Cadence')], rows: overview },
+      { title: 'Monthly', columns: [C('Channel'), C('Month'), C('Videos', 'num'), C('Long form', 'num'), C('Shorts', 'num'), C('Views', 'num'), C('Avg views', 'num'), C('Eng. rate', 'pct'), C('MoM change', 'pct'), C('3-mo avg views', 'num'), C('6-mo avg views', 'num')], rows: monthly },
+      { title: 'Day of week (UTC)', columns: [C('Channel'), C('Day'), C('Videos', 'num'), C('Avg views', 'num'), C('Eng. rate', 'pct'), C('Rank', 'num'), C('Recommendation')], rows: dow },
+      { title: 'Auto insights', columns: [C('Channel'), C('Insight'), C('Finding'), C('Impact', 'status'), C('Action')], rows: insights },
+    ],
+  });
+
+  // Video length
+  const byBucket = groupBy(videos, 'lengthBucket');
+  reports.push({
+    id: 'length', title: 'Video Length',
+    sections: [{
+      title: 'Length bucket performance',
+      columns: [C('Bucket'), C('Videos', 'num'), C('Long form', 'num'), C('Shorts', 'num'), C('Views', 'num'), C('Avg views', 'num'), C('Eng. rate', 'pct'), C('Avg views/day', 'num'), C('Best video'), C('URL', 'url'), C('Recommendation')],
+      rows: LENGTH_BUCKETS.map((b) => {
+        const r = byBucket.get(b) || [];
+        if (!r.length) return [b, 0, 0, 0, 0, 0, 0, 0, '—', '', '—'];
+        const best = [...r].sort(byViewsDesc)[0];
+        const overallAvg = avg(videos, 'views');
+        const a = avg(r, 'views');
+        const rec = a >= overallAvg * 1.5 ? 'High priority length — produce more' : a >= overallAvg ? 'Above average — continue' : a >= overallAvg * 0.5 ? 'Average — test titles and topics' : 'Underperforming — review';
+        return [b, r.length, r.filter((x) => x.type === 'Long Form').length, r.filter((x) => x.type === 'Shorts').length, sum(r, 'views'), Math.round(a), er(r), round1(avg(r, 'vpd')), best.title, best.url, rec];
+      }),
+      note: 'Recommendations compare each bucket with the average across all analysed videos, so they scale to any channel size.',
+    }],
+  });
+
+  // Theme / format / intent
+  const dimension = (key, label, order) => {
+    const out = [];
+    for (const c of channels) {
+      const rows = videos.filter((v) => v.channelId === c.id);
+      const g = groupBy(rows, key);
+      const keys = order || [...g.keys()].sort();
+      for (const k of keys) {
+        const r = g.get(k) || [];
+        if (!r.length && !order) continue;
+        const best = [...r].sort(byViewsDesc)[0];
+        out.push([k, c.title, c.type, r.length, sum(r, 'views'), Math.round(avg(r, 'views')), er(r), round1(avg(r, 'vpd')), rows.length ? r.length / rows.length : 0, best ? best.title : '—']);
+      }
+    }
+    return { title: label + ' by channel', columns: [C(label), C('Channel'), C('Type'), C('Videos', 'num'), C('Views', 'num'), C('Avg views', 'num'), C('Eng. rate', 'pct'), C('Avg views/day', 'num'), C('Share of uploads', 'pct'), C('Top video')], rows: out };
+  };
+  reports.push({ id: 'theme', title: 'Themes', sections: [dimension('theme', 'Theme')] });
+  reports.push({ id: 'format', title: 'Formats', sections: [dimension('format', 'Format')] });
+  reports.push({ id: 'intent', title: 'Intent / Funnel', sections: [dimension('intent', 'Intent', INTENT_ORDER)] });
+
+  // Thumbnails
+  reports.push({
+    id: 'thumbnails', title: 'Thumbnails', gallery: true,
+    sections: [{
+      title: 'All videos by views',
+      columns: [C('Thumbnail', 'thumb'), C('Channel'), C('Title'), C('URL', 'url'), C('Type'), C('Views', 'num'), C('Eng. rate', 'pct'), C('Tier', 'status'), C('HD custom thumb', 'status')],
+      rows: [...videos].sort(byViewsDesc).map((v) => [v.thumb, v.channel, v.title, v.url, v.type, v.views, v.er, v.perfTier, v.hasMaxresThumb ? 'Yes' : 'No']),
+      note: '"HD custom thumb = No" means YouTube has no 1280×720 version, which usually means the thumbnail was auto-generated or uploaded at low resolution. Run the AI thumbnail review for a visual score.',
+    }],
+  });
+
+  // Top / under performers
+  const topCols = [C('#', 'num'), C('Channel'), C('Title'), C('URL', 'url'), C('Views', 'num'), C('Eng. rate', 'pct'), C('Duration'), C('Theme'), C('Format'), C('Intent'), C('Published', 'date'), C('Views/day', 'num')];
+  const topRow = (v, i) => [i + 1, v.channel, v.title, v.url, v.views, v.er, v.duration, v.theme, v.format, v.intent, v.published, round1(v.vpd)];
+  const byPerf = [...videos].sort((a, b) => b.perfScore - a.perfScore);
+  reports.push({
+    id: 'top', title: 'Top Content',
+    sections: [
+      { title: 'Top 25 by views', columns: topCols, rows: [...videos].sort(byViewsDesc).slice(0, 25).map(topRow) },
+      { title: 'Top 10% by performance score', columns: topCols, rows: byPerf.slice(0, Math.max(1, Math.floor(byPerf.length * 0.1))).map(topRow) },
+    ],
+  });
+  const aged = videos.filter((v) => now - v.ts > 14 * DAY).sort((a, b) => a.perfScore - b.perfScore).slice(0, 50);
+  reports.push({
+    id: 'under', title: 'Underperforming',
+    sections: [{
+      title: 'Lowest performance score (older than 14 days)',
+      columns: [C('#', 'num'), C('Channel'), C('Title'), C('URL', 'url'), C('Views', 'num'), C('Eng. rate', 'pct'), C('SEO', 'num'), C('CTA', 'num'), C('Theme'), C('Action')],
+      rows: aged.map((v, i) => [i + 1, v.channel, v.title, v.url, v.views, v.er, v.seoScore, v.cta.score, v.theme,
+        v.type === 'Shorts' ? 'Review Shorts strategy for this topic' : v.seoScore < 50 ? 'Fix title, description and hashtags first' : !v.hasMaxresThumb ? 'Upload a custom HD thumbnail' : v.views < 500 ? 'Republish with a stronger title and thumbnail' : 'Review topic relevance and thumbnail']),
+    }],
+  });
+
+  // Content gap (keyword similarity, not random)
+  const ownKw = own.map((v) => ({ v, k: keywords(v.title) }));
+  const common = [], missing = [];
+  for (const cv of comps) {
+    const ck = keywords(cv.title);
+    let best = { s: 0, v: null };
+    for (const o of ownKw) { const s = similarity(ck, o.k); if (s > best.s) best = { s, v: o.v }; }
+    if (best.s >= 0.25) {
+      common.push([best.v.title, best.v.url, cv.title, cv.url, cv.channel, cv.theme, best.s, best.v.views, cv.views, cv.views - best.v.views]);
+    } else if (best.s < 0.1) {
+      const opp = Math.min(100, Math.round(Math.log10(Math.max(1, cv.views)) * 12 + Math.min(40, cv.vpd / 5)));
+      missing.push([cv.channel, cv.title, cv.url, cv.theme, cv.format, cv.views, round1(cv.vpd), opp, opp >= 70 ? 'High' : opp >= 45 ? 'Medium' : 'Low']);
+    }
+  }
+  common.sort((a, b) => Math.abs(b[9]) - Math.abs(a[9]));
+  missing.sort((a, b) => b[7] - a[7]);
+  const ownThemes = new Set(own.map((v) => v.theme));
+  const multi = [];
+  for (const [theme, r] of groupBy(comps, 'theme')) {
+    if (ownThemes.has(theme) || theme === 'Other') continue;
+    const names = [...new Set(r.map((x) => x.channel))];
+    if (names.length < 2) continue;
+    multi.push([theme, names.length, names.join(', '), sum(r, 'views'), Math.round(avg(r, 'views')), Math.max(...r.map((x) => x.views)), names.length >= 3 ? 'High' : 'Medium', [...r].sort(byViewsDesc)[0].title]);
+  }
+  multi.sort((a, b) => b[3] - a[3]);
+  reports.push({
+    id: 'gap', title: 'Content Gaps',
+    sections: [
+      { title: 'Topics both sides cover', columns: [C('Our video'), C('Our URL', 'url'), C('Competitor video'), C('Competitor URL', 'url'), C('Competitor'), C('Theme'), C('Similarity', 'pct'), C('Our views', 'num'), C('Their views', 'num'), C('Views gap', 'num')], rows: common.slice(0, 50) },
+      { title: 'Competitor topics we have not covered', columns: [C('Competitor'), C('Title'), C('URL', 'url'), C('Theme'), C('Format'), C('Views', 'num'), C('Views/day', 'num'), C('Opportunity', 'num'), C('Priority', 'status')], rows: missing.slice(0, 100) },
+      { title: 'Themes 2+ competitors cover and we do not', columns: [C('Theme'), C('Competitors', 'num'), C('Names'), C('Total views', 'num'), C('Avg views', 'num'), C('Best single video', 'num'), C('Priority', 'status'), C('Their best title')], rows: multi },
+    ],
+  });
+
+  // SEO + CTA audit
+  const seoRows = videos.map((v) => {
+    const ts = titleStatus(v.title), ds = descStatus(v.desc), hs = hashtagStatus(v.hashCount);
+    return [v.channel, v.title, v.url, v.titleLen, ts, KEYWORD_SIGNAL.test(v.title) ? 'Yes' : 'No', v.descLen, ds, v.hasChapters ? 'Yes' : 'No', v.cta.types.join(', ') || 'None', v.cta.aboveFold ? 'Yes' : 'No', v.cta.score, v.hashCount, hs, v.seoScore, overallStatus(ts, ds, hs)];
+  });
+  const order = { Weak: 0, Average: 1, Strong: 2 };
+  seoRows.sort((a, b) => order[a[15]] - order[b[15]]);
+  reports.push({
+    id: 'seo', title: 'SEO & CTA Audit',
+    sections: [{
+      title: 'Title, description, CTA and hashtag audit',
+      columns: [C('Channel'), C('Title'), C('URL', 'url'), C('Title len', 'num'), C('Title', 'status'), C('Keyword signal', 'status'), C('Desc len', 'num'), C('Description', 'status'), C('Chapters', 'status'), C('CTA types'), C('CTA above fold', 'status'), C('CTA score', 'num'), C('Hashtags', 'num'), C('Hashtag status', 'status'), C('SEO score', 'num'), C('Overall', 'status')],
+      rows: seoRows,
+    }],
+  });
+
+  // Recommendations (own channel only)
+  const reco = [];
+  for (const v of own) {
+    const ts = titleStatus(v.title), ds = descStatus(v.desc), hs = hashtagStatus(v.hashCount);
+    if (ts !== 'Strong') reco.push([v.url, 'Title', v.title, titleRec(v.title), ts, ts === 'Weak' ? 'High' : 'Medium', `${v.titleLen} chars, target 40–75`]);
+    if (ds !== 'Strong') reco.push([v.url, 'Description', v.desc.slice(0, 80) + '…', descRec(v.title, v.desc), ds, ds === 'Weak' ? 'High' : 'Medium', `${v.descLen} chars, target 180–500`]);
+    if (hs !== 'Strong') reco.push([v.url, 'Hashtags', v.hashtags.join(' ') || '(none)', hashtagRec(v.title), hs, hs === 'Weak' ? 'Medium' : 'Low', `${v.hashCount} hashtags, target 2–8`]);
+    if (!v.cta.aboveFold) reco.push([v.url, 'CTA', v.cta.types.join(', ') || '(none)', 'Put one clear CTA with a link in the first 2 lines of the description.', v.cta.types.length ? 'Average' : 'Weak', 'High', 'Only the first ~150 characters show before "more"']);
+    if (!v.hasChapters && v.type === 'Long Form' && v.durationSec > 240) reco.push([v.url, 'Chapters', '(none)', 'Add timestamps (0:00 Intro …) to get chapters and key moments in Google.', 'Weak', 'Medium', 'Chapters can appear as key moments in Google and AI answers']);
+  }
+  const pOrder = { High: 0, Medium: 1, Low: 2 };
+  reco.sort((a, b) => pOrder[a[5]] - pOrder[b[5]]);
+  reports.push({
+    id: 'reco', title: 'Recommendations',
+    sections: [{ title: 'Fixes for our channel (rule-based; use AI tab for rewrites)', columns: [C('URL', 'url'), C('Field'), C('Current'), C('Recommended'), C('Status', 'status'), C('Priority', 'status'), C('Notes')], rows: reco }],
+  });
+
+  return reports;
+}
