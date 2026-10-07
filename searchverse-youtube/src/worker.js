@@ -324,6 +324,7 @@ async function getChannel(req, env, ctx, url, user) {
 const MODELS = {
   text: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   vision: '@cf/meta/llama-3.2-11b-vision-instruct',
+  visionBackup: '@cf/llava-hf/llava-1.5-7b-hf',
   image: '@cf/black-forest-labs/flux-1-schnell',
 };
 
@@ -343,6 +344,7 @@ async function askJson(req, env, provider, prompt, { image, temperature = 0.2 } 
     text = await gemini(req, env, parts, temperature);
   } else if (image) {
     text = await runVision(env, prompt, image.bytes);
+    try { return parseJson(text); } catch { return { score: '–', why: String(text).slice(0, 400), fixes: [] }; }
   } else {
     const out = await env.AI.run(MODELS.text, {
       messages: [{ role: 'system', content: 'You reply with a single valid JSON object and nothing else.' }, { role: 'user', content: prompt }],
@@ -354,15 +356,32 @@ async function askJson(req, env, provider, prompt, { image, temperature = 0.2 } 
   return parseJson(text);
 }
 
+// Thumbnail review with an open-source vision model. Tries the documented
+// input shapes in turn (Workers AI models differ), then falls back to LLaVA.
 async function runVision(env, prompt, bytes) {
-  const input = { messages: [{ role: 'user', content: prompt + '\nReply with a single JSON object only.' }], image: [...bytes], max_tokens: 600 };
-  try {
-    return (await env.AI.run(MODELS.vision, input)).response;
-  } catch (e) {
-    // Meta's licence must be accepted once per account before first use.
+  const text = prompt + '\nReply with a single JSON object only.';
+  const image = [...bytes];
+  const attempts = [
+    [MODELS.vision, { prompt: text, image, max_tokens: 600 }],
+    [MODELS.vision, { messages: [{ role: 'system', content: 'You are a YouTube thumbnail expert. Reply in JSON.' }, { role: 'user', content: text }], image, max_tokens: 600 }],
+    [MODELS.visionBackup, { prompt: text, image, max_tokens: 600 }],
+  ];
+  let lastErr;
+  for (const [model, input] of attempts) {
+    try {
+      const out = await runAgreeing(env, model, input);
+      const r = out.response ?? out.description;
+      if (r) return r;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('Vision model returned nothing.');
+}
+// Meta's licence must be accepted once per account before first use.
+async function runAgreeing(env, model, input) {
+  try { return await env.AI.run(model, input); } catch (e) {
     if (!/agree/i.test(e.message)) throw e;
-    await env.AI.run(MODELS.vision, { prompt: 'agree' });
-    return (await env.AI.run(MODELS.vision, input)).response;
+    await env.AI.run(model, { prompt: 'agree' });
+    return env.AI.run(model, input);
   }
 }
 
