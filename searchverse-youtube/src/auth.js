@@ -238,8 +238,8 @@ export async function removeUser(env, by, email) {
 // browser opens the admin's mail app with the text ready (mailto).
 export function inviteText(origin, inviter, role) {
   return {
-    subject: `${inviter} invited you to Searchverse YouTube Audit`,
-    text: `Hi,\n\n${inviter} has invited you to Searchverse YouTube Audit as ${role === 'admin' ? 'an admin' : 'a team member'}.\n\nHow to open it:\n1. Go to ${origin}\n2. Click "Sign in with Google"\n3. Choose this email address\n\nIf Google says "app not verified", click Continue: it's your team's internal tool.\n\nThanks`,
+    subject: `${inviter} invited you to Searchverse Channel Audit`,
+    text: `Hi,\n\n${inviter} has invited you to Searchverse Channel Audit as ${role === 'admin' ? 'an admin' : 'a team member'}.\n\nHow to open it:\n1. Go to ${origin}\n2. Click "Sign in with Google"\n3. Choose this email address\n\nIf Google says "app not verified", click Continue: it's your team's internal tool.\n\nThanks`,
   };
 }
 const htmlOf = (t) => '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">' + t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>').replace(/(https?:\/\/\S+)/g, '<a href="$1">$1</a>') + '</div>';

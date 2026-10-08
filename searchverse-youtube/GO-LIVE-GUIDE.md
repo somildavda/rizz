@@ -1,4 +1,4 @@
-# Searchverse YouTube Audit: take it live, step by step 🍼
+# Searchverse Channel Audit: take it live, step by step 🍼
 
 This guide works the same way as the GSC/GA tool's guide: Cloudflare + Sign in with Google + Team + invite emails.
 It takes about 30 minutes once and costs ₹0. Do the steps in order and tick them off.
@@ -60,7 +60,7 @@ You need: a laptop, your **Infidigit Google account** (this will be the admin), 
    ```
    npm run deploy
    ```
-   It prints your link, e.g. **`https://searchverse-youtube.YOURNAME.workers.dev`**. 📝 We'll call it **YOUR-LINK**.
+   It prints your link, e.g. **`https://searchverse-audit.YOURNAME.workers.dev`**. 📝 We'll call it **YOUR-LINK**.
 
 ---
 

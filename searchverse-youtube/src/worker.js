@@ -501,7 +501,7 @@ async function photos(req, env, ctx, url) {
   u.searchParams.set('license_type', 'commercial,modification');
   u.searchParams.set('aspect_ratio', 'wide');
   u.searchParams.set('page_size', '8');
-  const r = await fetch(u, { headers: { 'user-agent': 'searchverse-youtube' } });
+  const r = await fetch(u, { headers: { 'user-agent': 'searchverse-audit' } });
   if (!r.ok) fail(`Openverse ${r.status}`, 502);
   const d = await r.json();
   return json({

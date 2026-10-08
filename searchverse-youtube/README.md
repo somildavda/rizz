@@ -1,4 +1,4 @@
-# Searchverse YouTube Audit
+# Searchverse Channel Audit
 
 👉 **Taking it live? Follow [GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md) step by step.**
 
