@@ -100,6 +100,9 @@ const ROUTES = {
   'GET /api/channel': getChannel,
   'GET /api/suggest-competitors': suggestCompetitors,
   'GET /api/channel-counts': channelCounts,
+  'GET /api/comments': comments,
+  'GET /api/thumb': thumbProxy,
+  'POST /api/ai/comments': aiMetered('text', aiComments),
   'GET /api/me': me,
   'GET /api/me/analytics': myAnalytics,
   'POST /api/youtube/disconnect': async (req, env, ctx, url, user) => { await disconnect(env, 'yt_connections', user.email); return json({ ok: true }); },
@@ -179,7 +182,7 @@ function parseChannelInput(input) {
 async function resolveChannel(input, key) {
   const p = parseChannelInput(input);
   if (!p) fail(`Can't read "${input}". Use a channel URL, @handle, or any video URL from the channel.`);
-  const part = 'snippet,statistics,contentDetails';
+  const part = 'snippet,statistics,contentDetails,brandingSettings';
   let res;
   if (p.id) res = await yt('channels', { part, id: p.id }, key);
   else if (p.handle) res = await yt('channels', { part, forHandle: '@' + p.handle }, key);
@@ -209,7 +212,30 @@ async function resolveChannel(input, key) {
     totalViews: +it.statistics.viewCount || 0,
     videoCount: +it.statistics.videoCount || 0,
     uploads: it.contentDetails.relatedPlaylists.uploads,
+    // Channel setup signals (same 1-unit call)
+    description: it.snippet.description || '',
+    keywords: it.brandingSettings?.channel?.keywords || '',
+    hasTrailer: !!it.brandingSettings?.channel?.unsubscribedTrailer,
+    publishedAt: it.snippet.publishedAt || '',
   };
+}
+
+// Playlists: how much of the channel is organised into playlists (keeps
+// viewers watching the next video). 1 unit per 50 playlists; first 100.
+async function playlistStats(channelId, key) {
+  let count = 0, items = 0, big = 0, token = '';
+  for (let i = 0; i < 2; i++) {
+    const params = { part: 'contentDetails', channelId, maxResults: '50' };
+    if (token) params.pageToken = token;
+    const d = await yt('playlists', params, key);
+    for (const p of d.items || []) {
+      const n = +p.contentDetails?.itemCount || 0;
+      count++; items += n; if (n >= 5) big++;
+    }
+    token = d.nextPageToken;
+    if (!token) break;
+  }
+  return { count, items, big };
 }
 
 async function ytAuth(req, env, user) {
@@ -223,6 +249,40 @@ async function ytAuth(req, env, user) {
 // Run YouTube work and always record the units it spent, even if it failed.
 async function metered(env, key, fn) {
   try { return await fn(); } finally { await addUsage(env, 'yt_units', key.units).catch(() => {}); }
+}
+
+// Top comments of a video (1 unit). Used for "what viewers ask" insights.
+async function comments(req, env, ctx, url, user) {
+  const id = url.searchParams.get('video') || '';
+  if (!/^[\w-]{11}$/.test(id)) fail('Bad video id.');
+  const cacheKey = 'cm:' + id;
+  const hit = await cacheGet(env, cacheKey);
+  if (hit) return json({ ...hit, cached: true });
+  await ensureBudget(env, 'yt_units', 1);
+  const key = await ytAuth(req, env, user);
+  let out;
+  try {
+    const d = await metered(env, key, () => yt('commentThreads', { part: 'snippet', videoId: id, maxResults: '100', order: 'relevance', textFormat: 'plainText' }, key));
+    out = { video: id, comments: (d.items || []).map((it) => {
+      const c = it.snippet.topLevelComment.snippet;
+      return { text: String(c.textDisplay || '').slice(0, 500), likes: +c.likeCount || 0, replies: +it.snippet.totalReplyCount || 0 };
+    }) };
+  } catch (e) {
+    if (/disabled comments|commentsDisabled|403/i.test(e.message)) out = { video: id, comments: [], disabled: true };
+    else throw e;
+  }
+  await cachePut(env, cacheKey, out, 3 * 864e5);
+  return json(out);
+}
+
+// Same-origin copy of a YouTube thumbnail so the browser can measure its
+// pixels (brightness, contrast, colour). No API quota involved.
+async function thumbProxy(req, env, ctx, url) {
+  const id = url.searchParams.get('id') || '';
+  if (!/^[\w-]{11}$/.test(id)) fail('Bad video id.');
+  const r = await fetch(`https://i.ytimg.com/vi/${id}/mqdefault.jpg`, { cf: { cacheTtl: 86400, cacheEverything: true } });
+  if (!r.ok) fail('Thumbnail not found', 404);
+  return new Response(r.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' } });
 }
 
 // Cheap "anything new?" check: current video counts for up to 50 channels (1 unit).
@@ -311,10 +371,11 @@ async function getChannel(req, env, ctx, url, user) {
   if (hit && url.searchParams.get('fresh') !== '1') return json({ ...hit, cached: true, unitsUsed: 0 });
 
   // Cost: ~1–2 to resolve + 1 per 50 video IDs + 1 per 50 video details.
-  await ensureBudget(env, 'yt_units', 2 + 2 * Math.ceil(want / 50));
+  await ensureBudget(env, 'yt_units', 4 + 2 * Math.ceil(want / 50));
   const key = await ytAuth(req, env, user);
   return metered(env, key, async () => {
     const channel = await resolveChannel(q, key);
+    if (!page) channel.playlists = await playlistStats(channel.id, key).catch(() => null);
     const ids = [];
     let token = page;
     do {
@@ -475,6 +536,21 @@ async function aiThumbnail(req, env) {
   return json({ ...(await askJson(req, env, p, prompt, { image: { bytes, mime: img.headers.get('content-type') || 'image/jpeg' }, temperature: 0.1 })), provider: p });
 }
 
+async function aiComments(req, env) {
+  const { title = '', comments: list = [], provider } = await req.json();
+  const text = list.slice(0, 80).map((c, i) => `${i + 1}. (${c.likes} likes) ${String(c.text).slice(0, 300)}`).join('\n');
+  const prompt = `These are top viewer comments on the YouTube video "${title}". Summarise what viewers want. Return JSON only with keys:
+"themes": array of up to 5 short themes viewers talk about,
+"questions": array of up to 5 real questions viewers ask (rephrased clearly),
+"requests": array of up to 3 things viewers ask the creator to make next,
+"sentiment": one of "Very positive", "Positive", "Mixed", "Negative",
+"video_ideas": array of 3 new video titles that answer these needs.
+Comments:
+${text}`;
+  const p = pickProvider(req, env, provider);
+  return json({ ...(await askJson(req, env, p, prompt, { temperature: 0.3 })), provider: p });
+}
+
 // Thumbnail concept image from an open-source model (FLUX.1 schnell, Apache-2.0),
 // so generated images can be used freely.
 async function aiImage(req, env) {
@@ -549,13 +625,15 @@ async function myAnalytics(req, env, ctx, url, user) {
     const cols = (d.columnHeaders || []).map((c) => c.name);
     return (d.rows || []).map((row) => Object.fromEntries(row.map((v, i) => [cols[i], v])));
   };
-  const [totals, daily, videos, traffic, searchTerms, countries] = await Promise.all([
+  const [totals, daily, videos, traffic, searchTerms, countries, demographics, devices] = await Promise.all([
     q({ metrics: 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost,likes,comments,shares' }),
     q({ dimensions: 'day', metrics: 'views,estimatedMinutesWatched,subscribersGained', sort: 'day' }),
-    q({ dimensions: 'video', metrics: 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained', sort: '-views', maxResults: '200' }),
+    q({ dimensions: 'video', metrics: 'views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,shares', sort: '-views', maxResults: '200' }),
     q({ dimensions: 'insightTrafficSourceType', metrics: 'views,estimatedMinutesWatched', sort: '-views' }),
     q({ dimensions: 'insightTrafficSourceDetail', filters: 'insightTrafficSourceType==YT_SEARCH', metrics: 'views', sort: '-views', maxResults: '25' }),
     q({ dimensions: 'country', metrics: 'views,estimatedMinutesWatched', sort: '-views', maxResults: '15' }),
+    q({ dimensions: 'ageGroup,gender', metrics: 'viewerPercentage', sort: 'gender,ageGroup' }).catch(() => []),
+    q({ dimensions: 'deviceType', metrics: 'views,estimatedMinutesWatched', sort: '-views' }).catch(() => []),
   ]);
-  return json({ range: { start: base.startDate, end: base.endDate, days }, totals: totals[0] || {}, daily, videos, traffic, searchTerms, countries });
+  return json({ range: { start: base.startDate, end: base.endDate, days }, totals: totals[0] || {}, daily, videos, traffic, searchTerms, countries, demographics, devices });
 }

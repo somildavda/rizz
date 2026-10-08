@@ -1,4 +1,4 @@
-import { normalizeVideo, buildReports, buildStory, fmtNum, keywords } from './analysis.js';
+import { normalizeVideo, buildReports, buildStory, healthReport, channelHealth, fmtNum, keywords } from './analysis.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_COMPS = 10;
@@ -356,6 +356,7 @@ function showAudit(payload, meta = {}) {
   const videos = payload.raw.flatMap((r) => r.videos.map((v) => normalizeVideo(v, r.channel, at)));
   state = { ...state, cfg: payload.cfg, payload, channels, videos, reports: buildReports(channels, videos, at), active: 'dashboard', ai: payload.ai || {} };
   if (payload.owner) state.reports.splice(1, 0, ownerReport(payload.owner, videos));
+  addHealthAndExtras(payload, channels, videos);
   state.story = buildStory(channels, videos);
   state.reports.unshift({ id: 'story', title: "🏆 Who's winning", story: state.story, kpis: state.reports.find((r) => r.id === 'dashboard').kpis });
   state.active = 'story';
@@ -372,6 +373,40 @@ function showAudit(payload, meta = {}) {
   render();
   if (location.hash !== '#/audit') location.hash = '#/audit';
   else route();
+}
+
+// Health score (+ thumbnail and comment extras), recomputed whenever new
+// measurements are added to the audit.
+function addHealthAndExtras(payload, channels, videos) {
+  const extras = {};
+  for (const c of channels) {
+    extras[c.id] = { thumbs: payload.thumbStats?.[c.id] };
+    if (c.type === 'Own' && payload.owner?.totals?.averageViewPercentage != null) extras[c.id].avgViewPercentage = payload.owner.totals.averageViewPercentage;
+    c._health = channelHealth(c, videos.filter((v) => v.channelId === c.id), extras[c.id]).score;
+  }
+  const dash = state.reports.find((r) => r.id === 'dashboard');
+  const own = channels.find((c) => c.type === 'Own');
+  if (own && dash && !dash.kpis.some((k) => k[0] === 'Health score')) dash.kpis.unshift(['Health score', own._health + '/100', 'Overall channel health. Click to see what it adds up']);
+  const hr = healthReport(channels, videos, extras);
+  const at = state.reports.findIndex((r) => r.id === 'dashboard');
+  state.reports.splice(at + 1, 0, hr);
+  state.reports.push({ id: 'comments', title: '💬 Comments', comments: true, sections: [] });
+}
+function rebuild(keepTab = true) {
+  const tab = state.active;
+  const at = state.payload.savedAt || Date.now();
+  const p = state.payload;
+  const channels = p.raw.map((r) => r.channel);
+  const videos = p.raw.flatMap((r) => r.videos.map((v) => normalizeVideo(v, r.channel, at)));
+  state.channels = channels;
+  state.videos = videos;
+  state.reports = buildReports(channels, videos, at);
+  if (p.owner) state.reports.splice(1, 0, ownerReport(p.owner, videos));
+  addHealthAndExtras(p, channels, videos);
+  state.story = buildStory(channels, videos);
+  state.reports.unshift({ id: 'story', title: "🏆 Who's winning", story: state.story, kpis: state.reports.find((r) => r.id === 'dashboard').kpis });
+  if (keepTab) state.active = tab;
+  render();
 }
 
 // Two pages: #/ (set up, limits, saved audits) and #/audit (results).
@@ -512,15 +547,21 @@ function ownerReport(a, videos) {
       ['Search share', ((a.traffic.find((r) => r.insightTrafficSourceType === 'YT_SEARCH')?.views || 0) / totalTrafficViews * 100).toFixed(1) + '%', 'Share of views from YouTube search'],
     ],
     sections: [
-      { title: `Per-video retention & watch time (${a.range.start} → ${a.range.end})`, columns: [C('Title'), C('URL', 'url'), C('Views', 'num'), C('Watch hours', 'num'), C('Avg duration'), C('Avg % viewed', 'num'), C('Subs gained', 'num'), C('Retention', 'status')],
+      { title: `Per-video retention & watch time (${a.range.start} → ${a.range.end})`, columns: [C('Title'), C('URL', 'url'), C('Views', 'num'), C('Watch hours', 'num'), C('Avg duration'), C('Avg % viewed', 'num'), C('Subs gained', 'num'), C('Shares', 'num'), C('Retention', 'status')],
         rows: a.videos.map((r) => { const v = byId.get(r.video); const p = r.averageViewPercentage;
-          return [v?.title || r.video, 'https://youtu.be/' + r.video, r.views, Math.round(r.estimatedMinutesWatched / 60), fmtDur(r.averageViewDuration), Math.round(p * 10) / 10, r.subscribersGained, p >= 50 ? 'Strong' : p >= 30 ? 'Average' : 'Weak']; }),
+          return [v?.title || r.video, 'https://youtu.be/' + r.video, r.views, Math.round(r.estimatedMinutesWatched / 60), fmtDur(r.averageViewDuration), Math.round(p * 10) / 10, r.subscribersGained, r.shares ?? 0, p >= 50 ? 'Strong' : p >= 30 ? 'Average' : 'Weak']; }),
         note: 'Retention: Strong ≥ 50% viewed, Average 30–49%, Weak < 30% (Shorts usually run higher). Impressions and click-through rate are only in YouTube Studio; Google does not expose them in the Analytics API.' },
       { title: 'Traffic sources', columns: [C('Source'), C('Views', 'num'), C('Share', 'pct'), C('Watch hours', 'num')],
         rows: a.traffic.map((r) => [TRAFFIC[r.insightTrafficSourceType] || r.insightTrafficSourceType, r.views, r.views / totalTrafficViews, Math.round(r.estimatedMinutesWatched / 60)]) },
       { title: 'Top YouTube search terms bringing viewers', columns: [C('Search term'), C('Views', 'num')],
         rows: a.searchTerms.map((r) => [r.insightTrafficSourceDetail, r.views]), note: 'Real queries people typed on YouTube before watching. Use them in titles, descriptions and new videos.' },
       { title: 'Top countries', columns: [C('Country'), C('Views', 'num'), C('Watch hours', 'num')], rows: a.countries.map((r) => [r.country, r.views, Math.round(r.estimatedMinutesWatched / 60)]) },
+      ...(a.demographics?.length ? [{ title: 'Audience age & gender', columns: [C('Age group'), C('Gender'), C('Share of viewers', 'pct')],
+        rows: a.demographics.map((r) => [String(r.ageGroup).replace('age', '').replace('-', '–'), r.gender, r.viewerPercentage / 100]).sort((x, y) => y[2] - x[2]),
+        note: 'Signed-in viewers only; YouTube hides groups that are too small.' }] : []),
+      ...(a.devices?.length ? [{ title: 'Devices', columns: [C('Device'), C('Views', 'num'), C('Watch hours', 'num')],
+        rows: a.devices.map((r) => [String(r.deviceType).toLowerCase().replace(/_/g, ' '), r.views, Math.round(r.estimatedMinutesWatched / 60)]),
+        note: 'If most views are on mobile, check thumbnails and text at phone size.' }] : []),
       { title: 'Daily trend', columns: [C('Day', 'date'), C('Views', 'num'), C('Watch hours', 'num'), C('Subs gained', 'num')], rows: a.daily.map((r) => [r.day, r.views, Math.round(r.estimatedMinutesWatched / 60), r.subscribersGained]) },
     ],
   };
@@ -563,12 +604,15 @@ function render() {
   if (state.active === 'ai') return renderAi(panel);
   const rep = state.reports.find((r) => r.id === state.active);
   if (rep.story) return renderStory(panel, rep.story);
-  if (rep.gallery) panel.appendChild(renderGallery(rep.sections[0]));
+  if (rep.comments) return renderComments(panel);
+  if (rep.health) panel.appendChild(renderHealthCards(rep.health));
+  if (rep.gallery) { panel.appendChild(renderThumbLab()); panel.appendChild(renderGallery(rep.sections[0])); return; }
   else rep.sections.forEach((s) => panel.appendChild(renderSection(s)));
 }
 
 // Score cards → the plain-language metric they belong to.
 const KPI_METRIC = {
+  'Health score': 'health',
   'Subscribers': 'subs', 'Videos analysed': 'uploads', 'Long form': 'shorts', 'Shorts': 'shorts',
   'Views (analysed)': 'avgViews', 'Avg views / video': 'avgViews', 'Engagement rate': 'engagement',
   'Avg SEO score': 'seo', 'Avg CTA score': 'cta', 'Avg performance': 'momentum',
@@ -609,6 +653,131 @@ function explain(key) {
     ${tabName ? `<div class="actions"><button class="btn primary" id="goTab">See the details: ${esc(tabName)} →</button></div>` : ''}`;
   $('explain').showModal();
   $('goTab')?.addEventListener('click', () => { $('explain').close(); state.active = it.tab; render(); });
+}
+
+// ── Health score cards ───────────────────────────────────────
+function renderHealthCards(rows) {
+  const el = document.createElement('div');
+  el.className = 'section';
+  const sorted = [...rows].sort((a, b) => b.h.score - a.h.score);
+  el.innerHTML = `<div class="story-grid">${sorted.map(({ c, h }) => `
+    <div class="card story ${c.type === 'Own' ? 'you' : ''}"><div class="top"><span class="title">${c.type === 'Own' ? '⭐ ' : ''}${esc(c.title)}</span><span class="ai-score">${h.score}<span class="muted small">/100</span></span></div>
+    <div class="why">${Object.entries(h.parts).filter(([, v]) => v != null).map(([k, v]) => `<div class="why-row" title="${esc(h.why[k])}"><span>${esc(HEALTH_LABEL[k])}</span><div class="bar"><i style="width:${v}%"></i></div><span class="pts">${v}</span></div>`).join('')}</div>
+    <div class="tip" style="margin-top:8px">👉 Weakest: <b>${esc(HEALTH_LABEL[Object.entries(h.parts).filter(([, v]) => v != null).sort((a, b) => a[1] - b[1])[0]?.[0]] || '—')}</b>. Hover a bar to see why.</div></div>`).join('')}</div>`;
+  return el;
+}
+const HEALTH_LABEL = { metadata: 'Titles & descriptions', thumbs: 'Thumbnails', focus: 'Topic focus', consistency: 'Upload rhythm', setup: 'Channel setup', discover: 'Discoverability', engagement: 'Engagement', cta: 'Calls to action', retention: 'Retention' };
+
+// ── Thumbnail lab: exact pixel measurements in the browser ───
+function measureImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 160; c.height = 90;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 160, 90);
+      const d = g.getImageData(0, 0, 160, 90).data;
+      let n = 0, sumL = 0, sumL2 = 0, rg = [], yb = [];
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], gr = d[i + 1], b = d[i + 2];
+        const l = 0.2126 * r + 0.7152 * gr + 0.0722 * b;
+        sumL += l; sumL2 += l * l; n++;
+        rg.push(r - gr); yb.push(0.5 * (r + gr) - b);
+      }
+      const mean = sumL / n, sd = Math.sqrt(sumL2 / n - mean * mean);
+      const m = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+      const s2 = (a, mu) => Math.sqrt(a.reduce((x, y) => x + (y - mu) ** 2, 0) / a.length);
+      const mrg = m(rg), myb = m(yb);
+      // Hasler & Süsstrunk colourfulness
+      const colorful = Math.sqrt(s2(rg, mrg) ** 2 + s2(yb, myb) ** 2) + 0.3 * Math.sqrt(mrg ** 2 + myb ** 2);
+      resolve({ brightness: mean / 2.55, contrast: sd, colorful });
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+function renderThumbLab() {
+  const el = document.createElement('div');
+  el.className = 'section';
+  const ts = state.payload.thumbStats;
+  el.innerHTML = `<div class="section-head"><h3>📐 Thumbnail lab</h3><div class="actions" style="margin:0"><button class="btn primary small" id="measureBtn">${ts ? 'Measure again' : 'Measure thumbnails'}</button><span class="muted small" id="measureNote"></span></div></div>
+    <p class="note">Measures the latest 40 thumbnails per channel exactly, pixel by pixel (no AI guessing, no quota): <b>brightness</b> (0–100), <b>contrast</b> (higher = pops more, 50+ is strong) and <b>colourfulness</b> (higher = more vivid, 60+ is strong).</p>
+    ${ts ? `<div class="table-wrap"><table><thead><tr><th>Channel</th><th class="num">Measured</th><th class="num">Brightness</th><th class="num">Contrast</th><th class="num">Colourfulness</th><th>Verdict</th></tr></thead><tbody>${state.channels.map((c) => {
+      const t = ts[c.id]; if (!t) return '';
+      const verdict = t.contrast >= 50 && t.colorful >= 60 ? '<span class="pill good">Pops on screen</span>' : t.contrast < 40 ? '<span class="pill bad">Flat: add contrast</span>' : t.colorful < 45 ? '<span class="pill warn">Dull: use brighter colours</span>' : '<span class="pill warn">OK</span>';
+      return `<tr><td>${c.type === 'Own' ? '⭐ ' : ''}${esc(c.title)}</td><td class="num">${t.n}</td><td class="num">${Math.round(t.brightness)}</td><td class="num">${Math.round(t.contrast)}</td><td class="num">${Math.round(t.colorful)}</td><td>${verdict}</td></tr>`;
+    }).join('')}</tbody></table></div>` : ''}`;
+  el.querySelector('#measureBtn').onclick = async (e) => {
+    e.target.disabled = true;
+    const out = {};
+    for (const c of state.channels) {
+      const vids = state.videos.filter((v) => v.channelId === c.id).sort((a, b) => b.ts - a.ts).slice(0, 40);
+      const res = [];
+      for (const [i, v] of vids.entries()) {
+        el.querySelector('#measureNote').textContent = `${c.title}: ${i + 1} / ${vids.length}`;
+        const r = await measureImage('/api/thumb?id=' + v.id);
+        if (r) { res.push(r); state.payload.thumbPerVideo = state.payload.thumbPerVideo || {}; state.payload.thumbPerVideo[v.id] = r; }
+      }
+      if (res.length) out[c.id] = { n: res.length, brightness: res.reduce((a, r) => a + r.brightness, 0) / res.length, contrast: res.reduce((a, r) => a + r.contrast, 0) / res.length, colorful: res.reduce((a, r) => a + r.colorful, 0) / res.length };
+    }
+    state.payload.thumbStats = out;
+    rebuild();
+    saveCurrent().catch(() => {});
+  };
+  return el;
+}
+
+// ── Comment insights ─────────────────────────────────────────
+const QUESTION = /\?|^(how|what|why|when|where|which|who|can|could|should|is|are|do|does|will|kya|kaise|kyu|kab)\b/i;
+function renderComments(panel) {
+  const cd = state.payload.comments || {};
+  const own = state.videos.filter((v) => v.channelType === 'Own').sort((a, b) => b.views - a.views).slice(0, 5);
+  const comp = state.videos.filter((v) => v.channelType === 'Competitor').sort((a, b) => b.views - a.views).slice(0, 5);
+  const picks = [...own, ...comp];
+  const el = document.createElement('div');
+  el.className = 'section';
+  el.innerHTML = `<div class="section-head"><h3>💬 What viewers say</h3><div class="actions" style="margin:0"><button class="btn primary small" id="loadComments">${Object.keys(cd).length ? 'Reload comments' : 'Read comments'}</button><span class="muted small" id="cmNote">Reads the top 100 comments on your 5 and competitors' 5 most-viewed videos (1 unit each).</span></div></div>
+    <div id="cmList">${picks.map((v) => {
+      const c = cd[v.id];
+      if (!c) return '';
+      const qs = c.comments.filter((x) => QUESTION.test(x.text.trim())).sort((a, b) => b.likes - a.likes).slice(0, 6);
+      const freq = new Map();
+      for (const x of c.comments) for (const w of keywords(x.text)) freq.set(w, (freq.get(w) || 0) + 1);
+      const words = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const ai = c.ai;
+      return `<div class="ai-card" data-id="${esc(v.id)}"><div class="section-head" style="margin:0"><div><b>${v.channelType === 'Own' ? '⭐ ' : ''}${esc(v.title)}</b><div class="muted small">${esc(v.channel)} · ${fmtNum(v.views)} views · ${c.disabled ? 'comments are turned off' : c.comments.length + ' comments read'}</div></div>
+        ${c.comments.length ? `<button class="btn small" data-act="ai">🤖 Summarise with AI</button>` : ''}</div>
+        ${c.comments.length ? `<div class="ai-cols"><div class="ai-box"><b>Questions viewers ask</b>${qs.length ? `<ul>${qs.map((q) => `<li>${esc(q.text.slice(0, 180))} <span class="muted small">(${q.likes} 👍)</span></li>`).join('')}</ul>` : '<div class="muted small">No clear questions.</div>'}</div>
+        <div class="ai-box"><b>Most-used words</b><div style="margin-top:6px">${words.map(([w, n]) => `<span class="pill" style="margin:2px">${esc(w)} ${n}</span>`).join('')}</div></div></div>` : ''}
+        ${ai ? `<div class="ai-cols"><div class="ai-box"><b>Themes</b><ul>${(ai.themes || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul><b>Mood:</b> ${esc(ai.sentiment || '')}</div>
+          <div class="ai-box"><b>Viewers want next</b><ul>${(ai.requests || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul><b>Video ideas</b><ul>${(ai.video_ideas || []).map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div></div>` : ''}</div>`;
+    }).join('') || '<div class="empty">Click "Read comments" to see what viewers ask and want.</div>'}</div>`;
+  el.querySelector('#loadComments').onclick = async (e) => {
+    e.target.disabled = true;
+    state.payload.comments = state.payload.comments || {};
+    for (const [i, v] of picks.entries()) {
+      el.querySelector('#cmNote').textContent = `Reading ${i + 1} / ${picks.length}…`;
+      try { state.payload.comments[v.id] = { ...(await apiReq('GET', '/api/comments?video=' + v.id)), ai: state.payload.comments[v.id]?.ai }; }
+      catch (err) { el.querySelector('#cmNote').textContent = err.message; if (/limit/i.test(err.message)) break; }
+    }
+    render();
+    loadUsage();
+    saveCurrent().catch(() => {});
+  };
+  el.querySelector('#cmList').onclick = async (e) => {
+    const b = e.target.closest('button[data-act="ai"]');
+    if (!b) return;
+    const id = b.closest('[data-id]').dataset.id;
+    const v = state.videos.find((x) => x.id === id);
+    b.disabled = true; b.textContent = 'Summarising…';
+    try {
+      state.payload.comments[id].ai = await apiReq('POST', '/api/ai/comments', { title: v.title, comments: state.payload.comments[id].comments, provider: store.get('provider', 'open') });
+      render();
+      saveCurrent().catch(() => {});
+    } catch (err) { b.textContent = err.message; }
+  };
+  panel.appendChild(el);
 }
 
 function renderSection(sec) {

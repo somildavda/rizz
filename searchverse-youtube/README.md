@@ -67,6 +67,13 @@ See **[GO-LIVE-GUIDE.md](GO-LIVE-GUIDE.md)**: `wrangler login` → `d1 create` �
 - All of this is stored in D1 (`schema.sql`). Tokens are encrypted with `APP_SECRET`. While the Google app is in Testing mode, connections need a 10-second Reconnect every 7 days.
 - Local testing without Google: put `OPEN_ACCESS=1` in `.dev.vars`.
 
+## Health score, thumbnail lab, comments
+- **Health Score (0–100)** per channel: titles & descriptions 18, thumbnails 15, topic focus 12, upload rhythm 10, channel setup 8, discoverability 7, engagement 5, CTAs 5, retention 25 (owner only). Parts that can't be measured are left out, never guessed. Weights and ideas adapted from [deeployCO/youtube-seo-skills](https://github.com/deeployCO/youtube-seo-skills) (MIT).
+- **Thumbnail lab**: exact brightness, contrast and colourfulness (Hasler–Süsstrunk) of the latest 40 thumbnails per channel, measured in the browser; no quota.
+- **Comments**: top 100 comments on the 5 most-viewed own and competitor videos (1 unit each), with the questions viewers ask, frequent words, and an optional AI summary of themes, requests and video ideas.
+- **Owner analytics** now also show age and gender, devices, and shares per video.
+- **Chapters** follow YouTube's rule: at least 3 timestamps, the first at 0:00.
+
 ## Limits, cache and storage
 - Every YouTube call is counted (search = 100 units, everything else = 1) in `usage_daily`, keyed to the Pacific day. Requests are refused before they would cross `YT_DAILY_LIMIT` (default 9,500 of Google's 10,000). AI calls have per-feature daily caps.
 - Channel fetches are cached in D1 for 24h and competitor suggestions for 7 days (gzip, shared by the whole team), so repeats cost 0 units.

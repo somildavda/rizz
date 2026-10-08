@@ -205,6 +205,11 @@ export function similarity(a, b) {
   return inter / (a.size + b.size - inter);
 }
 
+export function hasChapters(desc) {
+  const stamps = [...String(desc).matchAll(/(?:^|\n)\s*[\[(]?((?:\d{1,2}:)?\d{1,2}:\d{2})/g)].map((m) => m[1]);
+  return stamps.length >= 3 && /^0?0:00$|^0:00:00$/.test(stamps[0]);
+}
+
 // ── Normalisation ────────────────────────────────────────────
 // `v` is a YouTube API videos.list item, `ch` a channels.list summary.
 export function normalizeVideo(v, ch, now = Date.now()) {
@@ -268,7 +273,8 @@ export function normalizeVideo(v, ch, now = Date.now()) {
     perfScore: perf,
     perfTier: performanceTier(perf),
     cta,
-    hasChapters: /(^|\n)\s*\(?\d{1,2}:\d{2}/.test(descRaw),
+    // YouTube's rule: at least 3 timestamps, the first one at 0:00.
+    hasChapters: hasChapters(descRaw),
     titleLen: title.length,
     descLen: desc.length,
     hashCount: hashtags.length,
@@ -664,6 +670,27 @@ export const STORY_METRICS = [
     tip: 'Cut 2–3 Shorts from every long video and link back to it.',
   },
   {
+    key: 'health', icon: '🩺', title: 'Overall channel health', tab: 'health', channelValue: (c) => c._health ?? 0,
+    value: () => 0, show: (v) => Math.round(v) + '/100',
+    what: 'One score that adds up titles, thumbnails, topic focus, upload rhythm, setup, chapters, engagement and calls to action.',
+    why: 'It shows at a glance which channel is set up best to be recommended by YouTube.',
+    tip: 'Open the Health Score tab and fix your lowest part first; that\'s the cheapest win.',
+  },
+  {
+    key: 'focus', icon: '🎯', title: 'Topic focus', tab: 'health',
+    value: (rows) => topicFocus(rows).score ?? 0, show: (v) => Math.round(v) + '/100',
+    what: 'How many videos stick to the channel\'s main topics.',
+    why: 'YouTube recommends channels it can clearly label. A focused channel gets shown to the right people.',
+    tip: 'Pick 3–5 core topics and make most videos about them.',
+  },
+  {
+    key: 'rhythm', icon: '⏱️', title: 'Upload rhythm', tab: 'publishing',
+    value: (rows) => uploadConsistency(rows).score ?? 0, show: (v) => Math.round(v) + '/100',
+    what: 'How steady the gaps between uploads are.',
+    why: 'Viewers and YouTube both like knowing when the next video comes.',
+    tip: 'Choose fixed upload days (e.g. every Tuesday and Friday) and schedule videos in advance.',
+  },
+  {
     key: 'subs', icon: '👥', title: 'Subscribers', tab: 'dashboard', channelValue: (c) => c.subscribers,
     value: () => 0, show: (v) => fmtNum(v),
     what: 'How many people follow the channel.',
@@ -707,4 +734,99 @@ export function buildStory(channels, videos) {
     : youWin === theyWin ? `🤝 It's close: you win ${youWin}, competitors win ${theyWin}.`
     : `📈 Competitors are ahead in ${theyWin} of ${youWin + theyWin} contests. Here's how to catch up.`;
   return { headline, youWin, theyWin, items };
+}
+
+// ── Channel health (ideas adapted from deeployCO/youtube-seo-skills, MIT) ──
+// Every part is 0–100 with a plain-language reason; the total is a weighted
+// average of the parts we can measure (missing data is left out, not guessed).
+export const HEALTH_PARTS = [
+  { key: 'metadata', label: 'Titles & descriptions', weight: 18, what: 'Average SEO score of titles, descriptions and hashtags.' },
+  { key: 'thumbs', label: 'Thumbnails', weight: 15, what: 'Custom HD thumbnails, plus contrast and colour when measured.' },
+  { key: 'focus', label: 'Topic focus', weight: 12, what: 'How many videos stick to the channel\'s main topics. Focused channels get recommended more.' },
+  { key: 'consistency', label: 'Upload rhythm', weight: 10, what: 'How regular the gaps between uploads are (steady beats random bursts).' },
+  { key: 'setup', label: 'Channel setup', weight: 8, what: 'Channel description, keywords, trailer and playlists.' },
+  { key: 'discover', label: 'Discoverability', weight: 7, what: 'Chapters on long videos and good hashtags.' },
+  { key: 'engagement', label: 'Engagement', weight: 5, what: 'Likes + comments per view (5%+ gets full marks).' },
+  { key: 'cta', label: 'Calls to action', weight: 5, what: 'Clear asks (subscribe, link, buy) near the top of descriptions.' },
+  { key: 'retention', label: 'Retention', weight: 25, what: 'Average % of each video watched (only with Connect YouTube; 60%+ = full marks).' },
+];
+const clamp = (x) => Math.max(0, Math.min(100, Math.round(x)));
+
+export function topicFocus(rows) {
+  if (rows.length < 5) return { score: null, topics: [] };
+  const freq = new Map();
+  const kws = rows.map((r) => keywords(r.title));
+  for (const k of kws) for (const w of k) freq.set(w, (freq.get(w) || 0) + 1);
+  const top = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
+  const covered = kws.filter((k) => top.some((w) => k.has(w))).length / rows.length;
+  return { score: clamp(covered * 110), topics: top, covered };
+}
+
+export function uploadConsistency(rows) {
+  const ts = rows.map((r) => r.ts).sort((a, b) => a - b).slice(-60);
+  if (ts.length < 4) return { score: null };
+  const gaps = ts.slice(1).map((t, i) => (t - ts[i]) / 864e5);
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const sd = Math.sqrt(gaps.reduce((a, g) => a + (g - mean) ** 2, 0) / gaps.length);
+  const cv = mean ? sd / mean : 0;
+  return { score: clamp(100 - cv * 45), meanGap: mean, sdGap: sd, cv };
+}
+
+export function channelHealth(ch, rows, extra = {}) {
+  const parts = {};
+  const why = {};
+  parts.metadata = rows.length ? clamp(avg(rows, 'seoScore')) : null;
+  why.metadata = `Average SEO score ${parts.metadata}/100`;
+  const hd = rows.length ? rows.filter((r) => r.hasMaxresThumb).length / rows.length : 0;
+  const t = extra.thumbs;
+  parts.thumbs = rows.length ? clamp(t ? hd * 50 + Math.min(25, (t.contrast / 60) * 25) + Math.min(25, (t.colorful / 60) * 25) : hd * 100) : null;
+  why.thumbs = `${Math.round(hd * 100)}% have HD custom thumbnails` + (t ? `, contrast ${Math.round(t.contrast)}, colourfulness ${Math.round(t.colorful)}` : ' (run "Measure thumbnails" for colour & contrast)');
+  const f = topicFocus(rows);
+  parts.focus = f.score;
+  why.focus = f.score == null ? 'Not enough videos' : `${Math.round(f.covered * 100)}% of videos are about: ${f.topics.join(', ')}`;
+  const c = uploadConsistency(rows);
+  parts.consistency = c.score;
+  why.consistency = c.score == null ? 'Not enough uploads' : `About every ${Math.round(c.meanGap)} days, usually ±${Math.round(c.sdGap)} days`;
+  if (ch.description != null && ch.keywords != null && ch.playlists !== undefined) {
+    const pl = ch.playlists;
+    const plCover = pl && ch.videoCount ? Math.min(1, pl.items / ch.videoCount) : 0;
+    parts.setup = clamp((ch.description.length >= 150 ? 25 : ch.description.length >= 50 ? 12 : 0) + (ch.keywords ? 15 : 0) + (ch.hasTrailer ? 20 : 0) + plCover * 25 + (pl && pl.big >= 3 ? 15 : pl && pl.big ? 8 : 0));
+    why.setup = [`description ${ch.description.length} chars`, ch.keywords ? 'has keywords' : 'no channel keywords', ch.hasTrailer ? 'has trailer' : 'no trailer', pl ? `${pl.count} playlists (${Math.round(plCover * 100)}% coverage)` : 'playlists unknown'].join(' · ');
+  } else { parts.setup = null; why.setup = 'Re-run the audit to check channel setup'; }
+  const long = rows.filter((r) => r.type === 'Long Form' && r.durationSec > 240);
+  const chap = long.length ? long.filter((r) => r.hasChapters).length / long.length : null;
+  const tags = rows.length ? rows.filter((r) => hashtagStatus(r.hashCount) === 'Strong').length / rows.length : 0;
+  parts.discover = rows.length ? clamp((chap == null ? tags : (chap + tags) / 2) * 100) : null;
+  why.discover = `${chap == null ? 'no long videos' : Math.round(chap * 100) + '% of long videos have chapters'} · ${Math.round(tags * 100)}% use 2–8 hashtags`;
+  const e = er(rows);
+  parts.engagement = rows.length ? clamp((e / 0.05) * 100) : null;
+  why.engagement = `${(e * 100).toFixed(2)}% likes+comments per view`;
+  parts.cta = rows.length ? clamp(avg(rows.map((r) => ({ s: r.cta.score })), 's')) : null;
+  why.cta = `Average CTA score ${parts.cta}/100`;
+  parts.retention = extra.avgViewPercentage != null ? clamp((extra.avgViewPercentage / 60) * 100) : null;
+  why.retention = parts.retention == null ? 'Needs Connect YouTube (owner only)' : `${extra.avgViewPercentage.toFixed(1)}% of each video watched on average`;
+  let wsum = 0, total = 0;
+  for (const p of HEALTH_PARTS) if (parts[p.key] != null) { wsum += p.weight; total += parts[p.key] * p.weight; }
+  return { score: wsum ? Math.round(total / wsum) : 0, parts, why, measuredWeight: wsum };
+}
+
+export function healthReport(channels, videos, extras = {}) {
+  const rows = channels.map((c) => ({ c, h: channelHealth(c, videos.filter((v) => v.channelId === c.id), extras[c.id] || {}) }));
+  const C = (l, f = 'text') => [l, f];
+  return {
+    id: 'health', title: 'Health Score', health: rows,
+    sections: [
+      {
+        title: 'Channel Health Score (0–100)',
+        columns: [C('Channel'), C('Type'), C('Health', 'num'), ...HEALTH_PARTS.map((p) => C(p.label, 'num'))],
+        rows: rows.map(({ c, h }) => [c.title, c.type, h.score, ...HEALTH_PARTS.map((p) => (h.parts[p.key] == null ? '—' : h.parts[p.key]))]).sort((a, b) => b[2] - a[2]),
+        note: 'Weights: ' + HEALTH_PARTS.map((p) => `${p.label} ${p.weight}%`).join(' · ') + '. Parts shown as — are not measured and are left out of the total (never guessed).',
+      },
+      {
+        title: 'Why each channel scored that way',
+        columns: [C('Channel'), C('Part'), C('Score', 'num'), C('Reason'), C('What it measures')],
+        rows: rows.flatMap(({ c, h }) => HEALTH_PARTS.map((p) => [c.title, p.label, h.parts[p.key] == null ? '—' : h.parts[p.key], h.why[p.key], p.what])),
+      },
+    ],
+  };
 }
