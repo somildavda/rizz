@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money Planner</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1a1d23;--mut:#6b7280;--line:#e5e7eb;--acc:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--fg:#e8eaed;--mut:#9aa0a8;--line:#2a2e36;--acc:#60a5fa;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px;max-width:900px;margin:auto}
+h1{margin:0;font-size:22px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:0 16px;max-width:900px;margin:auto}
+nav button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:8px 14px;border-radius:999px;cursor:pointer}
+nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{max-width:900px;margin:auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--bg);border-radius:10px;padding:10px}
+.stat b{display:block;font-size:20px}
+.stat span{color:var(--mut);font-size:13px}
+table{width:100%;border-collapse:collapse}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+input,select{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.row>*{flex:1 1 120px}
+button.b{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer}
+button.x{background:none;border:0;color:var(--mut);cursor:pointer;font-size:16px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.over{background:var(--bad)}.bar i.near{background:var(--warn)}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut);font-size:13px}
+.banner{padding:12px;border-radius:10px;font-weight:600;margin-bottom:14px}
+.banner.ok{background:color-mix(in srgb,var(--ok) 15%,transparent)}
+.banner.bad{background:color-mix(in srgb,var(--bad) 15%,transparent)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header><h1>💰 Money Planner</h1><div class="mut" id="monthLbl"></div></header>
+<nav id="tabs"></nav>
+<main id="app"></main>
+<script>
+const KEY='moneyPlanner.v1';
+const inr=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+const ym=(d=new Date())=>d.toISOString().slice(0,7);
+const uid=()=>Math.random().toString(36).slice(2,9);
+
+const DEFAULT={
+  salary:141000,
+  fixed:[
+    {id:uid(),name:'Car loan EMI',amt:12500,grp:'EMI'},
+    {id:uid(),name:'Mom',amt:15000,grp:'Family'},
+    {id:uid(),name:'OTT 1',amt:500,grp:'OTT'},
+    {id:uid(),name:'OTT 2',amt:130,grp:'OTT'},
+    {id:uid(),name:'OTT 3',amt:299,grp:'OTT'},
+    {id:uid(),name:'OTT 4',amt:199,grp:'OTT'},
+    {id:uid(),name:'Dentist + skin doctor',amt:10000,grp:'Health'},
+  ],
+  sips:[3900,1000,500,500,500,500,500,6000].map((a,i)=>({id:uid(),name:'INDmoney SIP '+(i+1),amt:a})),
+  budgets:[
+    {id:uid(),name:'Food & groceries',amt:12000},
+    {id:uid(),name:'Fuel',amt:8000},
+    {id:uid(),name:'Bills & phone',amt:4000},
+    {id:uid(),name:'Dining & fun',amt:8000},
+    {id:uid(),name:'Shopping',amt:5000},
+    {id:uid(),name:'Misc',amt:3000},
+  ],
+  goals:{emergency:15000,corpus:18000,buyFund:12000},
+  emergencyTarget:6*80000,
+  emergencySaved:0,
+  buyFundSaved:0,
+  cards:['HDFC Credit','ICICI Credit','UPI / Bank','Cash'],
+  spends:[],
+  wishlist:[],
+  investedSoFar:0,
+};
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))||DEFAULT}catch(e){S=DEFAULT}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}render()};
+
+const sum=a=>a.reduce((s,x)=>s+(+x.amt||0),0);
+function calc(){
+  const fixed=sum(S.fixed),sip=sum(S.sips),bud=sum(S.budgets);
+  const g=S.goals,goals=g.emergency+g.corpus+g.buyFund;
+  const free=S.salary-fixed-sip;
+  const left=free-bud-goals;
+  const month=S.spends.filter(s=>s.date.startsWith(ym()));
+  const byCat={},byCard={};
+  month.forEach(s=>{byCat[s.cat]=(byCat[s.cat]||0)+s.amt;byCard[s.card]=(byCard[s.card]||0)+s.amt});
+  const spent=sum(month);
+  const over=S.budgets.filter(b=>(byCat[b.name]||0)>b.amt).map(b=>({name:b.name,by:(byCat[b.name]||0)-b.amt}));
+  const overTotal=over.reduce((s,o)=>s+o.by,0);
+  return{fixed,sip,bud,goals,free,left,spent,byCat,byCard,over,overTotal,month,
+    savingRate:(sip+g.emergency+g.corpus)/S.salary};
+}
+
+const TABS={plan:'📊 Plan',spend:'💳 Spends',buy:'🛍️ Buy',invest:'📈 Corpus',setup:'⚙️ Setup'};
+let tab='plan';
+function render(){
+  document.getElementById('monthLbl').textContent=new Date().toLocaleString('en-IN',{month:'long',year:'numeric'});
+  document.getElementById('tabs').innerHTML=Object.entries(TABS).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('');
+  document.getElementById('app').innerHTML=VIEWS[tab](calc());
+}
+
+function bar(used,max){const p=max?used/max*100:0;return`<div class="bar"><i class="${p>100?'over':p>85?'near':''}" style="width:${Math.min(p,100)}%"></i></div>`}
+
+const VIEWS={
+plan:c=>`
+  ${c.over.length?`<div class="banner bad">🚫 Over budget by ${inr(c.overTotal)} (${c.over.map(o=>o.name).join(', ')}). Buying is paused this month.</div>`
+    :`<div class="banner ok">✅ Within budget. Buy fund is open.</div>`}
+  <div class="card"><h2>This month's salary split</h2>
+  <div class="grid">
+    <div class="stat"><span>Salary</span><b>${inr(S.salary)}</b></div>
+    <div class="stat"><span>Fixed (EMI, Mom, OTT, health)</span><b>${inr(c.fixed)}</b></div>
+    <div class="stat"><span>SIPs (INDmoney)</span><b>${inr(c.sip)}</b></div>
+    <div class="stat"><span>Living budgets</span><b>${inr(c.bud)}</b></div>
+    <div class="stat"><span>Emergency + corpus + buy fund</span><b>${inr(c.goals)}</b></div>
+    <div class="stat"><span>Unallocated buffer</span><b class="${c.left<0?'bad':'ok'}">${inr(c.left)}</b></div>
+  </div>
+  <p class="mut">Saving + investing rate: <b>${(c.savingRate*100).toFixed(0)}%</b> of salary (aim for 30%+).</p></div>
+
+  <div class="card"><h2>Budgets vs spent</h2><table>
+  ${S.budgets.map(b=>{const u=c.byCat[b.name]||0;return`<tr><td>${b.name}${bar(u,b.amt)}</td><td class="n">${inr(u)} / ${inr(b.amt)}</td></tr>`}).join('')}
+  <tr><th>Total</th><th class="n">${inr(c.spent)} / ${inr(c.bud)}</th></tr></table></div>
+
+  <div class="card"><h2>Fixed monthly</h2><table>
+  ${S.fixed.map(f=>`<tr><td>${f.name} <span class="mut">${f.grp}</span></td><td class="n">${inr(f.amt)}</td></tr>`).join('')}
+  </table></div>
+
+  <div class="card"><h2>Month-end checklist</h2>
+  <p class="mut">When salary lands, move money and tick it off by recording it:</p>
+  <div class="row"><button class="b" onclick="closeMonth()">Record this month's transfers</button></div>
+  <p class="mut">Adds ${inr(S.goals.emergency)} to emergency fund, ${inr(S.goals.buyFund)} to buy fund, ${inr(S.goals.corpus+c.sip)} to investments. Any overspend (${inr(c.overTotal)}) is taken out of the buy fund.</p></div>`,
+
+spend:c=>`
+  <div class="card"><h2>Add a spend</h2>
+  <div class="row">
+    <input id="sAmt" type="number" placeholder="Amount ₹">
+    <select id="sCat">${S.budgets.map(b=>`<option>${b.name}</option>`).join('')}</select>
+    <select id="sCard">${S.cards.map(x=>`<option>${x}</option>`).join('')}</select>
+  </div><div class="row">
+    <input id="sNote" placeholder="Note (e.g. Swiggy)">
+    <input id="sDate" type="date" value="${new Date().toISOString().slice(0,10)}">
+    <button class="b" onclick="addSpend()">Add</button>
+  </div></div>
+
+  <div class="card"><h2>By card this month</h2><table>
+  ${S.cards.map(k=>`<tr><td>${k}</td><td class="n">${inr(c.byCard[k]||0)}</td></tr>`).join('')}
+  </table></div>
+
+  <div class="card"><h2>Import statement (CSV)</h2>
+  <p class="mut">Export a CSV from your card/bank. Needs columns with a date, a description and an amount. Everything is filed under "Misc" for you to fix up.</p>
+  <div class="row"><select id="impCard">${S.cards.map(x=>`<option>${x}</option>`).join('')}</select>
+  <input type="file" accept=".csv" onchange="importCsv(this)"></div></div>
+
+  <div class="card"><h2>This month's spends</h2><table>
+  ${c.month.slice().reverse().map(s=>`<tr><td>${s.date.slice(5)} · ${s.note||s.cat}<div class="mut">${s.cat} · ${s.card}</div></td><td class="n">${inr(s.amt)}</td><td><button class="x" onclick="del('spends','${s.id}')">✕</button></td></tr>`).join('')||'<tr><td class="mut">No spends yet</td></tr>'}
+  </table></div>`,
+
+buy:c=>{
+  const locked=c.over.length>0;
+  return`
+  ${locked?`<div class="banner bad">🔒 Buying is locked: you're ${inr(c.overTotal)} over budget. Get back on track first.</div>`:''}
+  <div class="card"><h2>Buy fund</h2>
+  <div class="grid"><div class="stat"><span>Saved</span><b>${inr(S.buyFundSaved)}</b></div>
+  <div class="stat"><span>Added per month</span><b>${inr(S.goals.buyFund)}</b></div></div></div>
+  <div class="card"><h2>Add to wishlist</h2><div class="row">
+  <input id="wName" placeholder="Item"><input id="wAmt" type="number" placeholder="Price ₹">
+  <select id="wPri"><option value="1">High</option><option value="2" selected>Medium</option><option value="3">Low</option></select>
+  <button class="b" onclick="addWish()">Add</button></div>
+  <p class="mut">Each item has a 48-hour cooling-off period before you can buy it.</p></div>
+  <div class="card"><h2>Wishlist</h2><table>
+  ${S.wishlist.slice().sort((a,b)=>a.pri-b.pri).map(w=>{
+    const cool=Date.now()-w.added<48*3600e3;
+    const afford=S.buyFundSaved>=w.amt;
+    const months=Math.ceil(Math.max(0,w.amt-S.buyFundSaved)/(S.goals.buyFund||1));
+    const st=locked?'<span class="bad">Locked</span>':cool?'<span class="warn">Cooling off</span>':afford?`<button class="b" onclick="buy('${w.id}')">Buy ✅</button>`:`<span class="mut">~${months} mo away</span>`;
+    return`<tr><td>${w.name}${bar(S.buyFundSaved,w.amt)}</td><td class="n">${inr(w.amt)}</td><td class="n">${st}</td><td><button class="x" onclick="del('wishlist','${w.id}')">✕</button></td></tr>`}).join('')||'<tr><td class="mut">Nothing yet</td></tr>'}
+  </table></div>`},
+
+invest:c=>{
+  const monthly=c.sip+S.goals.corpus;
+  const fv=(m,y,r=.12)=>{const i=r/12,n=y*12;return m*((Math.pow(1+i,n)-1)/i)*(1+i)+S.investedSoFar*Math.pow(1+r,y)};
+  return`
+  <div class="card"><h2>Emergency fund</h2>
+  <div class="grid"><div class="stat"><span>Saved</span><b>${inr(S.emergencySaved)}</b></div>
+  <div class="stat"><span>Target (6 months' expenses)</span><b>${inr(S.emergencyTarget)}</b></div>
+  <div class="stat"><span>Months to target</span><b>${Math.ceil(Math.max(0,S.emergencyTarget-S.emergencySaved)/(S.goals.emergency||1))}</b></div></div>
+  ${bar(S.emergencySaved,S.emergencyTarget)}<p class="mut">Keep it in a liquid fund or sweep FD, not in stocks.</p></div>
+  <div class="card"><h2>Corpus projection</h2>
+  <p>Investing <b>${inr(monthly)}</b>/month (SIPs ${inr(c.sip)} + extra corpus ${inr(S.goals.corpus)}), invested so far ${inr(S.investedSoFar)}:</p>
+  <table><tr><th>Years</th><th class="n">At 10%</th><th class="n">At 12%</th></tr>
+  ${[5,10,15,20,25].map(y=>`<tr><td>${y}</td><td class="n">${inr(fv(monthly,y,.10))}</td><td class="n">${inr(fv(monthly,y))}</td></tr>`).join('')}</table>
+  <p class="mut">Assumes the monthly amount stays flat. Raising SIPs 10% each year when you get a raise grows the corpus a lot more. Returns are estimates, not guaranteed.</p></div>
+  <div class="card"><h2>Your SIPs</h2><table>${S.sips.map(s=>`<tr><td>${s.name}</td><td class="n">${inr(s.amt)}</td></tr>`).join('')}</table></div>`},
+
+setup:c=>`
+  <div class="card"><h2>Salary</h2><input type="number" value="${S.salary}" onchange="S.salary=+this.value;save()"></div>
+  ${editList('fixed','Fixed monthly',true)}
+  ${editList('sips','SIPs / investments')}
+  ${editList('budgets','Living budgets')}
+  <div class="card"><h2>Monthly goal transfers</h2>
+  ${[['emergency','Emergency fund'],['corpus','Extra corpus investment'],['buyFund','Buy fund']].map(([k,l])=>`<div class="row"><label>${l}</label><input type="number" value="${S.goals[k]}" onchange="S.goals.${k}=+this.value;save()"></div>`).join('')}</div>
+  <div class="card"><h2>Balances</h2>
+  ${[['emergencySaved','Emergency fund saved'],['emergencyTarget','Emergency target'],['buyFundSaved','Buy fund saved'],['investedSoFar','Invested so far']].map(([k,l])=>`<div class="row"><label>${l}</label><input type="number" value="${S[k]}" onchange="S.${k}=+this.value;save()"></div>`).join('')}</div>
+  <div class="card"><h2>Cards & accounts</h2><input value="${S.cards.join(', ')}" onchange="S.cards=this.value.split(',').map(x=>x.trim()).filter(Boolean);save()"><p class="mut">Comma separated.</p></div>
+  <div class="card"><h2>Backup</h2><div class="row"><button class="b" onclick="exportData()">Download backup</button><input type="file" accept=".json" onchange="importData(this)"></div>
+  <p class="mut">Data lives only in this browser. Download a backup now and then.</p></div>`,
+};
+
+function editList(key,title,grp){
+  return`<div class="card"><h2>${title}</h2><table>${S[key].map((x,i)=>`<tr>
+  <td><input value="${x.name}" onchange="S.${key}[${i}].name=this.value;save()"></td>
+  ${grp?`<td><input value="${x.grp||''}" onchange="S.${key}[${i}].grp=this.value;save()"></td>`:''}
+  <td><input type="number" value="${x.amt}" onchange="S.${key}[${i}].amt=+this.value;save()"></td>
+  <td><button class="x" onclick="del('${key}','${x.id}')">✕</button></td></tr>`).join('')}</table>
+  <div class="row"><button class="b" onclick="S.${key}.push({id:uid(),name:'New',amt:0${grp?",grp:''":''}});save()">+ Add</button></div></div>`;
+}
+
+const $=id=>document.getElementById(id);
+function addSpend(){const amt=+$('sAmt').value;if(!amt)return;
+  S.spends.push({id:uid(),amt,cat:$('sCat').value,card:$('sCard').value,note:$('sNote').value,date:$('sDate').value});save()}
+function addWish(){const amt=+$('wAmt').value,name=$('wName').value.trim();if(!amt||!name)return;
+  S.wishlist.push({id:uid(),name,amt,pri:+$('wPri').value,added:Date.now()});save()}
+function del(k,id){S[k]=S[k].filter(x=>x.id!==id);save()}
+function buy(id){const w=S.wishlist.find(x=>x.id===id);
+  if(!confirm(`Buy ${w.name} for ${inr(w.amt)} from the buy fund?`))return;
+  S.buyFundSaved-=w.amt;S.spends.push({id:uid(),amt:w.amt,cat:'Shopping',card:S.cards[0],note:'Wishlist: '+w.name,date:new Date().toISOString().slice(0,10),fromFund:true});
+  S.budgets.find(b=>b.name==='Shopping')&&(S.budgets.find(b=>b.name==='Shopping').amt+=w.amt);
+  S.wishlist=S.wishlist.filter(x=>x.id!==id);save()}
+function closeMonth(){const c=calc();const k='closed_'+ym();
+  if(S[k]&&!confirm('Already recorded this month. Record again?'))return;
+  S.emergencySaved+=S.goals.emergency;S.buyFundSaved=Math.max(0,S.buyFundSaved+S.goals.buyFund-c.overTotal);
+  S.investedSoFar+=S.goals.corpus+c.sip;S[k]=1;save()}
+function importCsv(inp){const f=inp.files[0];if(!f)return;f.text().then(t=>{
+  const rows=t.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'').trim()));
+  const h=rows.shift().map(x=>x.toLowerCase());
+  const di=h.findIndex(x=>x.includes('date')),ni=h.findIndex(x=>/desc|narr|detail|particular/.test(x)),
+        ai=h.findIndex(x=>/amount|debit|withdraw/.test(x));
+  if(di<0||ai<0)return alert('Could not find date/amount columns');
+  let n=0;rows.forEach(r=>{const amt=Math.abs(parseFloat((r[ai]||'').replace(/[^\d.-]/g,'')));if(!amt)return;
+    const d=new Date(r[di]);const date=isNaN(d)?new Date().toISOString().slice(0,10):d.toISOString().slice(0,10);
+    S.spends.push({id:uid(),amt,cat:S.budgets.at(-1).name,card:$('impCard').value,note:ni>=0?r[ni]:'',date});n++});
+  alert(`Imported ${n} spends`);save()})}
+function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='money-backup.json';a.click()}
+function importData(inp){inp.files[0]?.text().then(t=>{S=JSON.parse(t);save()})}
+render();
+</script>
+</body>
+</html>
