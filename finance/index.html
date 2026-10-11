@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Money Planner</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--fg:#1a1d23;--mut:#6b7280;--line:#e5e7eb;--acc:#2563eb;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#181b21;--fg:#e8eaed;--mut:#9aa0a8;--line:#2a2e36;--acc:#60a5fa;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}}
@@ -37,6 +42,10 @@ button.x{background:none;border:0;color:var(--mut);cursor:pointer;font-size:16px
 .banner.ok{background:color-mix(in srgb,var(--ok) 15%,transparent)}
 .banner.bad{background:color-mix(in srgb,var(--bad) 15%,transparent)}
 .hide{display:none}
+.banner.dev{background:color-mix(in srgb,var(--warn) 20%,transparent);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--mut)}
+textarea{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%}
+button.g{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
 </style>
 </head>
 <body>
@@ -44,7 +53,9 @@ button.x{background:none;border:0;color:var(--mut);cursor:pointer;font-size:16px
 <nav id="tabs"></nav>
 <main id="app"></main>
 <script>
-const KEY='moneyPlanner.v1';
+const REAL_KEY='moneyPlanner.v1',DEV_KEY='moneyPlanner.dev';
+let devMode=false;try{devMode=localStorage.getItem('moneyPlanner.mode')==='dev'}catch(e){}
+let KEY=devMode?DEV_KEY:REAL_KEY;
 const inr=n=>'₹'+Math.round(n).toLocaleString('en-IN');
 const ym=(d=new Date())=>d.toISOString().slice(0,7);
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -79,7 +90,10 @@ const DEFAULT={
   investedSoFar:0,
 };
 let S;
-try{S=JSON.parse(localStorage.getItem(KEY))||DEFAULT}catch(e){S=DEFAULT}
+function load(){try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+  if(!S)S=devMode?demoData():structuredClone(DEFAULT);
+  S.wishlist.forEach(w=>{w.cat??='Gadgets';w.saved??=0;w.monthly??=0})}
+load();
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}render()};
 
 const sum=a=>a.reduce((s,x)=>s+(+x.amt||0),0);
@@ -90,8 +104,8 @@ function calc(){
   const left=free-bud-goals;
   const month=S.spends.filter(s=>s.date.startsWith(ym()));
   const byCat={},byCard={};
-  month.forEach(s=>{byCat[s.cat]=(byCat[s.cat]||0)+s.amt;byCard[s.card]=(byCard[s.card]||0)+s.amt});
-  const spent=sum(month);
+  month.filter(s=>!s.fromFund).forEach(s=>{byCat[s.cat]=(byCat[s.cat]||0)+s.amt;byCard[s.card]=(byCard[s.card]||0)+s.amt});
+  const spent=sum(month.filter(s=>!s.fromFund));
   const over=S.budgets.filter(b=>(byCat[b.name]||0)>b.amt).map(b=>({name:b.name,by:(byCat[b.name]||0)-b.amt}));
   const overTotal=over.reduce((s,o)=>s+o.by,0);
   return{fixed,sip,bud,goals,free,left,spent,byCat,byCard,over,overTotal,month,
@@ -103,7 +117,7 @@ let tab='plan';
 function render(){
   document.getElementById('monthLbl').textContent=new Date().toLocaleString('en-IN',{month:'long',year:'numeric'});
   document.getElementById('tabs').innerHTML=Object.entries(TABS).map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('');
-  document.getElementById('app').innerHTML=VIEWS[tab](calc());
+  document.getElementById('app').innerHTML=(devMode?`<div class="banner dev"><span>🧪 DEV MODE: test data only, your real data is safe</span><button class="g" onclick="setDev(false)">Exit</button></div>`+devTools():'')+VIEWS[tab](calc());
 }
 
 function bar(used,max){const p=max?used/max*100:0;return`<div class="bar"><i class="${p>100?'over':p>85?'near':''}" style="width:${Math.min(p,100)}%"></i></div>`}
@@ -163,23 +177,40 @@ spend:c=>`
 
 buy:c=>{
   const locked=c.over.length>0;
+  const cats=[...new Set(['Gadgets','Clothes','Home','Travel','Gift','Health','Car',...S.wishlist.map(w=>w.cat)])];
   return`
   ${locked?`<div class="banner bad">🔒 Buying is locked: you're ${inr(c.overTotal)} over budget. Get back on track first.</div>`:''}
   <div class="card"><h2>Buy fund</h2>
-  <div class="grid"><div class="stat"><span>Saved</span><b>${inr(S.buyFundSaved)}</b></div>
-  <div class="stat"><span>Added per month</span><b>${inr(S.goals.buyFund)}</b></div></div></div>
-  <div class="card"><h2>Add to wishlist</h2><div class="row">
-  <input id="wName" placeholder="Item"><input id="wAmt" type="number" placeholder="Price ₹">
-  <select id="wPri"><option value="1">High</option><option value="2" selected>Medium</option><option value="3">Low</option></select>
-  <button class="b" onclick="addWish()">Add</button></div>
-  <p class="mut">Each item has a 48-hour cooling-off period before you can buy it.</p></div>
+  <div class="grid"><div class="stat"><span>Free in fund</span><b>${inr(S.buyFundSaved)}</b></div>
+  <div class="stat"><span>Added per month</span><b>${inr(S.goals.buyFund)}</b></div>
+  <div class="stat"><span>Set aside for items</span><b>${inr(S.wishlist.reduce((a,w)=>a+w.saved,0))}</b></div></div>
+  <div class="row"><input id="extra" type="number" placeholder="Extra ₹ this month"><button class="g" onclick="addExtra()">+ Add to fund</button></div></div>
+
+  <div class="card"><h2>Add something you want to buy</h2>
+  <div class="row"><input id="wName" placeholder="What? (anything, e.g. iPhone, Goa trip, sofa)"></div>
+  <div class="row"><input id="wAmt" type="number" placeholder="Price ₹">
+  <input id="wCat" list="catList" placeholder="Category"><datalist id="catList">${cats.map(x=>`<option>${x}</option>`).join('')}</datalist></div>
+  <div class="row"><input id="wMonthly" type="number" placeholder="₹ / month (optional)">
+  <label class="mut" style="flex:0 0 auto;align-self:center">Want by</label><input id="wBy" type="month">
+  <select id="wPri"><option value="1">High</option><option value="2" selected>Medium</option><option value="3">Low</option></select></div>
+  <div class="row"><input id="wLink" placeholder="Link (optional)"></div>
+  <div class="row"><textarea id="wNote" rows="2" placeholder="Why do I want it? (optional)"></textarea></div>
+  <div class="row"><button class="b" onclick="addWish()">Add to wishlist</button></div>
+  <p class="mut">Give it a "want it by" month and I'll work out the monthly saving. Each item has a 48-hour cooling-off before you can buy it.</p></div>
+
   <div class="card"><h2>Wishlist</h2><table>
   ${S.wishlist.slice().sort((a,b)=>a.pri-b.pri).map(w=>{
     const cool=Date.now()-w.added<48*3600e3;
-    const afford=S.buyFundSaved>=w.amt;
-    const months=Math.ceil(Math.max(0,w.amt-S.buyFundSaved)/(S.goals.buyFund||1));
+    const have=w.saved+S.buyFundSaved, afford=have>=w.amt;
+    const rate=w.monthly||S.goals.buyFund||1;
+    const months=Math.ceil(Math.max(0,w.amt-have)/rate);
     const st=locked?'<span class="bad">Locked</span>':cool?'<span class="warn">Cooling off</span>':afford?`<button class="b" onclick="buy('${w.id}')">Buy ✅</button>`:`<span class="mut">~${months} mo away</span>`;
-    return`<tr><td>${w.name}${bar(S.buyFundSaved,w.amt)}</td><td class="n">${inr(w.amt)}</td><td class="n">${st}</td><td><button class="x" onclick="del('wishlist','${w.id}')">✕</button></td></tr>`}).join('')||'<tr><td class="mut">Nothing yet</td></tr>'}
+    return`<tr><td><b>${esc(w.name)}</b> <span class="tag">${esc(w.cat)}</span>
+      ${w.link?` <a href="${esc(w.link)}" target="_blank" rel="noopener">🔗</a>`:''}
+      ${bar(Math.min(have,w.amt),w.amt)}
+      <div class="mut">Saved ${inr(w.saved)}${w.monthly?` · ${inr(w.monthly)}/mo`:''}${w.by?` · want by ${w.by}`:''}${w.note?` · ${esc(w.note)}`:''}</div>
+      <div class="row"><input id="put_${w.id}" type="number" placeholder="₹"><button class="g" onclick="putTo('${w.id}')">Set aside from fund</button></div></td>
+      <td class="n">${inr(w.amt)}</td><td class="n">${st}</td><td><button class="x" onclick="delWish('${w.id}')">✕</button></td></tr>`}).join('')||'<tr><td class="mut">Nothing yet</td></tr>'}
   </table></div>`},
 
 invest:c=>{
@@ -208,6 +239,9 @@ setup:c=>`
   <div class="card"><h2>Balances</h2>
   ${[['emergencySaved','Emergency fund saved'],['emergencyTarget','Emergency target'],['buyFundSaved','Buy fund saved'],['investedSoFar','Invested so far']].map(([k,l])=>`<div class="row"><label>${l}</label><input type="number" value="${S[k]}" onchange="S.${k}=+this.value;save()"></div>`).join('')}</div>
   <div class="card"><h2>Cards & accounts</h2><input value="${S.cards.join(', ')}" onchange="S.cards=this.value.split(',').map(x=>x.trim()).filter(Boolean);save()"><p class="mut">Comma separated.</p></div>
+  <div class="card"><h2>Dev mode 🧪</h2>
+  <p class="mut">Play with fake data: simulate months, overspending and buying. Your real data stays untouched.</p>
+  <div class="row"><button class="b" onclick="setDev(${!devMode})">${devMode?'Exit dev mode':'Turn on dev mode'}</button></div></div>
   <div class="card"><h2>Backup</h2><div class="row"><button class="b" onclick="exportData()">Download backup</button><input type="file" accept=".json" onchange="importData(this)"></div>
   <p class="mut">Data lives only in this browser. Download a backup now and then.</p></div>`,
 };
@@ -224,18 +258,48 @@ function editList(key,title,grp){
 const $=id=>document.getElementById(id);
 function addSpend(){const amt=+$('sAmt').value;if(!amt)return;
   S.spends.push({id:uid(),amt,cat:$('sCat').value,card:$('sCard').value,note:$('sNote').value,date:$('sDate').value});save()}
-function addWish(){const amt=+$('wAmt').value,name=$('wName').value.trim();if(!amt||!name)return;
-  S.wishlist.push({id:uid(),name,amt,pri:+$('wPri').value,added:Date.now()});save()}
+const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function addWish(){const amt=+$('wAmt').value,name=$('wName').value.trim();if(!amt||!name)return alert('Add a name and price');
+  let monthly=+$('wMonthly').value||0;const by=$('wBy').value;
+  if(!monthly&&by){const [y,m]=by.split('-').map(Number),n=new Date();const left=(y-n.getFullYear())*12+(m-1-n.getMonth())+1;monthly=Math.ceil(amt/Math.max(1,left))}
+  S.wishlist.push({id:uid(),name,amt,cat:$('wCat').value.trim()||'Other',monthly,by,link:$('wLink').value.trim(),note:$('wNote').value.trim(),pri:+$('wPri').value,added:Date.now(),saved:0});save()}
+function addExtra(){const v=+$('extra').value;if(v>0){S.buyFundSaved+=v;save()}}
+function putTo(id){const w=S.wishlist.find(x=>x.id===id),v=Math.min(+$('put_'+id).value||0,S.buyFundSaved);if(v<=0)return alert('Not enough free money in the buy fund');
+  S.buyFundSaved-=v;w.saved+=v;save()}
+function delWish(id){const w=S.wishlist.find(x=>x.id===id);S.buyFundSaved+=w.saved;del('wishlist',id)}
 function del(k,id){S[k]=S[k].filter(x=>x.id!==id);save()}
 function buy(id){const w=S.wishlist.find(x=>x.id===id);
-  if(!confirm(`Buy ${w.name} for ${inr(w.amt)} from the buy fund?`))return;
-  S.buyFundSaved-=w.amt;S.spends.push({id:uid(),amt:w.amt,cat:'Shopping',card:S.cards[0],note:'Wishlist: '+w.name,date:new Date().toISOString().slice(0,10),fromFund:true});
-  S.budgets.find(b=>b.name==='Shopping')&&(S.budgets.find(b=>b.name==='Shopping').amt+=w.amt);
+  if(!confirm(`Buy ${w.name} for ${inr(w.amt)}?`))return;
+  const fromFund=w.amt-w.saved;S.buyFundSaved-=Math.max(0,fromFund);
+  S.spends.push({id:uid(),amt:w.amt,cat:'Shopping',card:S.cards[0],note:'Wishlist: '+w.name,date:new Date().toISOString().slice(0,10),fromFund:true});
   S.wishlist=S.wishlist.filter(x=>x.id!==id);save()}
 function closeMonth(){const c=calc();const k='closed_'+ym();
   if(S[k]&&!confirm('Already recorded this month. Record again?'))return;
   S.emergencySaved+=S.goals.emergency;S.buyFundSaved=Math.max(0,S.buyFundSaved+S.goals.buyFund-c.overTotal);
-  S.investedSoFar+=S.goals.corpus+c.sip;S[k]=1;save()}
+  S.investedSoFar+=S.goals.corpus+c.sip;
+  S.wishlist.forEach(w=>{const v=Math.min(w.monthly,S.buyFundSaved,Math.max(0,w.amt-w.saved));S.buyFundSaved-=v;w.saved+=v});
+  S[k]=1;save()}
+
+// ---- dev mode ----
+function setDev(on){try{localStorage.setItem('moneyPlanner.mode',on?'dev':'real')}catch(e){}
+  devMode=on;KEY=on?DEV_KEY:REAL_KEY;load();render()}
+function demoData(){const d=structuredClone(DEFAULT),t=new Date().toISOString().slice(0,10);
+  d.buyFundSaved=20000;d.emergencySaved=45000;d.investedSoFar=120000;
+  [[3200,'Food & groceries','Swiggy'],[4500,'Fuel','Petrol'],[2100,'Dining & fun','Movie'],[1499,'Bills & phone','Jio']]
+    .forEach(([amt,cat,note],i)=>d.spends.push({id:uid(),amt,cat,card:d.cards[i%2],note,date:t}));
+  d.wishlist.push({id:uid(),name:'AirPods',amt:12000,cat:'Gadgets',monthly:4000,saved:4000,pri:1,added:Date.now()-3*864e5},
+    {id:uid(),name:'Goa trip',amt:30000,cat:'Travel',monthly:5000,saved:0,pri:2,added:Date.now()});
+  return d}
+function devTools(){return`<div class="card"><h2>🧪 Dev tools</h2><div class="row">
+  <button class="g" onclick="devSpend()">+ 5 random spends</button>
+  <button class="g" onclick="devOver()">Force overspend</button>
+  <button class="g" onclick="closeMonth()">Simulate month end</button>
+  <button class="g" onclick="devCool()">Skip cooling-off</button>
+  <button class="g" onclick="if(confirm('Reset test data?')){S=demoData();save()}">Reset test data</button></div></div>`}
+function devSpend(){const t=new Date().toISOString().slice(0,10);for(let i=0;i<5;i++){const b=S.budgets[Math.floor(Math.random()*S.budgets.length)];
+  S.spends.push({id:uid(),amt:Math.round(200+Math.random()*2500),cat:b.name,card:S.cards[i%S.cards.length],note:'Test',date:t})}save()}
+function devOver(){const b=S.budgets[3]||S.budgets[0];S.spends.push({id:uid(),amt:b.amt+2000,cat:b.name,card:S.cards[0],note:'Test overspend',date:new Date().toISOString().slice(0,10)});save()}
+function devCool(){S.wishlist.forEach(w=>w.added=0);save()}
 function importCsv(inp){const f=inp.files[0];if(!f)return;f.text().then(t=>{
   const rows=t.trim().split(/\r?\n/).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,'').trim()));
   const h=rows.shift().map(x=>x.toLowerCase());
@@ -249,6 +313,7 @@ function importCsv(inp){const f=inp.files[0];if(!f)return;f.text().then(t=>{
 function exportData(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='money-backup.json';a.click()}
 function importData(inp){inp.files[0]?.text().then(t=>{S=JSON.parse(t);save()})}
 render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
