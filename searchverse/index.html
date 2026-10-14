@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SearchVerse — Search Intelligence Suite</title>
+<meta name="description" content="SearchVerse: search intelligence tools for performance, speed and video visibility.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07080F;--panel:#0F1220;--line:#1E2236;--text:#E8EAF5;--muted:#8A90AB;--a:#7C5CFF;--b:#22D3EE}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.glow{position:fixed;inset:-20% -10% auto;height:70vh;background:radial-gradient(closest-side,rgba(124,92,255,.25),transparent),radial-gradient(closest-side at 80% 30%,rgba(34,211,238,.15),transparent);pointer-events:none;z-index:0}
+nav{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:18px max(16px,5vw);background:rgba(7,8,15,.7);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
+.brand img{width:34px;height:34px}
+.brand span{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+nav .links{display:flex;gap:24px;color:var(--muted);font-size:14px}
+nav .links a:hover{color:var(--text)}
+main{position:relative;z-index:1}
+.hero{padding:96px max(16px,5vw) 64px;max-width:1100px;margin:auto;text-align:center}
+.pill{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--muted);margin-bottom:24px}
+h1{font-size:clamp(36px,6vw,68px);line-height:1.05;letter-spacing:-.035em;font-weight:800}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:620px;margin:22px auto 0;color:var(--muted);font-size:18px;line-height:1.6}
+.cta{margin-top:36px;display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.btn{padding:13px 22px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid var(--line);cursor:pointer;background:var(--panel);color:var(--text)}
+.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff}
+section.tools{max-width:1100px;margin:auto;padding:24px max(16px,5vw) 96px}
+.sec-h{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px;gap:16px}
+.sec-h h2{font-size:28px;letter-spacing:-.02em}
+.sec-h p{color:var(--muted);font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;cursor:pointer;transition:.25s;overflow:hidden}
+.card:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.6);box-shadow:0 20px 50px -20px rgba(124,92,255,.5)}
+.card .ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:18px;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.2))}
+.card h3{font-size:18px;margin-bottom:8px}
+.card p{color:var(--muted);font-size:14px;line-height:1.55}
+.card .go{margin-top:18px;font-size:13px;font-weight:600;color:var(--b)}
+.card .tag{position:absolute;top:18px;right:18px;font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+footer{border-top:1px solid var(--line);padding:28px max(16px,5vw);display:flex;justify-content:space-between;color:var(--muted);font-size:13px;flex-wrap:wrap;gap:8px;position:relative;z-index:1}
+/* in-app viewer */
+#viewer{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
+#viewer.on{display:flex}
+.vbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.vbar .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vbar .btn{padding:8px 14px;font-size:13px}
+#frame{flex:1;border:0;width:100%;background:#fff}
+@media(max-width:640px){nav .links{display:none}.hero{padding-top:64px}}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<nav>
+  <a class="brand" href="#/"><img src="logo.svg" alt=""><span>SearchVerse</span></a>
+  <div class="links"><a href="#tools">Suite</a><a href="#about">About</a></div>
+</nav>
+
+<main>
+  <header class="hero">
+    <div class="pill">Search Intelligence Suite</div>
+    <h1>One universe for every<br><em>search signal</em> that matters.</h1>
+    <p>Performance analytics, page-speed insights and video visibility — unified in one workspace built for modern search teams.</p>
+    <div class="cta">
+      <a class="btn primary" href="#tools">Explore the suite</a>
+      <a class="btn" href="#about">Why SearchVerse</a>
+    </div>
+  </header>
+
+  <section class="tools" id="tools">
+    <div class="sec-h">
+      <div><h2>The Suite</h2><p>Pick a module to launch it.</p></div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <section class="tools" id="about" style="padding-top:0">
+    <div class="sec-h"><div><h2>Built for search teams</h2></div></div>
+    <div class="grid">
+      <div class="card" style="cursor:default"><div class="ic">⚡</div><h3>Fast insights</h3><p>Answers in seconds, not spreadsheets.</p></div>
+      <div class="card" style="cursor:default"><div class="ic">🧭</div><h3>One workspace</h3><p>Every tool, one login-free launchpad.</p></div>
+      <div class="card" style="cursor:default"><div class="ic">📈</div><h3>Decision-ready</h3><p>Metrics framed for action and client reporting.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>© <span id="yr"></span> SearchVerse. All rights reserved.</span>
+  <span>Search intelligence, unified.</span>
+</footer>
+
+<div id="viewer">
+  <div class="vbar">
+    <a class="btn" href="#/">← Home</a>
+    <div class="t" id="vtitle"></div>
+    <a class="btn" id="vext" target="_blank" rel="noopener">Open full screen ↗</a>
+  </div>
+  <iframe id="frame" allow="clipboard-write; fullscreen" referrerpolicy="no-referrer"></iframe>
+</div>
+
+<script>
+/* ===== Add new modules here: one object per tool ===== */
+var TOOLS = [
+  { id: "performance", icon: "📊", name: "Performance Explorer", tag: "Analytics",
+    desc: "Impressions, clicks and trends by line of business.",
+    url: "https://searchverse.somildavda.workers.dev/#/p/c9a1ceb992e94e6cba34417b06f261bc/lob?metric=impressions" },
+  { id: "workspace", icon: "🗂️", name: "Search Workspace", tag: "Workspace",
+    desc: "Team workspace and reporting automation.",
+    url: "https://script.google.com/a/macros/infidigit.com/s/AKfycbwBVzrOdMxxjUvouiIrFUm2p-Res919oq2CgCgVk0IkNupDR3FU8Pa5Z0VbIhaxbYHwYw/exec",
+    newTab: true }, // Google Apps Script pages refuse to load inside frames
+  { id: "speed", icon: "🚀", name: "PageSpeed Lab", tag: "Core Web Vitals",
+    desc: "Bulk page-speed and Core Web Vitals checks.",
+    url: "https://searchverse-psi.shred-app.workers.dev/" },
+  { id: "youtube", icon: "▶️", name: "Video Visibility", tag: "YouTube",
+    desc: "YouTube search presence and video insights.",
+    url: "https://searchverse-youtube.searchverse-infidigit.workers.dev/" }
+];
+
+document.getElementById("yr").textContent = new Date().getFullYear();
+var grid = document.getElementById("grid");
+TOOLS.forEach(function (t) {
+  var el = document.createElement("a");
+  el.className = "card";
+  el.href = t.newTab ? t.url : "#/app/" + t.id;
+  if (t.newTab) { el.target = "_blank"; el.rel = "noopener"; }
+  el.innerHTML = '<span class="tag"></span><div class="ic"></div><h3></h3><p></p><div class="go">Launch →</div>';
+  el.querySelector(".tag").textContent = t.tag;
+  el.querySelector(".ic").textContent = t.icon;
+  el.querySelector("h3").textContent = t.name;
+  el.querySelector("p").textContent = t.desc;
+  grid.appendChild(el);
+});
+
+var viewer = document.getElementById("viewer"), frame = document.getElementById("frame");
+function route() {
+  var m = location.hash.match(/^#\/app\/([\w-]+)/);
+  var t = m && TOOLS.filter(function (x) { return x.id === m[1]; })[0];
+  if (t) {
+    document.getElementById("vtitle").textContent = t.name;
+    document.getElementById("vext").href = t.url;
+    if (frame.src !== t.url) frame.src = t.url;
+    viewer.classList.add("on");
+    document.title = t.name + " — SearchVerse";
+  } else {
+    viewer.classList.remove("on");
+    frame.removeAttribute("src");
+    document.title = "SearchVerse — Search Intelligence Suite";
+    if (location.hash.length > 2 && location.hash.indexOf("#/") !== 0) {
+      var s = document.querySelector(location.hash); if (s) s.scrollIntoView();
+    }
+  }
+}
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>
