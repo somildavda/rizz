@@ -162,13 +162,15 @@ async function handleAuth(req, env, url) {
     if (mode !== 'login') {
       const user = await currentUser(req, env);
       if (!user) return redirect('/');
-      if (user.role !== 'admin') return redirect('/#/?error=' + encodeURIComponent('Only admins can connect Google accounts'));
+      if (user.role !== 'admin' && !(mode === 'connect' && user.role === 'pm')) return redirect('/#/?error=' + encodeURIComponent('Only admins and PMs can connect Google accounts'));
       email = user.email;
     }
+    // where to come back to after connecting (e.g. the New project form)
+    const ret = /^\/[\w/-]{0,80}$/.test(url.searchParams.get('return') || '') ? url.searchParams.get('return') : '';
     const state = id();
     await env.DB.prepare('DELETE FROM oauth_states WHERE created_at < ?').bind(now() - 3600000).run();
     await env.DB.prepare('INSERT INTO oauth_states (state, mode, email, created_at) VALUES (?, ?, ?, ?)')
-      .bind(state, mode, email, now())
+      .bind(state, mode === 'connect' && ret ? 'connect|' + ret : mode, email, now())
       .run();
     const params = new URLSearchParams({
       client_id: env.GOOGLE_CLIENT_ID,
@@ -259,7 +261,8 @@ async function handleAuth(req, env, url) {
     )
       .bind(id(), st.email, email, enc, accEnc, now() + (tok.expires_in || 3600) * 1000, granted, now(), now())
       .run();
-    return redirect('/#/settings?connected=' + encodeURIComponent(email));
+    const back = String(st.mode).split('|')[1];
+    return redirect(`/#${back || '/settings'}?connected=` + encodeURIComponent(email));
   }
 
   if (path === '/auth/logout') {
@@ -590,6 +593,7 @@ async function handleApi(req, env, url) {
     )
       .bind(pid, user.email, p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, now())
       .run();
+    await saveStorage(env, pid, b);
     if (user.role === 'pm') await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)').bind(pid, user.email, 'manager', now()).run();
     await saveMeta(env, pid, p);
     return json({ id: pid });
@@ -603,7 +607,8 @@ async function handleApi(req, env, url) {
         : null;
       const meta = await getMeta(env, project.id);
       return json({
-        project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta.money_pages || '', brand_terms: meta.brand_terms || '', lead_event: meta.lead_event || '' },
+        project: { ...project, members, connection_email: conn?.google_email || null, money_pages: meta.money_pages || '', brand_terms: meta.brand_terms || '', lead_event: meta.lead_event || '', storage: meta.storage || '' },
+        databases: shards(env).map((x) => x.name),
       });
     }
     if (method === 'PUT' && user.role === 'pm' && canManage(project)) {
@@ -614,6 +619,7 @@ async function handleApi(req, env, url) {
         .bind(p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, project.id)
         .run();
       await saveMeta(env, project.id, p);
+      await saveStorage(env, project.id, p);
       return json({ ok: true });
     }
     if (method === 'PUT' && user.role !== 'admin') {
@@ -635,6 +641,7 @@ async function handleApi(req, env, url) {
         .bind(p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, project.id)
         .run();
       await saveMeta(env, project.id, p);
+      await saveStorage(env, project.id, p);
       return json({ ok: true });
     }
     if (method === 'DELETE') {
@@ -1353,6 +1360,10 @@ async function dataDb(env, runId, assign = false) {
   const sizes = await Promise.all(list.map((x) => shardSize(x.db).catch(() => Infinity)));
   let best = 0;
   sizes.forEach((v, i) => { if (v < sizes[best]) best = i; });
+  // a project can be pinned to its own storage database (used while it has room)
+  const pref = await env.DB.prepare("SELECT m.value FROM runs r JOIN project_meta m ON m.project_id = r.project_id AND m.key = 'storage' WHERE r.id = ?").bind(runId).first().catch(() => null);
+  const pi = pref?.value ? list.findIndex((x) => x.name === pref.value) : -1;
+  if (pi >= 0 && sizes[pi] < SHARD_LIMIT * 0.95) best = pi;
   await env.DB.prepare('INSERT OR IGNORE INTO run_shard (run_id, shard) VALUES (?, ?)').bind(runId, list[best].name).run();
   return list[best].db;
 }
@@ -1387,6 +1398,12 @@ async function archiveOldRuns(env) {
 async function getMeta(env, projectId) {
   const { results } = await env.DB.prepare('SELECT key, value FROM project_meta WHERE project_id = ?').bind(projectId).all();
   return Object.fromEntries(results.map((r) => [r.key, r.value]));
+}
+
+async function saveStorage(env, projectId, b) {
+  if (!('storage' in (b || {}))) return;
+  const v = shards(env).some((x) => x.name === b.storage) ? b.storage : '';
+  await env.DB.prepare('INSERT OR REPLACE INTO project_meta (project_id, key, value) VALUES (?, ?, ?)').bind(projectId, 'storage', v).run();
 }
 
 async function saveMeta(env, projectId, p) {
@@ -1436,6 +1453,7 @@ async function validateProject(env, user, b) {
   const conn = await env.DB.prepare('SELECT id FROM connections WHERE id = ?').bind(b.connection_id || '').first();
   if (!conn) throw new HttpError(400, 'Pick one of the connected Google accounts');
   return {
+    ...('storage' in b ? { storage: String(b.storage || '') } : {}),
     name,
     site_url,
     gsc_property,

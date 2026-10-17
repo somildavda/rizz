@@ -418,18 +418,29 @@ function userEditor(u, projects) {
 
 // ---------- project form ----------
 async function renderProjectForm(pid) {
-  const p = pid ? (await api('/api/projects/' + pid)).project : { max_pages: 25 };
+  const pres = pid ? await api('/api/projects/' + pid) : null;
+  const p = pres ? pres.project : { max_pages: 25 };
+  const dbs = pres?.databases || (await api('/api/usage').catch(() => ({}))).databases?.map((d) => d.name) || ['main'];
+  const here = location.hash.replace(/^#/, '').split('?')[0];
+  const connectUrl = `/auth/connect?return=${encodeURIComponent(here)}`;
   const isOwner = isAdmin() || (isPM() && (!pid || canManage(p)));
   if (!isOwner && !(pid && canManage(p))) { app.innerHTML = '<div class="banner err">Only admins and project managers can open project settings.</div>'; return; }
   const { connections } = isOwner ? await api('/api/connections') : { connections: [{ id: p.connection_id, google_email: p.connection_email || '—' }] };
-  if (!connections.length) { location.hash = '#/settings'; return toast('Connect a Google account first'); }
+  if (!connections.length) {
+    app.innerHTML = `<div class="card center"><h2>Connect a Google account first</h2><p class="muted">Pick the Google account that has access to the Search Console property and GA4 property for this project. You'll come straight back here.</p><a class="btn primary" href="${connectUrl}">🔗 Connect Google account</a></div>`;
+    return;
+  }
+  const justConnected = hashParams().connected;
   app.innerHTML = `<div class="row spread"><h1>${pid ? 'Edit project' : 'New project'}</h1><a class="btn" href="${pid ? '#/p/' + pid : '#/'}">Cancel</a></div>
     <div class="grid g2 section">
       <div class="card">
         <label>Project name</label><input id="f-name" value="${esc(p.name || '')}" placeholder="e.g. Acme – India">
         ${isOwner ? '' : `<div class="banner small" style="margin-top:12px">You're a <b>manager</b> of this project: you can change its name, crawl default, money pages, brand terms and lead event, and manage its team. The Google account and properties are set by an admin.</div>`}
         <div class="${isOwner ? '' : 'hidden'}"><label>Google account with access</label>
-        <select id="f-conn">${connections.map((c) => `<option value="${c.id}" ${c.id === p.connection_id ? 'selected' : ''}>${esc(c.google_email)}</option>`).join('')}</select>
+        <div class="row" style="flex-wrap:nowrap"><select id="f-conn" style="flex:1">${connections.map((c) => `<option value="${c.id}" ${(justConnected ? c.google_email === justConnected : c.id === p.connection_id) ? 'selected' : ''}>${esc(c.google_email)}</option>`).join('')}</select>
+          <a class="btn" href="${connectUrl}" title="Sign in with another Google account that has access to this site's Search Console / GA4">+ Connect another account</a></div>
+        <div class="hint">Don't see the right Search Console / GA4 property below? Connect the Google account that has access to it — you'll come straight back to this form.</div>
+        ${justConnected ? `<div class="banner small" style="margin-top:8px">✅ Connected <b>${esc(justConnected)}</b> — pick its properties below.</div>` : ''}
         <label>Search Console property</label><select id="f-gsc"><option>Loading…</option></select>
         <label>GA4 property <span class="muted">(optional)</span></label><select id="f-ga"><option value="">Loading…</option></select>
         <div id="prop-err" class="hint"></div>
@@ -439,6 +450,9 @@ async function renderProjectForm(pid) {
         <div class="hint"><b>What it means:</b> how many pages of your site the tool opens and checks on each run (titles, meta, H1, schema, content vs. keywords, speed, AI-search readiness…).
           Money pages go first, then the pages with the most Search Console clicks & impressions. Pages beyond this number still count in GSC/GA numbers — they just aren't audited.<br>
           <b>Suggestion:</b> 100 for a quick weekly check · 250–500 for a monthly deep audit · up to 1,000 for the whole site or all LOB pages. ≈ 1 minute per 100 pages; you can change it on each run.</div>
+        <div class="${isOwner ? '' : 'hidden'}"><label>💾 Storage database</label>
+        <select id="f-store">${['', ...dbs].map((d) => `<option value="${esc(d)}" ${d === (p.storage || '') ? 'selected' : ''}>${d === '' ? 'Automatic — whichever database has the most free space' : d === 'main' ? 'Main database' : 'Database ' + d.replace('DATA', '#')}</option>`).join('')}</select>
+        <div class="hint">Give a big project its own free 500 MB database: in Terminal run <code>npm run add-storage</code> then <code>npm run deploy</code>, then pick the new database here. New runs of this project are saved there (it switches to automatic only if that database is almost full). Existing runs stay where they are.</div></div>
         <label>💰 Money pages <span class="muted">(always crawled first, highlighted, prioritised by the AI)</span></label>
         <textarea id="f-money" rows="5" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
         <div class="hint">One full URL per line (up to 300).</div>
@@ -478,7 +492,7 @@ async function renderProjectForm(pid) {
     const b = {
       name: document.getElementById('f-name').value, connection_id: document.getElementById('f-conn').value,
       gsc_property: document.getElementById('f-gsc').value, ga4_property: ga.value, ga4_name: ga.value ? ga.selectedOptions[0].textContent : '',
-      site_url: document.getElementById('f-site').value, max_pages: document.getElementById('f-max').value, money_pages: document.getElementById('f-money').value, brand_terms: document.getElementById('f-brand').value, lead_event: document.getElementById('f-lead').value,
+      site_url: document.getElementById('f-site').value, storage: document.getElementById('f-store').value, max_pages: document.getElementById('f-max').value, money_pages: document.getElementById('f-money').value, brand_terms: document.getElementById('f-brand').value, lead_event: document.getElementById('f-lead').value,
     };
     try {
       if (pid) { await api('/api/projects/' + pid, { method: 'PUT', body: b }); location.hash = '#/p/' + pid; }
