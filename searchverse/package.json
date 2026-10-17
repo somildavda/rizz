@@ -6,7 +6,8 @@
     "deploy": "node scripts/stamp-version.mjs && wrangler deploy",
     "db:init": "wrangler d1 execute searchverse --remote --file=schema.sql",
     "db:init:local": "wrangler d1 execute searchverse --local --file=schema.sql",
-    "add-storage": "node scripts/add-storage.mjs"
+    "add-storage": "node scripts/add-storage.mjs",
+    "move-account": "node scripts/move-account.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
