@@ -280,13 +280,22 @@ async function accessToken(env, connectionId) {
   const c = await env.DB.prepare('SELECT * FROM connections WHERE id = ?').bind(connectionId).first();
   if (!c) throw new HttpError(400, 'The Google connection for this project was removed. Edit the project and pick another account.');
   if (c.access_token_enc && c.access_expires > now() + 60000) return decrypt(env, c.access_token_enc);
+  const secret = await decrypt(env, c.refresh_token_enc);
+  if (secret.startsWith('sa:')) {
+    // service account: sign a JWT with its private key — never expires, no Google consent screen
+    const tok = await serviceToken(JSON.parse(secret.slice(3)));
+    await env.DB.prepare('UPDATE connections SET access_token_enc = ?, access_expires = ?, expired = 0 WHERE id = ?')
+      .bind(await encrypt(env, tok.access_token), now() + tok.expires_in * 1000, c.id)
+      .run();
+    return tok.access_token;
+  }
   const res = await fetch(GOOGLE_TOKEN, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: env.GOOGLE_CLIENT_ID,
       client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: await decrypt(env, c.refresh_token_enc),
+      refresh_token: secret,
       grant_type: 'refresh_token',
     }),
   });
@@ -302,6 +311,28 @@ async function accessToken(env, connectionId) {
     .bind(await encrypt(env, tok.access_token), now() + tok.expires_in * 1000, c.id)
     .run();
   return tok.access_token;
+}
+
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64urlStr = (s) => b64url(new TextEncoder().encode(s));
+async function serviceToken(sa) {
+  const pem = String(sa.private_key || '').replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(pem), (ch) => ch.charCodeAt(0));
+  const key = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+  const iat = Math.floor(Date.now() / 1000);
+  const unsigned = b64urlStr(JSON.stringify({ alg: 'RS256', typ: 'JWT' })) + '.' + b64urlStr(JSON.stringify({
+    iss: sa.client_email, aud: GOOGLE_TOKEN, iat, exp: iat + 3600,
+    scope: 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly',
+  }));
+  const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
+  const res = await fetch(GOOGLE_TOKEN, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: unsigned + '.' + b64url(sig) }),
+  });
+  const tok = await res.json().catch(() => ({}));
+  if (!res.ok) throw new HttpError(400, `Service account ${sa.client_email} could not sign in: ${tok.error_description || tok.error || res.statusText}`);
+  return tok;
 }
 
 async function gfetch(token, url, payload) {
@@ -514,6 +545,24 @@ async function handleApi(req, env, url) {
   }
 
   // connections
+  if (path === '/api/connections/service' && method === 'POST') {
+    if (user.role !== 'pm') requireAdmin(user);
+    let sa;
+    try { sa = JSON.parse((await body(req)).json || ''); } catch { throw new HttpError(400, 'That is not valid JSON — paste the whole key file you downloaded from Google Cloud.'); }
+    if (sa.type !== 'service_account' || !sa.client_email || !sa.private_key) throw new HttpError(400, 'This is not a service-account key file (it needs "type": "service_account", client_email and private_key).');
+    const keep = { client_email: sa.client_email, private_key: sa.private_key };
+    const tok = await serviceToken(keep); // proves the key works before saving
+    await DB.prepare(
+      `INSERT INTO connections (id, owner_email, google_email, refresh_token_enc, access_token_enc, access_expires, scopes, created_at, connected_at, expired)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(owner_email, google_email) DO UPDATE SET refresh_token_enc = excluded.refresh_token_enc, access_token_enc = excluded.access_token_enc,
+         access_expires = excluded.access_expires, scopes = excluded.scopes, connected_at = excluded.connected_at, expired = 0`
+    )
+      .bind(id(), user.email, sa.client_email, await encrypt(env, 'sa:' + JSON.stringify(keep)), await encrypt(env, tok.access_token), now() + tok.expires_in * 1000,
+        'service webmasters analytics', now(), now())
+      .run();
+    return json({ ok: true, email: sa.client_email });
+  }
   // PMs may read the connected Google accounts (to create / set up projects) but not add or remove them
   const pmRead = user.role === 'pm' && method === 'GET' && (path === '/api/connections' || /^\/api\/connections\/\w+\/properties$/.test(path));
   if ((path.startsWith('/api/connections') && !pmRead) || path.startsWith('/api/users')) requireAdmin(user);

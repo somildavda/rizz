@@ -70,12 +70,13 @@ function hashParams() {
 // Testing-mode Google apps expire refresh tokens 7 days after consent.
 const TOKEN_DAYS = 7;
 function connStatus(c) {
+  if ((c.scopes || '').includes('service')) return { expired: false, days: 9999, html: '<span class="pill good">Shared access · never expires</span>' };
   const left = c.connected_at + TOKEN_DAYS * 86400000 - Date.now();
   if (c.expired || left <= 0) return { expired: true, days: 0, html: '<span class="pill bad">Expired — reconnect</span>' };
   const days = Math.ceil(left / 86400000);
   return { expired: false, days, html: `<span class="pill ${days <= 2 ? 'warn' : 'good'}">Active · expires in ${days} day${days > 1 ? 's' : ''}</span>` };
 }
-const reconnectBtn = (c, cls = 'btn sm primary') => `<a class="${cls}" href="/auth/connect?hint=${encodeURIComponent(c.google_email)}">Reconnect</a>`;
+const reconnectBtn = (c, cls = 'btn sm primary') => ((c.scopes || '').includes('service') ? '' : `<a class="${cls}" href="/auth/connect?hint=${encodeURIComponent(c.google_email)}">Reconnect</a>`);
 
 // ---------- charts ----------
 function lineChart(series, { height = 180, labels = [] } = {}) {
@@ -281,7 +282,17 @@ async function renderSettings(err, p) {
             <div class="small muted">${c.scopes?.includes('webmasters') ? 'Search Console ✓' : 'Search Console ✗'} · ${c.scopes?.includes('analytics') ? 'Analytics ✓' : 'Analytics ✗'} · last connected ${new Date(c.connected_at).toLocaleDateString()}</div>
             <div style="margin-top:4px">${connStatus(c).html}</div></div>
             <div class="row" style="gap:6px">${reconnectBtn(c, connStatus(c).days <= 2 ? 'btn sm primary' : 'btn sm')}<button class="btn sm danger" data-del="${c.id}">Remove</button></div></div>`).join('') || '<p class="muted">No accounts connected yet.</p>'}
-        <p><a class="btn primary" href="/auth/connect">+ Connect a Google account</a></p>
+        <div class="share-box" id="sa"><b>🔑 Shared access (recommended) — set up once</b>
+          <p class="small muted" style="margin:6px 0">Create one Google <b>service account</b>; for every new project the site owner just adds its email to Search Console and GA4. No Google sign-in, no test users, never expires.</p>
+          <details class="small"><summary><b>How to get the key file (5 min, free, one time)</b></summary><ol style="padding-left:18px">
+            <li>Open <a href="https://console.cloud.google.com/iam-admin/serviceaccounts" target="_blank" rel="noopener">Google Cloud → IAM → Service accounts</a> (same project as your Google sign-in).</li>
+            <li><b>+ Create service account</b> → name it <code>searchverse</code> → <b>Done</b> (no roles needed).</li>
+            <li>Click it → <b>Keys</b> → <b>Add key → Create new key → JSON</b>. A .json file downloads.</li>
+            <li>Make sure the <b>Google Search Console API</b>, <b>Google Analytics Data API</b> and <b>Google Analytics Admin API</b> are enabled in that project (APIs &amp; Services → Library).</li>
+            <li>Open the .json file in TextEdit, copy everything and paste it below.</li></ol></details>
+          <textarea id="sa-json" rows="3" placeholder='{ "type": "service_account", "client_email": "searchverse@….iam.gserviceaccount.com", "private_key": "…" }' style="margin-top:8px"></textarea>
+          <div class="row" style="margin-top:8px"><button class="btn primary" id="sa-save">Save shared access</button><span class="small muted">Stored encrypted. Only the email is ever shown.</span></div></div>
+        <p style="margin-top:14px"><a class="btn" href="/auth/connect">👤 Or connect a Google account by signing in</a></p>
         <p class="hint">Tip: on Google's screen pick the account that owns the properties and tick both permission boxes. While the Google app is in testing mode, access lasts 7 days. Click <b>Reconnect</b> when it expires. Your projects and history are kept.</p>
       </div>` : `<div class="card"><h2>Your access</h2><p>You're a <b>member</b>. An admin manages Google connections, projects and who can see what.</p><p class="muted small">Ask your admin if you need access to another project or permission to run analyses.</p></div>`}
       <div class="card">
@@ -336,6 +347,11 @@ async function renderSettings(err, p) {
       document.getElementById('ret-clean').onclick = async () => after(await api('/api/retention/cleanup', { method: 'POST' }));
     }).catch(() => {});
   }
+  document.getElementById('sa-save')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    try { const r = await api('/api/connections/service', { method: 'POST', body: { json: document.getElementById('sa-json').value } }); toast('Shared access ready: ' + r.email); location.hash = '#/settings?connected=' + encodeURIComponent(r.email); route(); }
+    catch (er) { toast(er.message, 8000); e.target.disabled = false; }
+  });
   app.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
     if (!confirm('Remove this Google account? Projects using it will stop updating until you pick another account.')) return;
     await api('/api/connections/' + b.dataset.del, { method: 'DELETE' });
@@ -426,45 +442,51 @@ async function renderProjectForm(pid) {
   const isOwner = isAdmin() || (isPM() && (!pid || canManage(p)));
   if (!isOwner && !(pid && canManage(p))) { app.innerHTML = '<div class="banner err">Only admins and project managers can open project settings.</div>'; return; }
   const { connections } = isOwner ? await api('/api/connections') : { connections: [{ id: p.connection_id, google_email: p.connection_email || '—' }] };
-  if (!connections.length) {
-    app.innerHTML = `<div class="card center"><h2>Connect a Google account first</h2><p class="muted">Pick the Google account that has access to the Search Console property and GA4 property for this project. You'll come straight back here.</p><a class="btn primary" href="${connectUrl}">🔗 Connect Google account</a></div>`;
-    return;
-  }
   const justConnected = hashParams().connected;
-  app.innerHTML = `<div class="row spread"><h1>${pid ? 'Edit project' : 'New project'}</h1><a class="btn" href="${pid ? '#/p/' + pid : '#/'}">Cancel</a></div>
-    <div class="grid g2 section">
-      <div class="card">
-        <label>Project name</label><input id="f-name" value="${esc(p.name || '')}" placeholder="e.g. Acme – India">
-        ${isOwner ? '' : `<div class="banner small" style="margin-top:12px">You're a <b>manager</b> of this project: you can change its name, crawl default, money pages, brand terms and lead event, and manage its team. The Google account and properties are set by an admin.</div>`}
-        <div class="${isOwner ? '' : 'hidden'}"><label>Google account with access</label>
-        <div class="row" style="flex-wrap:nowrap"><select id="f-conn" style="flex:1">${connections.map((c) => `<option value="${c.id}" ${(justConnected ? c.google_email === justConnected : c.id === p.connection_id) ? 'selected' : ''}>${esc(c.google_email)}</option>`).join('')}</select>
-          <a class="btn" href="${connectUrl}" title="Sign in with another Google account that has access to this site's Search Console / GA4">+ Connect another account</a></div>
-        <div class="hint">Don't see the right Search Console / GA4 property below? Connect the Google account that has access to it — you'll come straight back to this form.</div>
-        ${justConnected ? `<div class="banner small" style="margin-top:8px">✅ Connected <b>${esc(justConnected)}</b> — pick its properties below.</div>` : ''}
-        <label>Search Console property</label><select id="f-gsc"><option>Loading…</option></select>
+  const isSA = (c) => (c?.scopes || '').includes('service');
+  const sa = connections.find(isSA);
+  const step = (n, title, sub, body, hide) => `<div class="card step-card ${hide ? 'hidden' : ''}"><div class="step-h"><span class="step-n">${n}</span><div><h2 style="margin:0">${title}</h2>${sub ? `<div class="small muted">${sub}</div>` : ''}</div></div>${body}</div>`;
+  app.innerHTML = `<div class="row spread"><div><h1>${pid ? 'Edit project' : 'New project'}</h1><div class="muted small">${pid ? esc(p.name) : 'Three quick steps — data access, the site, then the details.'}</div></div><a class="btn" href="${pid ? '#/p/' + pid : '#/'}">Cancel</a></div>
+    <div class="grid g2 section" style="align-items:start">
+      <div class="steps">
+      ${step('1', 'Data access', 'How Searchverse reads this site’s Search Console & GA4', `
+        ${sa ? `<div class="share-box"><div class="row spread"><b>⭐ Easiest: share the property with Searchverse</b><span class="pill good">No Google sign-in · never expires</span></div>
+          <p class="small muted" style="margin:6px 0 10px">Whoever owns the site adds this email once — no Google Cloud changes, works for any client or Google account.</p>
+          <div class="copy-row"><code id="sa-mail">${esc(sa.google_email)}</code><button class="btn sm" id="sa-copy">📋 Copy</button></div>
+          <ol class="small" style="margin:10px 0 0;padding-left:18px">
+            <li><b>Search Console</b> → the property → Settings → <b>Users and permissions</b> → Add user → paste the email → Permission <b>Restricted</b>.</li>
+            <li><b>GA4</b> → Admin → <b>Property access management</b> → ＋ Add users → paste the email → Role <b>Viewer</b> (untick “Notify”).</li>
+            <li>Pick <b>${esc(sa.google_email.split('@')[0])} (shared access)</b> below and click <b>🔄 Load properties</b>.</li></ol></div>`
+        : isOwner ? `<div class="banner small">💡 Tip: set up <a href="#/settings">shared access</a> once (Settings → Google data accounts → Service account) and clients just add one email to their GSC/GA4 — no Google sign-in and no Google Cloud changes per account.</div>` : ''}
+        <label>Account used for this project</label>
+        <div class="row" style="flex-wrap:nowrap"><select id="f-conn" style="flex:1">${connections.map((c) => `<option value="${c.id}" ${(justConnected ? c.google_email === justConnected : pid ? c.id === p.connection_id : c === (sa || connections[0])) ? 'selected' : ''}>${isSA(c) ? '🔑 ' + esc(c.google_email.split('@')[0]) + ' (shared access)' : '👤 ' + esc(c.google_email)}</option>`).join('') || '<option value="">— nothing connected yet —</option>'}</select>
+          <button class="btn" id="f-reload" title="Reload the properties this account can see">🔄 Load properties</button></div>
+        <details class="small" style="margin-top:10px"><summary class="muted">Or sign in with a Google account instead</summary>
+          <p class="muted">Signs in with a Google account that already has access. While your Google app is in <b>Testing</b>, that email must be listed as a test user in Google Cloud first — shared access above avoids this.</p>
+          <a class="btn sm" href="${connectUrl}">👤 Sign in with another Google account</a></details>
+        ${justConnected ? `<div class="banner small" style="margin-top:8px">✅ Connected <b>${esc(justConnected)}</b> — pick its properties in step 2.</div>` : ''}`, !isOwner)}
+      ${step('2', 'The site', 'Pick the properties this project reports on', `
+        <label style="margin-top:0">Search Console property</label><select id="f-gsc"><option>Loading…</option></select>
         <label>GA4 property <span class="muted">(optional)</span></label><select id="f-ga"><option value="">Loading…</option></select>
         <div id="prop-err" class="hint"></div>
         <label>Homepage URL</label><input id="f-site" value="${esc(p.site_url || '')}" placeholder="Auto from Search Console property">
-        <div class="hint">Used for crawling and robots.txt / sitemap checks.</div></div>
+        <div class="hint">Used for crawling and robots.txt / sitemap checks.</div>`, !isOwner)}
+      ${step(isOwner ? '3' : '✎', 'Project details', 'Name, crawl size, money pages and brand terms', `
+        ${isOwner ? '' : `<div class="banner small" style="margin-bottom:8px">You're the <b>PM</b> of this project: you can change these details and its team. Data access is set by an admin.</div>`}
+        <label style="margin-top:0">Project name</label><input id="f-name" value="${esc(p.name || '')}" placeholder="e.g. Acme – India">
         <label>Pages to crawl per run <span class="muted">(default for new runs)</span></label><input id="f-max" type="number" min="5" max="1000" value="${p.max_pages || 25}">
-        <div class="hint"><b>What it means:</b> how many pages of your site the tool opens and checks on each run (titles, meta, H1, schema, content vs. keywords, speed, AI-search readiness…).
-          Money pages go first, then the pages with the most Search Console clicks & impressions. Pages beyond this number still count in GSC/GA numbers — they just aren't audited.<br>
-          <b>Suggestion:</b> 100 for a quick weekly check · 250–500 for a monthly deep audit · up to 1,000 for the whole site or all LOB pages. ≈ 1 minute per 100 pages; you can change it on each run.</div>
+        <div class="hint">100 for a quick weekly check · 250–500 for a monthly deep audit · up to 1,000 for the whole site or all LOB pages (≈ 1 min per 100 pages). Money pages are always crawled first.</div>
         <div class="${isOwner ? '' : 'hidden'}"><label>💾 Storage database</label>
         <select id="f-store">${['', ...dbs].map((d) => `<option value="${esc(d)}" ${d === (p.storage || '') ? 'selected' : ''}>${d === '' ? 'Automatic — whichever database has the most free space' : d === 'main' ? 'Main database' : 'Database ' + d.replace('DATA', '#')}</option>`).join('')}</select>
-        <div class="hint">Give a big project its own free 500 MB database: in Terminal run <code>npm run add-storage</code> then <code>npm run deploy</code>, then pick the new database here. New runs of this project are saved there (it switches to automatic only if that database is almost full). Existing runs stay where they are.</div></div>
-        <label>💰 Money pages <span class="muted">(always crawled first, highlighted, prioritised by the AI)</span></label>
-        <textarea id="f-money" rows="5" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
-        <div class="hint">One full URL per line (up to 300).</div>
-        <label>🏷️ Brand terms <span class="muted">(queries containing these are "branded")</span></label>
+        <div class="hint">Big project? Give it its own free 500 MB database: run <code>npm run add-storage</code> and <code>npm run deploy</code>, then pick it here.</div></div>
+        <label>💰 Money pages <span class="muted">(one URL per line — crawled first, prioritised by the AI)</span></label>
+        <textarea id="f-money" rows="4" placeholder="https://www.example.com/plans/broadband&#10;https://www.example.com/postpaid">${esc(p.money_pages || '')}</textarea>
+        <label>🏷️ Brand terms <span class="muted">(comma separated — these queries count as branded)</span></label>
         <input id="f-brand" value="${esc(p.brand_terms || '')}" placeholder="airtel, xstream, airtel thanks">
-        <div class="hint">Comma separated. Spaces are ignored when matching, so "airtel" also matches "air tel".</div>
         <label>🎯 Lead event in GA4 <span class="muted">(optional)</span></label>
         <input id="f-lead" value="${esc(p.lead_event || '')}" placeholder="e.g. generate_lead or form_submit">
-        <div class="hint">The exact GA4 key event name that counts as a lead. Shown as a separate "Leads" column.</div>
-        <div class="hint">Top pages by clicks & impressions from Search Console (5–100).</div>
         <div class="row" style="margin-top:20px"><button class="btn primary" id="f-save">${pid ? 'Save changes' : 'Create project'}</button>
-        ${pid && isAdmin() ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>
+        ${pid && isAdmin() ? '<button class="btn danger" id="f-del">Delete project</button>' : ''}</div>`)}
       </div>
       ${pid ? `<div class="card"><h2>Team access</h2>
         <p class="muted small">Admins see every project. Members only see the projects they're added to: <b>Client</b> only views · <b>Analyst</b> also runs analyses · <b>PM</b> also edits settings & LOBs, deletes runs and gives access${isAdmin() ? '' : ' (only admins can add PMs)'}. Everyone signs in with their own Google account.</p>
@@ -478,14 +500,17 @@ async function renderProjectForm(pid) {
     gsc.innerHTML = '<option>Loading…</option>'; ga.innerHTML = '<option value="">Loading…</option>';
     try {
       const r = await api(`/api/connections/${document.getElementById('f-conn').value}/properties`);
-      gsc.innerHTML = r.gsc.map((s) => `<option value="${esc(s.url)}" ${s.url === p.gsc_property ? 'selected' : ''}>${esc(s.url)}</option>`).join('') || '<option value="">No Search Console properties on this account</option>';
+      gsc.innerHTML = r.gsc.map((s) => `<option value="${esc(s.url)}" ${s.url === p.gsc_property ? 'selected' : ''}>${esc(s.url)}</option>`).join('') || '<option value="">Nothing found — share the property with this account (step 1), wait a minute, then 🔄 Load properties</option>';
       ga.innerHTML = '<option value="">— None —</option>' + r.ga4.map((g) => `<option value="${esc(g.id)}" ${g.id === p.ga4_property ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
       document.getElementById('prop-err').textContent = [r.errors.gsc && 'Search Console: ' + r.errors.gsc, r.errors.ga4 && 'GA4: ' + r.errors.ga4].filter(Boolean).join(' · ');
       if (!pid && !document.getElementById('f-name').value && gsc.value) document.getElementById('f-name').value = gsc.value.replace(/^sc-domain:|^https?:\/\/|\/$/g, '');
     } catch (e) { document.getElementById('prop-err').textContent = e.message; }
   };
   document.getElementById('f-conn').onchange = load;
-  if (isOwner) load();
+  document.getElementById('f-reload').onclick = (e) => { e.preventDefault(); load(); };
+  document.getElementById('sa-copy')?.addEventListener('click', () => { navigator.clipboard?.writeText(sa.google_email); toast('Copied ' + sa.google_email); });
+  if (isOwner && connections.length) load();
+  else if (isOwner) { document.getElementById('f-gsc').innerHTML = '<option value="">Connect data access in step 1 first</option>'; document.getElementById('f-ga').innerHTML = '<option value="">—</option>'; }
 
   document.getElementById('f-save').onclick = async () => {
     const ga = document.getElementById('f-ga');
