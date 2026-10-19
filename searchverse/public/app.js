@@ -658,6 +658,7 @@ async function renderRunner(pid) {
         <div class="r-cust hidden"><label class="small" style="margin-top:0">Compare to</label><input type="date" id="r-pend" style="width:auto"></div>
       </div>
       <div class="hint" id="r-cmp-text"></div>
+      <div id="r-fresh" class="fresh-note small muted">⏳ Checking how fresh this site's Search Console data is…</div>
 
       <h3 style="margin-top:22px">🎯 Scope</h3>
       <select id="r-scope" style="width:auto"><option value="">Whole site</option>
@@ -713,10 +714,51 @@ async function renderRunner(pid) {
       ps = new Date($('r-pstart').value); pe = new Date($('r-pend').value);
     } else if ($('r-compare').value === 'year') { ps = new Date(s); ps.setUTCFullYear(ps.getUTCFullYear() - 1); pe = new Date(e); pe.setUTCFullYear(pe.getUTCFullYear() - 1); }
     else { pe = new Date(s.getTime() - 86400000); ps = new Date(pe.getTime() - (len - 1) * 86400000); }
-    $('r-cmp-text').textContent = `${len} days: ${range(isoDay(s), isoDay(e))}, compared with ${range(isoDay(ps), isoDay(pe))}. Search Console keeps ~16 months and lags 2–3 days.`;
+    $('r-cmp-text').textContent = `${len} days: ${range(isoDay(s), isoDay(e))}, compared with ${range(isoDay(ps), isoDay(pe))}. Search Console keeps ~16 months.`;
+    freshNote();
   };
+  // Search Console freshness: final data usually lags 2–3 days; the newest 1–2 days are preliminary
+  let FRESH = null;
+  const freshNote = () => {
+    const box = $('r-fresh');
+    if (!box || !FRESH) return;
+    const end = $('r-end').value, { final, all } = FRESH;
+    if (!final && !all) { box.className = 'fresh-note small banner err'; box.innerHTML = '⚠️ Search Console returned no data for the last 12 days — check the property has data or that access hasn’t expired.'; return; }
+    const missing = all && end > all ? Math.round((new Date(end) - new Date(all)) / 86400000) : 0;
+    if (missing) {
+      box.className = 'fresh-note small banner err';
+      box.innerHTML = `⚠️ <b>Search Console data is only available until ${dmy(all)}</b> (final until ${dmy(final || all)}). The last <b>${missing} day${missing > 1 ? 's' : ''}</b> of your range have no data yet, so clicks & impressions will look lower than they are. <button class="btn sm primary" id="r-fresh-fix">Use data until ${dmy(final || all)}</button>`;
+    } else if (final && end > final) {
+      box.className = 'fresh-note small banner';
+      box.innerHTML = `ℹ️ Data after <b>${dmy(final)}</b> is <b>preliminary</b> (Google may still adjust it slightly). Latest preliminary day: ${dmy(all)}. <button class="btn sm" id="r-fresh-fix">End on ${dmy(final)} instead</button>`;
+    } else {
+      box.className = 'fresh-note small good-note';
+      box.innerHTML = `✅ Complete data for this range. Search Console has final data until <b>${dmy(final)}</b>${all && all > final ? ` (preliminary until ${dmy(all)})` : ''}.`;
+    }
+    document.getElementById('r-fresh-fix')?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const s0 = new Date($('r-start').value), e0 = new Date($('r-end').value), target = new Date(final || all), shift = e0 - target;
+      if ($('r-preset').value === 'custom' || /^l|lm/.test($('r-preset').value)) { $('r-end').value = isoDay(target); }
+      else { $('r-start').value = isoDay(new Date(s0 - shift)); $('r-end').value = isoDay(target); }
+      $('r-preset').value = /^\d+$/.test($('r-preset').value) ? $('r-preset').value : 'custom';
+      cmpText();
+    });
+  };
+  api(`/api/projects/${pid}/gsc-freshness`).then((f) => {
+    FRESH = f;
+    // rolling presets (last 7/28/90 days) should end on the latest final day, not a guess
+    if (/^\d+$/.test($('r-preset').value) && f.final && $('r-end').value !== f.final) {
+      const n = +$('r-preset').value, e1 = new Date(f.final);
+      $('r-end').value = f.final; $('r-start').value = isoDay(new Date(e1 - (n - 1) * 86400000));
+    }
+    cmpText();
+  }).catch((e) => { const b = $('r-fresh'); if (b) b.textContent = 'Couldn’t check Search Console freshness: ' + e.message; });
   $('r-preset').onchange = () => {
-    if ($('r-preset').value !== 'custom') { const [s, e] = presetRange($('r-preset').value); $('r-start').value = isoDay(s); $('r-end').value = isoDay(e); }
+    if ($('r-preset').value !== 'custom') {
+      let [s, e] = presetRange($('r-preset').value);
+      if (FRESH?.final && /^\d+$/.test($('r-preset').value)) { e = new Date(FRESH.final); s = new Date(e - (+$('r-preset').value - 1) * 86400000); }
+      $('r-start').value = isoDay(s); $('r-end').value = isoDay(e);
+    }
     cmpText();
   };
   ['r-start', 'r-end'].forEach((id) => ($(id).onchange = () => { $('r-preset').value = 'custom'; cmpText(); }));

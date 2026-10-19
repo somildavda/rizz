@@ -1112,6 +1112,18 @@ async function handleApi(req, env, url) {
     }
     return gscPassthrough(env, project, b, filters);
   }
+  // how fresh is Search Console? latest day with final data vs latest day with any (preliminary) data
+  if ((m = path.match(/^\/api\/projects\/(\w+)\/gsc-freshness$/)) && method === 'GET') {
+    const project = await getProject(env, m[1], user.email);
+    const token = await accessToken(env, project.connection_id);
+    const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    const ask = (state) => fetch(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(project.gsc_property)}/searchAnalytics/query`, {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ startDate: day(12), endDate: day(0), dimensions: ['date'], type: 'web', rowLimit: 30, ...(state ? { dataState: state } : {}) }),
+    }).then((r) => r.json()).then((d) => (d.rows || []).map((r) => r.keys[0]).sort().pop() || null);
+    const [final, all] = await Promise.all([ask(''), ask('all')]);
+    return json({ final, all, today: day(0) });
+  }
   if ((m = path.match(/^\/api\/projects\/(\w+)\/ga-rows$/)) && method === 'POST') {
     const project = await getProject(env, m[1], user.email);
     if (!project.ga4_property) return json({ rows: [] });

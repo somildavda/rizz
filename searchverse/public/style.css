@@ -345,3 +345,6 @@ main > .row.spread:first-child h1, main h1 { margin: 0; }
 .news .news-list { flex: 1 1 auto; min-height: 0; }
 .news-tabs { width: 100%; }
 .news-tabs button { white-space: nowrap; min-height: 32px; }
+.fresh-note { margin-top: 8px; }
+.fresh-note .btn { margin-left: 6px; vertical-align: middle; }
+.good-note { color: var(--good); }
