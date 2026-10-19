@@ -436,6 +436,33 @@ async function handleApi(req, env, url) {
   const method = req.method;
   let m;
 
+  // latest news / PR mentions for the brands of the projects this user can see (Google News RSS, free)
+  if (path === '/api/news/brands' && method === 'GET') {
+    const { results } = await DB.prepare(
+      `SELECT p.id, p.name, p.site_url, (SELECT value FROM project_meta WHERE project_id = p.id AND key = 'brand_terms') AS brand_terms
+       FROM projects p LEFT JOIN project_members m ON m.project_id = p.id AND m.email = ?
+       WHERE ? = 'admin' OR m.email IS NOT NULL ORDER BY p.created_at DESC LIMIT 12`
+    ).bind(user.email, user.role).all();
+    const brands = results.map((p) => {
+      const term = String(p.brand_terms || '').split(',').map((t) => t.trim()).filter(Boolean)[0];
+      let host = ''; try { host = new URL(p.site_url).hostname.replace(/^www\./, ''); } catch {}
+      const name = term || String(p.name || host).replace(/^https?:\/\/|^www\.|\.(com|in|co\.in|org|net)\/?$/gi, '');
+      return { project: p.id, brand: name.charAt(0).toUpperCase() + name.slice(1) };
+    }).filter((b) => b.brand);
+    const lists = await Promise.allSettled(brands.map(async (b) => {
+      const r = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent('"' + b.brand + '"')}+when:30d&hl=en-IN&gl=IN&ceid=IN:en`,
+        { headers: { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0)' }, cf: { cacheTtl: 7200, cacheEverything: true } });
+      if (!r.ok) throw new Error(String(r.status));
+      return parseFeed(await r.text(), { src: 'Google News', cat: 'brand' }).slice(0, 12).map((it) => {
+        // Google News titles end with " - Publisher"
+        const m = it.title.match(/^(.*) - ([^-]{2,60})$/);
+        return { ...it, title: m ? m[1] : it.title, src: m ? m[2] : it.src, brand: b.brand, project: b.project, summary: '',
+          flag: /launch|partner|acquir|funding|ipo|results|profit|loss|tariff|price|outage|lawsuit|fine|ban|ceo|appoint/i.test(it.title) ? 'PR' : '' };
+      });
+    }));
+    const items = lists.flatMap((l) => (l.status === 'fulfilled' ? l.value : [])).sort((a, b) => b.ts - a.ts).slice(0, 80);
+    return json({ items, brands: brands.map((b) => b.brand) });
+  }
   // SEO & AI news from free public feeds (cached ~3 hours at Cloudflare's edge)
   if (path === '/api/news' && method === 'GET') {
     const cache = caches.default, key = new Request(url.origin + '/__news_v1');

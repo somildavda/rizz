@@ -340,3 +340,8 @@ main > .row.spread:first-child h1, main h1 { margin: 0; }
 .home-grid .pc-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 @media (max-width: 1350px) and (min-width: 1101px) { .home-grid .pc-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .home-grid .pc-stats { grid-template-columns: repeat(2, 1fr); } }
+/* keep the news tabs visible: only the list scrolls */
+.news > * { flex-shrink: 0; }
+.news .news-list { flex: 1 1 auto; min-height: 0; }
+.news-tabs { width: 100%; }
+.news-tabs button { white-space: nowrap; min-height: 32px; }

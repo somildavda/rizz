@@ -285,25 +285,38 @@ function projectCard(p) {
   </div>`;
 }
 // ---------- SEO & AI updates feed ----------
-let NEWS = null, NEWS_TAB = 'all';
+let NEWS = null, BRAND_NEWS = null, BRANDS = [], NEWS_TAB = 'brands', BRAND_PICK = '';
 const newsPanel = () => `<aside class="card news" id="news"><div class="row spread"><h2 style="margin:0">📰 SEO &amp; AI updates</h2><button class="btn sm" data-news-refresh title="Refresh">⟳</button></div>
-  <div class="seg news-tabs">${[['all', 'All'], ['google', 'Google'], ['seo', 'SEO news'], ['ai', 'AI & LLMs']].map(([k, l]) => `<button data-news="${k}" class="${k === NEWS_TAB ? 'on' : ''}">${l}</button>`).join('')}</div>
+  <div class="seg news-tabs">${[['brands', '🏷️ Our brands'], ['google', 'Google'], ['seo', 'SEO'], ['ai', 'AI & LLMs']].map(([k, l]) => `<button data-news="${k}" class="${k === NEWS_TAB ? 'on' : ''}">${l}</button>`).join('')}</div>
+  <select id="news-brand" class="hidden" style="margin-bottom:8px"></select>
   <div id="news-list" class="news-list"><div class="muted small">Loading the latest updates…</div></div>
-  <p class="small muted" style="margin:10px 0 0">From Google Search Central, Search Engine Roundtable / Land / Journal, Google AI, OpenAI and Hugging Face. Refreshed every few hours.</p></aside>`;
+  <p class="small muted" style="margin:10px 0 0" id="news-src"></p></aside>`;
 const ago = (ts) => { if (!ts) return ''; const d = (Date.now() - ts) / 3600000; return d < 1 ? 'just now' : d < 24 ? `${Math.floor(d)}h ago` : d < 24 * 14 ? `${Math.floor(d / 24)}d ago` : dmy(ts); };
 function drawNews() {
   const box = document.getElementById('news-list');
-  if (!box || !NEWS) return;
-  const list = NEWS.filter((n) => NEWS_TAB === 'all' || n.cat === NEWS_TAB || (NEWS_TAB === 'google' && n.flag === 'Google update'));
+  if (!box) return;
+  const isB = NEWS_TAB === 'brands';
+  const sel = document.getElementById('news-brand');
+  sel.classList.toggle('hidden', !isB || BRANDS.length < 2);
+  if (isB) sel.innerHTML = `<option value="">All my brands (${BRANDS.length})</option>` + BRANDS.map((b) => `<option ${b === BRAND_PICK ? 'selected' : ''}>${esc(b)}</option>`).join('');
+  document.getElementById('news-src').textContent = isB ? 'Latest news & PR mentions from Google News (last 30 days) for the brands of your projects. Uses each project\'s first brand term — set it in project Settings.' : 'From Google Search Central, Search Engine Roundtable / Land / Journal, Google AI, OpenAI and Hugging Face. Refreshed every few hours.';
+  const src = isB ? BRAND_NEWS : NEWS;
+  if (!src) { box.innerHTML = '<div class="muted small">Loading…</div>'; return; }
+  const list = isB ? src.filter((n) => !BRAND_PICK || n.brand === BRAND_PICK) : src.filter((n) => n.cat === NEWS_TAB || (NEWS_TAB === 'google' && n.flag === 'Google update'));
   box.innerHTML = list.slice(0, 25).map((n) => `<a class="news-item" href="${esc(n.link)}" target="_blank" rel="noopener">
-      <div class="small muted">${esc(n.src)} · ${ago(n.ts)}${n.flag ? ` <span class="pill ${n.flag === 'Google update' ? 'bad' : 'info'}">${esc(n.flag)}</span>` : ''}</div>
+      <div class="small muted">${n.brand ? `<span class="pill good">${esc(n.brand)}</span> ` : ''}${esc(n.src)} · ${ago(n.ts)}${n.flag ? ` <span class="pill ${n.flag === 'Google update' ? 'bad' : n.flag === 'PR' ? 'warn' : 'info'}">${esc(n.flag)}</span>` : ''}</div>
       <b>${esc(n.title)}</b>${n.summary ? `<div class="small muted clamp2">${esc(n.summary)}</div>` : ''}</a>`).join('') || '<div class="muted small">Nothing new here right now.</div>';
 }
 async function loadNews(fresh) {
-  try { NEWS = (await api('/api/news' + (fresh ? '?fresh=1' : ''))).items || []; } catch { NEWS = []; }
-  if (!NEWS.length) { const b = document.getElementById('news-list'); if (b) b.innerHTML = '<div class="muted small">Couldn’t load updates right now — try ⟳ later.</div>'; return; }
+  drawNews();
+  const [a, b] = await Promise.allSettled([api('/api/news' + (fresh ? '?fresh=1' : '')), api('/api/news/brands')]);
+  NEWS = a.status === 'fulfilled' ? a.value.items || [] : [];
+  BRAND_NEWS = b.status === 'fulfilled' ? b.value.items || [] : [];
+  BRANDS = b.status === 'fulfilled' ? b.value.brands || [] : [];
+  if (NEWS_TAB === 'brands' && !BRANDS.length) { NEWS_TAB = 'google'; document.querySelectorAll('[data-news]').forEach((x) => x.classList.toggle('on', x.dataset.news === 'google')); }
   drawNews();
 }
+document.addEventListener('change', (e) => { if (e.target.id === 'news-brand') { BRAND_PICK = e.target.value; drawNews(); } });
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-news]');
   if (t) { NEWS_TAB = t.dataset.news; document.querySelectorAll('[data-news]').forEach((b) => b.classList.toggle('on', b === t)); drawNews(); }
