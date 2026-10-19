@@ -235,7 +235,7 @@ async function renderHome(err) {
   const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), isAdmin() ? api('/api/connections') : { connections: null }]);
   if (!connections) {
     app.innerHTML = `${err}<div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
-      <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access.</div>'}</div>`;
+      ${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access, or click + New project.</div>'}</div>`;
     return;
   }
   const steps = [
@@ -250,23 +250,52 @@ async function renderHome(err) {
   const expBanner = stale.length ? `<div class="banner err">⏳ Google access ${stale.length > 1 ? 'needs' : 'needs'} a refresh for ${stale.map((c) => `<b>${esc(c.google_email)}</b> ${reconnectBtn(c)}`).join(' ')} — takes 10 seconds.</div>` : '';
   app.innerHTML = `${err}${noConn}${expBanner}
     <div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
-    <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
+    ${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
     </div>`;
 }
 
 function projectCard(p) {
-  return `
-      <a class="card click" href="#/p/${p.id}" style="color:inherit;text-decoration:none">
-        <div class="row spread"><div style="min-width:0"><h3 style="margin:0">${esc(p.name)}</h3><div class="muted small url">${esc(p.gsc_property)}</div></div>${ring(p.last_score)}</div>
-        <div class="row small muted" style="margin-top:12px;gap:16px">
-          <span>Clicks <b style="color:var(--text)">${big(p.kpis?.clicks)}</b></span>
-          <span>Impr. <b style="color:var(--text)">${big(p.kpis?.impressions)}</b></span>
-          <span>${p.last_run ? 'Last run ' + dmy(p.last_run) : 'Never analysed'}</span>
-        </div>
-        ${p.my_role !== 'admin' ? `<div style="margin-top:8px">${accessPill(p.my_role)}</div>` : ''}
-        ${(p.recent_runs || []).length ? `<div class="runlist"><div class="small muted" style="margin:12px 0 4px">Runs — click one to open</div>${p.recent_runs.map((r) => `<span class="runitem" data-go="#/p/${p.id}?run=${r.id}"><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span><span class="small" style="flex:1;min-width:0"><b>${esc(r.scope || 'Whole site')}</b><span class="muted"> · ${esc(range(r.start_date, r.end_date))}<br>${date(r.created_at)} · ${esc((r.created_by || '').split('@')[0])}${r.error === 'archived' ? ' · archived' : ''}</span></span><span class="muted">›</span></span>`).join('')}</div>` : ''}
-      </a>`;
+  const k = p.kpis || {}, runs = p.recent_runs || [];
+  const host = (() => { try { return new URL(p.site_url || '').hostname; } catch { return ''; } })();
+  const stat = (label, v, sub) => `<div class="pc-stat"><span>${label}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  const scopes = [...new Set(runs.map((r) => r.scope || 'Whole site'))];
+  return `<div class="card pcard">
+    <div class="pc-head">
+      <div class="pc-id"><img class="pc-fav" src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64" alt="" onerror="this.style.visibility='hidden'">
+        <div style="min-width:0"><a href="#/p/${p.id}" class="pc-name">${esc(p.name)}</a><div class="muted small url">${esc(p.gsc_property)}${p.ga4_name ? ' · GA4 ✓' : ''}</div></div></div>
+      <div class="pc-actions">${p.my_role !== 'admin' ? accessPill(p.my_role) : ''}
+        <a class="btn" href="#/p/${p.id}">📊 Dashboard</a>${canRun(p) ? `<a class="btn primary" href="#/p/${p.id}/run">▶ Run analysis</a>` : ''}${canManage(p) ? `<a class="btn" href="#/p/${p.id}/edit" title="Project settings">⚙️</a>` : ''}</div>
+    </div>
+    <div class="pc-body">
+      <a class="pc-score" href="#/p/${p.id}">${ring(p.last_score, true)}<div><b>SEO score</b><div class="small muted">${p.last_score == null ? 'Not analysed yet' : p.last_score >= 80 ? 'Strong' : p.last_score >= 55 ? 'Needs work' : 'Poor'}</div></div></a>
+      <div class="pc-stats">
+        ${stat('Clicks', big(k.clicks), k.prev?.clicks ? delta(k.clicks, k.prev.clicks) : '')}
+        ${stat('Impressions', big(k.impressions), k.prev?.impressions ? delta(k.impressions, k.prev.impressions) : '')}
+        ${stat('CTR', k.ctr != null ? pct(k.ctr, 2) : '–', '')}
+        ${stat('Avg position', k.position != null ? fmt(k.position, 1) : '–', '')}
+        ${stat('Last run', p.last_run ? dmy(p.last_run) : '—', `${runs.length} recent run${runs.length === 1 ? '' : 's'}`)}
+      </div>
+    </div>
+    ${runs.length ? `<div class="pc-runs"><div class="row spread" style="margin-bottom:6px"><b class="small">Recent runs</b><span class="small muted">${scopes.length} scope${scopes.length > 1 ? 's' : ''}: ${esc(scopes.slice(0, 4).join(' · '))}${scopes.length > 4 ? '…' : ''}</span></div>
+      <div class="table-wrap"><table class="runs-t"><thead><tr><th>Score</th><th>Scope</th><th>Period</th><th>Run on</th><th>By</th><th></th></tr></thead><tbody>
+      ${runs.map((r) => `<tr class="click" data-go="#/p/${p.id}?run=${r.id}"><td><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span></td><td><b>${esc(r.scope || 'Whole site')}</b>${r.error === 'archived' ? ' <span class="pill">archived</span>' : ''}</td><td class="nowrap">${esc(range(r.start_date, r.end_date))}</td><td class="nowrap muted">${esc(date(r.created_at))}</td><td class="muted">${esc((r.created_by || '').split('@')[0])}</td><td class="muted">›</td></tr>`).join('')}
+      </tbody></table></div></div>` : `<div class="pc-runs muted small">No runs yet.${canRun(p) ? ` <a href="#/p/${p.id}/run">Run the first analysis →</a>` : ''}</div>`}
+  </div>`;
 }
+function projectsHeader(projects) {
+  const scored = projects.filter((p) => p.last_score != null);
+  const avg = scored.length ? Math.round(scored.reduce((t, p) => t + p.last_score, 0) / scored.length) : null;
+  const runs = projects.reduce((t, p) => t + (p.recent_runs || []).filter((r) => Date.now() - r.created_at < 30 * 86400000).length, 0);
+  const clicks = projects.reduce((t, p) => t + (p.kpis?.clicks || 0), 0);
+  const tile = (l, v) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`;
+  return `<div class="grid kpis section">${tile('Projects', projects.length)}${tile('Avg SEO score', avg ?? '–')}${tile('Runs (last 30 days)', runs)}${tile('Clicks (latest runs)', big(clicks))}</div>
+    ${projects.length > 3 ? '<input id="p-search" placeholder="🔎 Search projects…" style="margin-top:16px;max-width:360px">' : ''}`;
+}
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'p-search') return;
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('.pcard').forEach((c) => (c.style.display = c.textContent.toLowerCase().includes(q) ? '' : 'none'));
+});
 
 // ---------- settings ----------
 async function renderSettings(err, p) {

@@ -279,3 +279,25 @@ details summary { cursor: pointer; }
   .side { position: static; flex-direction: row; overflow-x: auto; padding: 6px; }
   .side .tab { width: auto; white-space: nowrap; }
 }
+
+/* ---------- projects page (project-wise) ---------- */
+.plist { display: grid; gap: 18px; }
+.pcard { padding: 0; overflow: hidden; }
+.pc-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 16px 20px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 70%, transparent), transparent); }
+.pc-id { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.pc-fav { width: 36px; height: 36px; border-radius: 10px; background: var(--surface); padding: 6px; box-shadow: 0 1px 3px rgba(16,24,40,.12); flex: none; }
+.pc-name { font: 800 20px 'Plus Jakarta Sans', Inter, sans-serif; color: var(--text); letter-spacing: -.01em; }
+.pc-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pc-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: center; padding: 18px 20px; }
+.pc-score { display: flex; gap: 14px; align-items: center; color: inherit; padding-right: 24px; border-right: 1px solid var(--border); }
+.pc-score:hover { text-decoration: none; }
+.pc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.pc-stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.pc-stat > span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.pc-stat b { font: 800 20px 'Plus Jakarta Sans', Inter, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-stat small { font-size: 12px; color: var(--muted); }
+.pc-runs { padding: 4px 20px 16px; }
+.runs-t td, .runs-t th { padding: 8px 10px; }
+.runs-t tr.click:hover td { background: var(--surface-2); }
+@media (max-width: 720px) { .pc-body { grid-template-columns: 1fr; } .pc-score { border-right: 0; padding-right: 0; } }
