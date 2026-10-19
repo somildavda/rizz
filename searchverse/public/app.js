@@ -749,7 +749,14 @@ async function renderRunner(pid) {
       cmpText();
     });
   };
-  api(`/api/projects/${pid}/gsc-freshness`).then((f) => {
+  // fall back to the normal Search Console rows endpoint if the freshness endpoint isn't deployed yet
+  const freshness = () => api(`/api/projects/${pid}/gsc-freshness`).catch(async () => {
+    const day = (n) => isoDay(new Date(Date.now() - n * 86400000));
+    const rows = await projGsc(pid, { startDate: day(12), endDate: day(0), dimensions: ['date'] }, 25000);
+    const last = rows.map((r) => r.keys[0]).sort().pop() || null;
+    return { final: last, all: last };
+  });
+  freshness().then((f) => {
     FRESH = f;
     // rolling presets (last 7/28/90 days) should end on the latest final day, not a guess
     if (/^\d+$/.test($('r-preset').value) && f.final && $('r-end').value !== f.final) {
