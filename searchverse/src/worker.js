@@ -436,6 +436,17 @@ async function handleApi(req, env, url) {
   const method = req.method;
   let m;
 
+  // SEO & AI news from free public feeds (cached ~3 hours at Cloudflare's edge)
+  if (path === '/api/news' && method === 'GET') {
+    const cache = caches.default, key = new Request(url.origin + '/__news_v1');
+    const hit = url.searchParams.get('fresh') ? null : await cache.match(key);
+    if (hit) return hit;
+    const items = await loadNews();
+    const res = json({ items, fetched_at: now() });
+    res.headers.set('cache-control', 'public, max-age=10800');
+    await cache.put(key, res.clone()).catch(() => {});
+    return res;
+  }
   if (path === '/api/me') {
     const user = await currentUser(req, env);
     if (!user) return json({ user: null });
@@ -1710,6 +1721,53 @@ async function fetchPage(project, raw, ua = '') {
     bytes: html.length,
     html,
   };
+}
+
+// ---------- SEO & AI news ----------
+const NEWS_FEEDS = [
+  { src: 'Google Search Central', cat: 'google', url: 'https://developers.google.com/search/blog/feed.xml' },
+  { src: 'Google Search Central', cat: 'google', url: 'https://feeds.feedburner.com/blogspot/amDG' },
+  { src: 'Search Engine Roundtable', cat: 'seo', url: 'https://www.seroundtable.com/index.xml' },
+  { src: 'Search Engine Land', cat: 'seo', url: 'https://searchengineland.com/feed' },
+  { src: 'Search Engine Journal', cat: 'seo', url: 'https://www.searchenginejournal.com/feed/' },
+  { src: 'Google AI', cat: 'ai', url: 'https://blog.google/technology/ai/rss/' },
+  { src: 'OpenAI', cat: 'ai', url: 'https://openai.com/news/rss.xml' },
+  { src: 'Hugging Face', cat: 'ai', url: 'https://huggingface.co/blog/feed.xml' },
+];
+const decodeXml = (t) => String(t || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/\s+/g, ' ').trim();
+function parseFeed(xml, feed) {
+  const out = [];
+  for (const m of xml.matchAll(/<(item|entry)\b[\s\S]*?<\/\1>/g)) {
+    const b = m[0];
+    const tag = (n) => b.match(new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)<\\/${n}>`))?.[1];
+    const title = decodeXml(tag('title'));
+    let link = decodeXml(tag('link'));
+    if (!/^https?:/.test(link)) link = b.match(/<link[^>]*rel="alternate"[^>]*href="([^"]+)"/)?.[1] || b.match(/<link[^>]*href="([^"]+)"/)?.[1] || '';
+    const when = Date.parse(decodeXml(tag('pubDate') || tag('published') || tag('updated') || tag('dc:date'))) || 0;
+    const summary = decodeXml(tag('description') || tag('summary') || '').slice(0, 220);
+    if (title && link) out.push({ title, link, ts: when, src: feed.src, cat: feed.cat, summary });
+    if (out.length >= 15) break;
+  }
+  return out;
+}
+async function loadNews() {
+  const results = await Promise.allSettled(NEWS_FEEDS.map(async (f) => {
+    const r = await fetch(f.url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0)', accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' }, cf: { cacheTtl: 3600 } });
+    if (!r.ok) throw new Error(f.url + ' ' + r.status);
+    return parseFeed(await r.text(), f);
+  }));
+  const seen = new Set(), items = [];
+  for (const r of results) if (r.status === 'fulfilled') for (const it of r.value) {
+    const k = it.title.toLowerCase().slice(0, 80);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    // flag the things an SEO team must not miss
+    if (/core update|spam update|algorithm|ranking update|helpful content|site reputation|search status/i.test(it.title)) it.flag = 'Google update';
+    else if (/ai overview|ai mode|gemini|chatgpt|gpt-|llm|perplexity|claude|copilot|sge/i.test(it.title)) it.flag = it.cat === 'ai' ? '' : 'AI search';
+    items.push(it);
+  }
+  return items.sort((a, b) => b.ts - a.ts).slice(0, 60);
 }
 
 // ---------- Gemini ----------

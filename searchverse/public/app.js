@@ -235,7 +235,8 @@ async function renderHome(err) {
   const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), isAdmin() ? api('/api/connections') : { connections: null }]);
   if (!connections) {
     app.innerHTML = `${err}<div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
-      ${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access, or click + New project.</div>'}</div>`;
+      <div class="home-grid"><div>${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access, or click + New project.</div>'}</div></div>${newsPanel()}</div>`;
+    loadNews();
     return;
   }
   const steps = [
@@ -250,8 +251,9 @@ async function renderHome(err) {
   const expBanner = stale.length ? `<div class="banner err">⏳ Google access ${stale.length > 1 ? 'needs' : 'needs'} a refresh for ${stale.map((c) => `<b>${esc(c.google_email)}</b> ${reconnectBtn(c)}`).join(' ')} — takes 10 seconds.</div>` : '';
   app.innerHTML = `${err}${noConn}${expBanner}
     <div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
-    ${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
-    </div>`;
+    <div class="home-grid"><div>    ${projectsHeader(projects)}<div class="plist section">${projects.map(projectCard).join('') || '<div class="muted">No projects yet. Create one to get started.</div>'}
+    </div></div>${newsPanel()}</div>`;
+  loadNews();
 }
 
 function projectCard(p) {
@@ -282,6 +284,32 @@ function projectCard(p) {
       </tbody></table></div>${runs.length > 3 ? `<button class="btn sm" data-more-runs style="margin-top:8px">Show all ${runs.length} runs</button>` : ''}</div>` : `<div class="pc-runs muted small">No runs yet.${canRun(p) ? ` <a href="#/p/${p.id}/run">Run the first analysis →</a>` : ''}</div>`}
   </div>`;
 }
+// ---------- SEO & AI updates feed ----------
+let NEWS = null, NEWS_TAB = 'all';
+const newsPanel = () => `<aside class="card news" id="news"><div class="row spread"><h2 style="margin:0">📰 SEO &amp; AI updates</h2><button class="btn sm" data-news-refresh title="Refresh">⟳</button></div>
+  <div class="seg news-tabs">${[['all', 'All'], ['google', 'Google'], ['seo', 'SEO news'], ['ai', 'AI & LLMs']].map(([k, l]) => `<button data-news="${k}" class="${k === NEWS_TAB ? 'on' : ''}">${l}</button>`).join('')}</div>
+  <div id="news-list" class="news-list"><div class="muted small">Loading the latest updates…</div></div>
+  <p class="small muted" style="margin:10px 0 0">From Google Search Central, Search Engine Roundtable / Land / Journal, Google AI, OpenAI and Hugging Face. Refreshed every few hours.</p></aside>`;
+const ago = (ts) => { if (!ts) return ''; const d = (Date.now() - ts) / 3600000; return d < 1 ? 'just now' : d < 24 ? `${Math.floor(d)}h ago` : d < 24 * 14 ? `${Math.floor(d / 24)}d ago` : dmy(ts); };
+function drawNews() {
+  const box = document.getElementById('news-list');
+  if (!box || !NEWS) return;
+  const list = NEWS.filter((n) => NEWS_TAB === 'all' || n.cat === NEWS_TAB || (NEWS_TAB === 'google' && n.flag === 'Google update'));
+  box.innerHTML = list.slice(0, 25).map((n) => `<a class="news-item" href="${esc(n.link)}" target="_blank" rel="noopener">
+      <div class="small muted">${esc(n.src)} · ${ago(n.ts)}${n.flag ? ` <span class="pill ${n.flag === 'Google update' ? 'bad' : 'info'}">${esc(n.flag)}</span>` : ''}</div>
+      <b>${esc(n.title)}</b>${n.summary ? `<div class="small muted clamp2">${esc(n.summary)}</div>` : ''}</a>`).join('') || '<div class="muted small">Nothing new here right now.</div>';
+}
+async function loadNews(fresh) {
+  try { NEWS = (await api('/api/news' + (fresh ? '?fresh=1' : ''))).items || []; } catch { NEWS = []; }
+  if (!NEWS.length) { const b = document.getElementById('news-list'); if (b) b.innerHTML = '<div class="muted small">Couldn’t load updates right now — try ⟳ later.</div>'; return; }
+  drawNews();
+}
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-news]');
+  if (t) { NEWS_TAB = t.dataset.news; document.querySelectorAll('[data-news]').forEach((b) => b.classList.toggle('on', b === t)); drawNews(); }
+  if (e.target.closest('[data-news-refresh]')) { const b = document.getElementById('news-list'); if (b) b.innerHTML = '<div class="muted small">Refreshing…</div>'; loadNews(true); }
+});
+
 function projectsHeader(projects) {
   const scored = projects.filter((p) => p.last_score != null);
   const avg = scored.length ? Math.round(scored.reduce((t, p) => t + p.last_score, 0) / scored.length) : null;
