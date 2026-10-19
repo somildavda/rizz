@@ -242,3 +242,40 @@ h1 { overflow-wrap: anywhere; }
 .copy-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .copy-row code { flex: 1; min-width: 0; overflow-wrap: anywhere; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; }
 details summary { cursor: pointer; }
+
+/* ---------- Looker-style dashboard ---------- */
+.dash { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 20px; align-items: start; }
+.side { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 16px;
+  background: linear-gradient(180deg, #1e1b4b, #0f172a); box-shadow: var(--shadow-3d); }
+.side .tab { display: flex; gap: 10px; align-items: center; text-align: left; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; color: #c7d2fe; font-weight: 500; border-bottom: 0; }
+.side .tab span { width: 20px; text-align: center; }
+.side .tab:hover { background: rgba(255,255,255,.07); color: #fff; }
+.side .tab.active { background: linear-gradient(135deg, #4f46e5, #0ea5e9); color: #fff; box-shadow: 0 6px 18px -8px rgba(14,165,233,.8); }
+.dash-main { min-width: 0; }
+.ov-filter { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 16px; }
+.ov-kpis { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.kpi.sc .spark { width: 46%; height: 32px; flex: none; }
+.trend { width: 100%; height: auto; display: block; }
+.trend .gl { stroke: var(--border); stroke-width: 1; }
+.trend .ax, .donut .ax { fill: var(--muted); font-size: 11px; font-family: Inter, sans-serif; }
+.trend rect:hover { fill: color-mix(in srgb, var(--primary) 8%, transparent); }
+.lg-cur, .lg-prev { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--primary); vertical-align: middle; }
+.lg-prev { border-top: 2px dashed var(--muted); }
+.ov-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.donut-wrap { display: flex; gap: 16px; align-items: center; }
+.donut { width: 120px; height: 120px; flex: none; }
+.dn-big { fill: var(--text); font: 800 16px 'Plus Jakarta Sans', Inter, sans-serif; }
+.legend { display: grid; gap: 6px; flex: 1; min-width: 0; font-size: 13px; }
+.legend div { display: flex; gap: 8px; align-items: center; } .legend span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.barlist { display: grid; gap: 8px; }
+.bl-row { display: grid; grid-template-columns: minmax(70px, 34%) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.bl-k { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.bl-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #4f46e5, #06b6d4); }
+.cell-k { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+@media (max-width: 900px) {
+  .dash { grid-template-columns: 1fr; }
+  .side { position: static; flex-direction: row; overflow-x: auto; padding: 6px; }
+  .side .tab { width: auto; white-space: nowrap; }
+}

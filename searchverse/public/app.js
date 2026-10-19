@@ -177,7 +177,7 @@ async function route() {
   try {
     if (path === '/') return await renderHome(err);
     if (path === '/settings') return await renderSettings(err, p);
-    if (path === '/users' || (path === '/new' && !isPM())) {
+    if (path === '/users') {
       if (!isAdmin()) { app.innerHTML = '<div class="banner err">Only admins can open this page.</div>'; return; }
     }
     if (path === '/users') return await renderUsers(err);
@@ -234,7 +234,7 @@ function renderLogin(err) {
 async function renderHome(err) {
   const [{ projects }, { connections }] = await Promise.all([api('/api/projects'), isAdmin() ? api('/api/connections') : { connections: null }]);
   if (!connections) {
-    app.innerHTML = `${err}<div class="row spread"><h1>Projects</h1>${isPM() ? '<a class="btn primary" href="#/new">+ New project</a>' : ''}</div>
+    app.innerHTML = `${err}<div class="row spread"><h1>Projects</h1><a class="btn primary" href="#/new">+ New project</a></div>
       <div class="grid g3 section">${projects.map(projectCard).join('') || '<div class="card muted">No projects shared with you yet. Ask your admin for access.</div>'}</div>`;
     return;
   }
@@ -439,9 +439,10 @@ async function renderProjectForm(pid) {
   const dbs = pres?.databases || (await api('/api/usage').catch(() => ({}))).databases?.map((d) => d.name) || ['main'];
   const here = location.hash.replace(/^#/, '').split('?')[0];
   const connectUrl = `/auth/connect?return=${encodeURIComponent(here)}`;
-  const isOwner = isAdmin() || (isPM() && (!pid || canManage(p)));
-  if (!isOwner && !(pid && canManage(p))) { app.innerHTML = '<div class="banner err">Only admins and project managers can open project settings.</div>'; return; }
-  const { connections } = isOwner ? await api('/api/connections') : { connections: [{ id: p.connection_id, google_email: p.connection_email || '—' }] };
+  if (pid && !isAdmin() && !canManage(p)) { app.innerHTML = '<div class="banner err">Only admins and the project’s PM can open its settings.</div>'; return; }
+  const { connections: mine } = await api('/api/connections').catch(() => ({ connections: [] }));
+  const isOwner = isAdmin() || !pid || isPM() || mine.some((c) => c.id === p.connection_id);
+  const connections = isOwner ? mine : [{ id: p.connection_id, google_email: p.connection_email || '—' }];
   const justConnected = hashParams().connected;
   const isSA = (c) => (c?.scopes || '').includes('service');
   const sa = connections.find(isSA);
@@ -457,7 +458,9 @@ async function renderProjectForm(pid) {
             <li><b>Search Console</b> → the property → Settings → <b>Users and permissions</b> → Add user → paste the email → Permission <b>Restricted</b>.</li>
             <li><b>GA4</b> → Admin → <b>Property access management</b> → ＋ Add users → paste the email → Role <b>Viewer</b> (untick “Notify”).</li>
             <li>Pick <b>${esc(sa.google_email.split('@')[0])} (shared access)</b> below and click <b>🔄 Load properties</b>.</li></ol></div>`
-        : isOwner ? `<div class="banner small">💡 Tip: set up <a href="#/settings">shared access</a> once (Settings → Google data accounts → Service account) and clients just add one email to their GSC/GA4 — no Google sign-in and no Google Cloud changes per account.</div>` : ''}
+        : `<div class="share-box"><b>👤 Connect the Google account that has this site’s Search Console</b>
+          <p class="small muted" style="margin:6px 0 10px">Sign in with Google, tick the Search Console + Analytics boxes, and you'll come straight back here with your sites listed. Read-only — Searchverse can't change anything in your account.</p>
+          <a class="btn primary" href="${connectUrl}">Sign in with Google</a>${isAdmin() ? ` <span class="small muted">· or set up <a href="#/settings">shared access</a> once so clients just add one email</span>` : ''}</div>`}
         <label>Account used for this project</label>
         <div class="row" style="flex-wrap:nowrap"><select id="f-conn" style="flex:1">${connections.map((c) => `<option value="${c.id}" ${(justConnected ? c.google_email === justConnected : pid ? c.id === p.connection_id : c === (sa || connections[0])) ? 'selected' : ''}>${isSA(c) ? '🔑 ' + esc(c.google_email.split('@')[0]) + ' (shared access)' : '👤 ' + esc(c.google_email)}</option>`).join('') || '<option value="">— nothing connected yet —</option>'}</select>
           <button class="btn" id="f-reload" title="Reload the properties this account can see">🔄 Load properties</button></div>
@@ -1616,7 +1619,7 @@ function renderRun(project, { run, pages }, runs, head) {
   CMP.cur = periodLabel(run.start_date, run.end_date); CMP.prev = periodLabel(run.prev_start, run.prev_end);
   pages.sort((a, b) => (b.gsc?.c || 0) - (a.gsc?.c || 0) || (b.gsc?.i || 0) - (a.gsc?.i || 0));
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
-  const tabs = ['Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
+  const tabs = ['Overview', 'Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
     <div class="muted small" style="margin-top:6px">Data ${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     <div class="card section"><div class="scores">
@@ -1626,19 +1629,11 @@ function renderRun(project, { run, pages }, runs, head) {
       <div class="score click-score" data-score="technical">${ring(s.scores.technical)}<div><b>Technical</b><div class="muted small">Indexability, sitemap, robots</div></div></div>
       ${s.geo ? `<div class="score click-score" data-tab="AI search & GEO">${ring(s.geo.score)}<div><b>AI search</b><div class="muted small">GEO readiness for AI Overviews, ChatGPT…</div></div></div>` : ''}
     </div></div>
-    <div class="grid kpis section">
-      ${kpi('Clicks', big(k.clicks), delta(k.clicks, k.prev?.clicks))}
-      ${kpi('Impressions', big(k.impressions), delta(k.impressions, k.prev?.impressions))}
-      ${kpi('CTR', pct(k.ctr, 2), delta(k.ctr, k.prev?.ctr, { isPct: true }))}
-      ${kpi('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }))}
-      ${k.sessions != null ? kpi('Organic sessions', big(k.sessions), delta(k.sessions, k.prevSessions)) : ''}
-      ${k.keyEvents != null ? kpi('Organic key events', big(k.keyEvents), delta(k.keyEvents, k.prevKeyEvents)) : ''}
-      ${s.brand ? kpi('Non-branded clicks', big(s.brand.nonBranded.c), `<span class="small muted">${pct(s.brand.nonBranded.c / Math.max(1, s.brand.nonBranded.c + s.brand.branded.c))} of clicks</span>`) + kpi('Branded clicks', big(s.brand.branded.c), `<span class="small muted">${fmt(s.brand.branded.n)} queries</span>`) : ''}
-    </div>
-    <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="small muted" style="margin-right:auto">Tip: click any score or number for the breakdown.</span><button class="btn" id="xlsx-btn">⬇ Excel report</button></div>
-    <div class="tabs">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}">${t}</button>`).join('')}</div>
-    <div id="tab"></div>`;
+    <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="small muted" style="margin-right:auto">Tip: click any score for its breakdown.</span><button class="btn" id="xlsx-btn">⬇ Excel report</button></div>
+    <div class="dash section"><nav class="side">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}"><span>${TAB_ICON[t] || '•'}</span>${t}</button>`).join('')}</nav>
+    <div id="tab" class="dash-main"></div></div>`;
   const views = {
+    Overview: () => viewOverview(run, pages, project),
     Insights: () => viewInsights(project, run, pages),
     'GSC + GA': () => viewGscGa(run, pages, project),
     GSC: () => viewGsc(run, pages),
@@ -1667,8 +1662,99 @@ function renderRun(project, { run, pages }, runs, head) {
     try { await exportExcel(project, run, pages); } catch (err) { toast(err.message); }
     e.target.disabled = false; e.target.textContent = '⬇ Excel report';
   };
-  show('Insights');
+  show('Overview');
 }
+
+// ---------- Overview dashboard (Looker-style) ----------
+const TAB_ICON = { Overview: '📊', Insights: '💡', 'GSC + GA': '🔗', GSC: '🔍', GA: '📈', 'Quick wins': '⚡', 'Major optimisations': '🛠️', 'AI search & GEO': '🤖', Rendering: '🧩', Pages: '📄', Technical: '⚙️', History: '🕘' };
+function spark(vals, color = 'var(--primary)') {
+  if (vals.length < 2) return '';
+  const W = 120, H = 32, max = Math.max(...vals), min = Math.min(...vals), r = max - min || 1;
+  const pts = vals.map((v, i) => `${((i / (vals.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - min) / r) * (H - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/><polygon points="0,${H} ${pts} ${W},${H}" fill="${color}" opacity=".10"/></svg>`;
+}
+function trendChart(cur, prev, key, label) {
+  const W = 900, H = 240, P = { l: 52, r: 12, t: 14, b: 26 };
+  const n = Math.max(cur.length, prev.length);
+  if (!n) return '<div class="muted small">No daily data in this run.</div>';
+  const max = Math.max(1, ...cur.map((d) => d[key]), ...prev.map((d) => d[key])) * 1.08;
+  const x = (i) => P.l + (i * (W - P.l - P.r)) / Math.max(1, n - 1), y = (v) => P.t + (H - P.t - P.b) * (1 - v / max);
+  const vf = (v) => (key === 'ctr' ? pct(v, 2) : key === 'p' ? fmt(v, 1) : fmt(v));
+  const line = (list) => list.map((d, i) => `${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(max * f)}" y2="${y(max * f)}" class="gl"/><text x="${P.l - 8}" y="${y(max * f) + 4}" text-anchor="end" class="ax">${key === 'ctr' ? pct(max * f, 1) : new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(max * f)}</text>`).join('');
+  const ticks = [0, Math.floor((n - 1) / 2), n - 1].map((i) => cur[i] ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="ax">${dmy(cur[i].d).replace(/ \d{4}$/, '')}</text>` : '').join('');
+  const hit = cur.map((d, i) => `<rect x="${x(i) - (W / n) / 2}" y="${P.t}" width="${W / n}" height="${H - P.t - P.b}" fill="transparent"><title>${dmy(d.d)}: ${vf(d[key])} ${label}${prev[i] ? ` · before: ${vf(prev[i][key])}` : ''}</title></rect>`).join('');
+  return `<svg class="trend" viewBox="0 0 ${W} ${H}">${grid}${ticks}
+    ${prev.length ? `<polyline points="${line(prev)}" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity=".7"/>` : ''}
+    <polygon points="${x(0)},${y(0)} ${line(cur)} ${x(cur.length - 1)},${y(0)}" fill="url(#tg)"/><defs><linearGradient id="tg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--primary)" stop-opacity=".28"/><stop offset="1" stop-color="var(--primary)" stop-opacity="0"/></linearGradient></defs>
+    <polyline points="${line(cur)}" fill="none" stroke="var(--primary)" stroke-width="2.4" stroke-linejoin="round"/>${hit}</svg>`;
+}
+function donut(parts) {
+  const tot = parts.reduce((t, p) => t + p.v, 0) || 1, R = 42, C = 2 * Math.PI * R;
+  let off = 0;
+  const cols = ['var(--primary)', '#06b6d4', '#f59e0b', '#10b981', '#ef4444'];
+  const arcs = parts.map((p, i) => { const len = (p.v / tot) * C; const a = `<circle r="${R}" cx="55" cy="55" fill="none" stroke="${cols[i % 5]}" stroke-width="16" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 55 55)"><title>${esc(p.k)}: ${fmt(p.v)} (${pct(p.v / tot)})</title></circle>`; off += len; return a; }).join('');
+  return `<div class="donut-wrap"><svg viewBox="0 0 110 110" class="donut">${arcs}<text x="55" y="52" text-anchor="middle" class="dn-big">${new Intl.NumberFormat('en', { notation: 'compact' }).format(tot)}</text><text x="55" y="66" text-anchor="middle" class="ax">clicks</text></svg>
+    <div class="legend">${parts.map((p, i) => `<div><i style="background:${cols[i % 5]}"></i><span>${esc(p.k)}</span><b>${pct(p.v / tot, 0)}</b></div>`).join('')}</div></div>`;
+}
+const barList = (rows, label, val, max) => `<div class="barlist">${rows.map((r) => `<div class="bl-row" title="${esc(label(r))}: ${fmt(val(r))}"><span class="bl-k">${esc(label(r))}</span><span class="bl-bar"><i style="width:${(100 * val(r)) / (max || 1)}%"></i></span><b>${big(val(r))}</b></div>`).join('')}</div>`;
+const COUNTRY = { ind: 'India', usa: 'United States', gbr: 'United Kingdom', are: 'UAE', sau: 'Saudi Arabia', can: 'Canada', aus: 'Australia', sgp: 'Singapore', npl: 'Nepal', bgd: 'Bangladesh', pak: 'Pakistan', deu: 'Germany', lka: 'Sri Lanka', qat: 'Qatar', kwt: 'Kuwait', omn: 'Oman' };
+function viewOverview(run, pages, project) {
+  const g = run.gsc || {}, s = run.summary, k = s.kpis;
+  const inR = (d, a, b) => d >= a && d <= b;
+  const cur = (g.daily || []).filter((d) => inR(d.d, run.start_date, run.end_date)), prev = (g.daily || []).filter((d) => inR(d.d, run.prev_start, run.prev_end));
+  const card = (label, v, d, vals, key) => `<div class="card kpi sc" data-ov="${key}"><div class="label">${label}</div><div class="value">${v}</div><div class="row spread" style="flex-wrap:nowrap;margin-top:6px">${d || '<span class="muted small">—</span>'}${spark(vals)}</div></div>`;
+  const nb = s.brand ? s.brand.nonBranded.c : null, br = s.brand ? s.brand.branded.c : null;
+  const isB = brandTester(project.brand_terms);
+  const pq = {}; for (const q of g.prevQueries || []) pq[q.q] = q;
+  const topQ = (g.queries || []).filter((q) => !isB(q.q)).slice(0, 10);
+  const pp = {}; for (const x of g.prevPages || []) pp[x.u] = x;
+  const topP = (g.pages || []).slice(0, 10);
+  const dev = (g.devices || []).map((d) => ({ k: d.k[0] + d.k.slice(1).toLowerCase(), v: d.c }));
+  const ctry = (g.countries || []).slice(0, 8);
+  return `<div class="ov-filter card"><span>📅 <b>${range(run.start_date, run.end_date)}</b></span><span class="muted">vs ${range(run.prev_start, run.prev_end)}</span>${s.scope ? `<span class="pill info">${esc(s.scope)}</span>` : '<span class="pill">Whole site</span>'}<span class="pill good">Organic search</span>${project.brand_terms ? '<span class="pill">Non-brand focus</span>' : ''}</div>
+    <div class="grid ov-kpis">
+      ${card('Clicks', big(k.clicks), delta(k.clicks, k.prev?.clicks), cur.map((d) => d.c), 'c')}
+      ${card('Impressions', big(k.impressions), delta(k.impressions, k.prev?.impressions), cur.map((d) => d.i), 'i')}
+      ${card('CTR', pct(k.ctr, 2), delta(k.ctr, k.prev?.ctr, { isPct: true }), cur.map((d) => d.ctr), 'ctr')}
+      ${card('Avg position', fmt(k.position, 1), delta(k.position, k.prev?.position, { invert: true }), cur.map((d) => -d.p), 'p')}
+      ${nb != null ? card('Non-branded clicks', big(nb), s.prevBrand ? delta(nb, s.prevBrand.nonBranded.c) : '', [], '') : ''}
+      ${k.sessions != null ? card('Organic sessions', big(k.sessions), delta(k.sessions, k.prevSessions), [], '') : ''}
+    </div>
+    <div class="card section"><div class="row spread"><h2 style="margin:0">Performance over time</h2>
+      <div class="seg" id="ov-metric">${[['c', 'Clicks'], ['i', 'Impressions'], ['ctr', 'CTR'], ['p', 'Position']].map(([k2, l], i) => `<button class="${i ? '' : 'on'}" data-m="${k2}">${l}</button>`).join('')}</div></div>
+      <div class="small muted" style="margin:4px 0 8px"><span class="lg-cur"></span> ${range(run.start_date, run.end_date)} &nbsp; <span class="lg-prev"></span> previous period · hover a day for numbers</div>
+      <div id="ov-trend">${trendChart(cur, prev, 'c', 'clicks')}</div></div>
+    <div class="grid ov-3 section">
+      <div class="card"><h3>Devices</h3>${dev.length ? donut(dev) : '<p class="muted small">Run a new analysis to see devices.</p>'}</div>
+      <div class="card"><h3>Top countries <span class="muted small">(clicks)</span></h3>${ctry.length ? barList(ctry, (c) => COUNTRY[c.k] || c.k.toUpperCase(), (c) => c.c, ctry[0].c) : '<p class="muted small">Run a new analysis to see countries.</p>'}</div>
+      <div class="card"><h3>Branded vs non-branded</h3>${s.brand ? `${donut([{ k: 'Non-branded', v: nb }, { k: 'Branded', v: br }])}` : '<p class="muted small">Add brand terms in project settings.</p>'}</div>
+    </div>
+    <div class="grid g2 section">
+      <div class="card"><h3>Top non-branded queries</h3>${table([
+        { key: 'q', label: 'Query', render: (q) => `<span class="cell-k">${esc(q.q)}</span>` },
+        { key: 'c', label: 'Clicks', num: 1, render: (q) => `${fmt(q.c)} <div class="small">${pq[q.q] ? delta(q.c, pq[q.q].c) : '<span class="muted">new</span>'}</div>` },
+        { key: 'i', label: 'Impr.', num: 1, render: (q) => big(q.i) },
+        { key: 'p', label: 'Pos', num: 1, render: (q) => fmt(q.p, 1) },
+      ], topQ, { filter: false })}</div>
+      <div class="card"><h3>Top landing pages</h3>${table([
+        { key: 'u', label: 'Page', render: (x) => `<span class="cell-k" title="${esc(x.u)}">${esc(shortUrl(x.u))}</span>` },
+        { key: 'c', label: 'Clicks', num: 1, render: (x) => `${fmt(x.c)} <div class="small">${pp[x.u] ? delta(x.c, pp[x.u].c) : '<span class="muted">new</span>'}</div>` },
+        { key: 'i', label: 'Impr.', num: 1, render: (x) => big(x.i) },
+        { key: 'p', label: 'Pos', num: 1, render: (x) => fmt(x.p, 1) },
+      ], topP, { filter: false })}</div>
+    </div>
+    <p class="small muted section">Want the AI read-out? Open <a href="#" data-tab="Insights">💡 Insights</a>. Full tables are under 🔍 GSC and 🔗 GSC + GA.</p>`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#ov-metric [data-m]');
+  if (!b || !scoreCtx) return;
+  const run = scoreCtx.run, g = run.gsc || {}, inR = (d, a, z) => d >= a && d <= z;
+  const cur = (g.daily || []).filter((d) => inR(d.d, run.start_date, run.end_date)), prev = (g.daily || []).filter((d) => inR(d.d, run.prev_start, run.prev_end));
+  document.querySelectorAll('#ov-metric [data-m]').forEach((x) => x.classList.toggle('on', x === b));
+  const lbl = { c: 'clicks', i: 'impressions', ctr: 'CTR', p: 'position' }[b.dataset.m];
+  document.getElementById('ov-trend').innerHTML = trendChart(cur, prev, b.dataset.m, lbl);
+});
 
 // Older runs past the retention window keep only scores, KPIs and the AI report
 function renderArchivedRun(project, run, runs, head) {

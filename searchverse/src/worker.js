@@ -162,7 +162,8 @@ async function handleAuth(req, env, url) {
     if (mode !== 'login') {
       const user = await currentUser(req, env);
       if (!user) return redirect('/');
-      if (user.role !== 'admin' && !(mode === 'connect' && user.role === 'pm')) return redirect('/#/?error=' + encodeURIComponent('Only admins and PMs can connect Google accounts'));
+      // anyone signed in may connect their OWN Google account (members only ever see their own connections)
+      if (user.role !== 'admin' && mode !== 'connect') return redirect('/#/?error=' + encodeURIComponent('Only admins can do this'));
       email = user.email;
     }
     // where to come back to after connecting (e.g. the New project form)
@@ -564,20 +565,23 @@ async function handleApi(req, env, url) {
     return json({ ok: true, email: sa.client_email });
   }
   // PMs may read the connected Google accounts (to create / set up projects) but not add or remove them
-  const pmRead = user.role === 'pm' && method === 'GET' && (path === '/api/connections' || /^\/api\/connections\/\w+\/properties$/.test(path));
-  if ((path.startsWith('/api/connections') && !pmRead) || path.startsWith('/api/users')) requireAdmin(user);
+  // admins & PMs see every connection; everyone else only the Google accounts they connected themselves
+  const allConn = user.role === 'admin' || user.role === 'pm';
+  if (path.startsWith('/api/users')) requireAdmin(user);
   if (path === '/api/connections' && method === 'GET') {
     const { results } = await DB.prepare(
-      'SELECT id, google_email, owner_email AS added_by, scopes, created_at, COALESCE(connected_at, created_at) AS connected_at, expired FROM connections ORDER BY created_at'
-    ).all();
+      `SELECT id, google_email, owner_email AS added_by, scopes, created_at, COALESCE(connected_at, created_at) AS connected_at, expired FROM connections
+       ${allConn ? '' : 'WHERE owner_email = ?'} ORDER BY created_at`
+    ).bind(...(allConn ? [] : [user.email])).all();
     return json({ connections: results });
   }
   if ((m = path.match(/^\/api\/connections\/(\w+)$/)) && method === 'DELETE') {
-    await DB.prepare('DELETE FROM connections WHERE id = ?').bind(m[1]).run();
+    if (user.role === 'admin') await DB.prepare('DELETE FROM connections WHERE id = ?').bind(m[1]).run();
+    else await DB.prepare('DELETE FROM connections WHERE id = ? AND owner_email = ?').bind(m[1], user.email).run();
     return json({ ok: true });
   }
   if ((m = path.match(/^\/api\/connections\/(\w+)\/properties$/))) {
-    const c = await DB.prepare('SELECT id FROM connections WHERE id = ?').bind(m[1]).first();
+    const c = await DB.prepare(`SELECT id FROM connections WHERE id = ?${allConn ? '' : ' AND owner_email = ?'}`).bind(m[1], ...(allConn ? [] : [user.email])).first();
     if (!c) throw new HttpError(404, 'Connection not found');
     const token = await accessToken(env, c.id);
     const [sites, ga] = await Promise.allSettled([
@@ -632,7 +636,6 @@ async function handleApi(req, env, url) {
     });
   }
   if (path === '/api/projects' && method === 'POST') {
-    if (user.role !== 'pm') requireAdmin(user);
     const b = await body(req);
     const p = await validateProject(env, user, b);
     const pid = id();
@@ -643,7 +646,7 @@ async function handleApi(req, env, url) {
       .bind(pid, user.email, p.name, p.site_url, p.gsc_property, p.ga4_property, p.ga4_name, p.connection_id, p.max_pages, now())
       .run();
     await saveStorage(env, pid, b);
-    if (user.role === 'pm') await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)').bind(pid, user.email, 'manager', now()).run();
+    if (user.role !== 'admin') await DB.prepare('INSERT OR REPLACE INTO project_members (project_id, email, role, added_at) VALUES (?, ?, ?, ?)').bind(pid, user.email, 'manager', now()).run();
     await saveMeta(env, pid, p);
     return json({ id: pid });
   }
@@ -660,7 +663,9 @@ async function handleApi(req, env, url) {
         databases: shards(env).map((x) => x.name),
       });
     }
-    if (method === 'PUT' && user.role === 'pm' && canManage(project)) {
+    const putBody = method === 'PUT' ? await req.clone().json().catch(() => ({})) : {};
+    const ownsConn = method === 'PUT' && putBody.connection_id && (user.role === 'pm' || await DB.prepare('SELECT 1 FROM connections WHERE id = ? AND owner_email = ?').bind(putBody.connection_id, user.email).first());
+    if (method === 'PUT' && user.role !== 'admin' && canManage(project) && ownsConn) {
       const p = await validateProject(env, user, await body(req));
       await DB.prepare(
         `UPDATE projects SET name = ?, site_url = ?, gsc_property = ?, ga4_property = ?, ga4_name = ?, connection_id = ?, max_pages = ? WHERE id = ?`
@@ -1499,7 +1504,8 @@ async function validateProject(env, user, b) {
   } catch {
     throw new HttpError(400, 'Homepage URL is not valid');
   }
-  const conn = await env.DB.prepare('SELECT id FROM connections WHERE id = ?').bind(b.connection_id || '').first();
+  const own = user.role === 'admin' || user.role === 'pm';
+  const conn = await env.DB.prepare(`SELECT id FROM connections WHERE id = ?${own ? '' : ' AND owner_email = ?'}`).bind(b.connection_id || '', ...(own ? [] : [user.email])).first();
   if (!conn) throw new HttpError(400, 'Pick one of the connected Google accounts');
   return {
     ...('storage' in b ? { storage: String(b.storage || '') } : {}),
