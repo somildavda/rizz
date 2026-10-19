@@ -267,7 +267,7 @@ function projectCard(p) {
         <a class="btn" href="#/p/${p.id}">📊 Dashboard</a>${canRun(p) ? `<a class="btn primary" href="#/p/${p.id}/run">▶ Run analysis</a>` : ''}${canManage(p) ? `<a class="btn" href="#/p/${p.id}/edit" title="Project settings">⚙️</a>` : ''}</div>
     </div>
     <div class="pc-body">
-      <a class="pc-score" href="#/p/${p.id}">${ring(p.last_score, true)}<div><b>SEO score</b><div class="small muted">${p.last_score == null ? 'Not analysed yet' : p.last_score >= 80 ? 'Strong' : p.last_score >= 55 ? 'Needs work' : 'Poor'}</div></div></a>
+      <a class="pc-score" href="#/p/${p.id}">${ring(p.last_score)}<div><b>SEO score</b><div class="small muted">${p.last_score == null ? 'Not analysed yet' : p.last_score >= 80 ? 'Strong' : p.last_score >= 55 ? 'Needs work' : 'Poor'}</div></div></a>
       <div class="pc-stats">
         ${stat('Clicks', big(k.clicks), k.prev?.clicks ? delta(k.clicks, k.prev.clicks) : '')}
         ${stat('Impressions', big(k.impressions), k.prev?.impressions ? delta(k.impressions, k.prev.impressions) : '')}
@@ -277,9 +277,9 @@ function projectCard(p) {
       </div>
     </div>
     ${runs.length ? `<div class="pc-runs"><div class="row spread" style="margin-bottom:6px"><b class="small">Recent runs</b><span class="small muted">${scopes.length} scope${scopes.length > 1 ? 's' : ''}: ${esc(scopes.slice(0, 4).join(' · '))}${scopes.length > 4 ? '…' : ''}</span></div>
-      <div class="table-wrap"><table class="runs-t"><thead><tr><th>Score</th><th>Scope</th><th>Period</th><th>Run on</th><th>By</th><th></th></tr></thead><tbody>
-      ${runs.map((r) => `<tr class="click" data-go="#/p/${p.id}?run=${r.id}"><td><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span></td><td><b>${esc(r.scope || 'Whole site')}</b>${r.error === 'archived' ? ' <span class="pill">archived</span>' : ''}</td><td class="nowrap">${esc(range(r.start_date, r.end_date))}</td><td class="nowrap muted">${esc(date(r.created_at))}</td><td class="muted">${esc((r.created_by || '').split('@')[0])}</td><td class="muted">›</td></tr>`).join('')}
-      </tbody></table></div></div>` : `<div class="pc-runs muted small">No runs yet.${canRun(p) ? ` <a href="#/p/${p.id}/run">Run the first analysis →</a>` : ''}</div>`}
+      <div class="table-wrap"><table class="runs-t"><thead><tr><th>Score</th><th>Scope · period</th><th>Run on · by</th><th></th></tr></thead><tbody>
+      ${runs.map((r, i) => `<tr class="click ${i > 2 ? 'more-run hidden' : ''}" data-go="#/p/${p.id}?run=${r.id}"><td><span class="pill ${pillFor(r.score)}">${r.score ?? '–'}</span></td><td><b>${esc(r.scope || 'Whole site')}</b>${r.error === 'archived' ? ' <span class="pill">archived</span>' : ''}<div class="small muted">${esc(range(r.start_date, r.end_date))}</div></td><td class="small muted">${esc(date(r.created_at))}<div>${esc((r.created_by || '').split('@')[0])}</div></td><td class="muted">›</td></tr>`).join('')}
+      </tbody></table></div>${runs.length > 3 ? `<button class="btn sm" data-more-runs style="margin-top:8px">Show all ${runs.length} runs</button>` : ''}</div>` : `<div class="pc-runs muted small">No runs yet.${canRun(p) ? ` <a href="#/p/${p.id}/run">Run the first analysis →</a>` : ''}</div>`}
   </div>`;
 }
 function projectsHeader(projects) {
@@ -288,9 +288,15 @@ function projectsHeader(projects) {
   const runs = projects.reduce((t, p) => t + (p.recent_runs || []).filter((r) => Date.now() - r.created_at < 30 * 86400000).length, 0);
   const clicks = projects.reduce((t, p) => t + (p.kpis?.clicks || 0), 0);
   const tile = (l, v) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`;
-  return `<div class="grid kpis section">${tile('Projects', projects.length)}${tile('Avg SEO score', avg ?? '–')}${tile('Runs (last 30 days)', runs)}${tile('Clicks (latest runs)', big(clicks))}</div>
+  return `<div class="grid home-kpis section">${tile('Projects', projects.length)}${tile('Avg SEO score', avg ?? '–')}${tile('Runs (last 30 days)', runs)}${tile('Clicks (latest runs)', big(clicks))}</div>
     ${projects.length > 3 ? '<input id="p-search" placeholder="🔎 Search projects…" style="margin-top:16px;max-width:360px">' : ''}`;
 }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-more-runs]');
+  if (!b) return;
+  b.closest('.pc-runs').querySelectorAll('.more-run').forEach((r) => r.classList.toggle('hidden'));
+  b.textContent = b.textContent.startsWith('Show') ? 'Show fewer' : `Show all ${b.closest('.pc-runs').querySelectorAll('tbody tr').length} runs`;
+});
 document.addEventListener('input', (e) => {
   if (e.target.id !== 'p-search') return;
   const q = e.target.value.toLowerCase();
