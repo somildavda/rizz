@@ -1790,19 +1790,48 @@ function parseFeed(xml, feed) {
   }
   return out;
 }
+// Search Herald's algorithm-update page: use a feed if it has one, otherwise read the article cards from the HTML
+async function loadHerald() {
+  const base = 'https://searchherald.com';
+  const H = { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', accept: 'text/html,application/xml;q=0.9,*/*;q=0.8' };
+  const feed = { src: 'Search Herald', cat: 'google' };
+  for (const u of [base + '/topic/algorithms/feed', base + '/topic/algorithms/rss', base + '/feed', base + '/rss.xml', base + '/feed.xml']) {
+    try {
+      const r = await fetch(u, { headers: H, cf: { cacheTtl: 3600 } });
+      const t = r.ok ? await r.text() : '';
+      if (/<(rss|feed)\b/i.test(t)) { const items = parseFeed(t, feed); if (items.length) return items.map((i) => ({ ...i, algo: true })); }
+    } catch {}
+  }
+  const r = await fetch(base + '/topic/algorithms', { headers: H, cf: { cacheTtl: 3600 } });
+  if (!r.ok) throw new Error('searchherald ' + r.status);
+  const html = await r.text(), out = [], seen = new Set();
+  const blocks = html.match(/<article\b[\s\S]*?<\/article>/gi) || html.match(/<(?:div|li)[^>]+class="[^"]*(?:post|card|article|entry)[^"]*"[\s\S]*?<\/(?:div|li)>/gi) || [];
+  for (const blk of blocks) {
+    const head = blk.match(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/i);
+    const title = decodeXml(head ? head[1] : '');
+    let link = (head && head[1].match(/href="([^"]+)"/)?.[1]) || blk.match(/<a[^>]+href="([^"#]+)"/i)?.[1] || '';
+    if (link && !/^https?:/.test(link)) link = new URL(link, base).toString();
+    const when = Date.parse(blk.match(/<time[^>]*datetime="([^"]+)"/i)?.[1] || blk.match(/(\w{3,9} \d{1,2}, \d{4})/)?.[1] || '') || 0;
+    const summary = decodeXml(blk.match(/<p[^>]*>([\s\S]*?)<\/p>/i)?.[1] || '').slice(0, 220);
+    if (title.length > 12 && link && !seen.has(link)) { seen.add(link); out.push({ title, link, ts: when, src: 'Search Herald', cat: 'google', summary, algo: true }); }
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
 async function loadNews() {
-  const results = await Promise.allSettled(NEWS_FEEDS.map(async (f) => {
+  const results = await Promise.allSettled([loadHerald(), ...NEWS_FEEDS.map(async (f) => {
     const r = await fetch(f.url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0)', accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml' }, cf: { cacheTtl: 3600 } });
     if (!r.ok) throw new Error(f.url + ' ' + r.status);
     return parseFeed(await r.text(), f);
-  }));
+  })]);
   const seen = new Set(), items = [];
   for (const r of results) if (r.status === 'fulfilled') for (const it of r.value) {
     const k = it.title.toLowerCase().slice(0, 80);
     if (seen.has(k)) continue;
     seen.add(k);
     // flag the things an SEO team must not miss
-    if (/core update|spam update|algorithm|ranking update|helpful content|site reputation|search status/i.test(it.title)) it.flag = 'Google update';
+    if (it.algo || /core update|spam update|algorithm|ranking update|helpful content|site reputation|search status|ranking volatility|reviews update/i.test(it.title)) it.flag = 'Google update';
     else if (/ai overview|ai mode|gemini|chatgpt|gpt-|llm|perplexity|claude|copilot|sge/i.test(it.title)) it.flag = it.cat === 'ai' ? '' : 'AI search';
     items.push(it);
   }

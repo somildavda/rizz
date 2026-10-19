@@ -285,6 +285,7 @@ function projectCard(p) {
   </div>`;
 }
 // ---------- SEO & AI updates feed ----------
+let BRAND_ERR = '';
 let NEWS = null, BRAND_NEWS = null, BRANDS = [], NEWS_TAB = 'brands', BRAND_PICK = '';
 const newsPanel = () => `<aside class="card news" id="news"><div class="row spread"><h2 style="margin:0">📰 SEO &amp; AI updates</h2><button class="btn sm" data-news-refresh title="Refresh">⟳</button></div>
   <div class="seg news-tabs">${[['brands', '🏷️ Our brands'], ['google', 'Google'], ['seo', 'SEO'], ['ai', 'AI & LLMs']].map(([k, l]) => `<button data-news="${k}" class="${k === NEWS_TAB ? 'on' : ''}">${l}</button>`).join('')}</div>
@@ -299,10 +300,14 @@ function drawNews() {
   const sel = document.getElementById('news-brand');
   sel.classList.toggle('hidden', !isB || BRANDS.length < 2);
   if (isB) sel.innerHTML = `<option value="">All my brands (${BRANDS.length})</option>` + BRANDS.map((b) => `<option ${b === BRAND_PICK ? 'selected' : ''}>${esc(b)}</option>`).join('');
-  document.getElementById('news-src').textContent = isB ? 'Latest news & PR mentions from Google News (last 30 days) for the brands of your projects. Uses each project\'s first brand term — set it in project Settings.' : 'From Google Search Central, Search Engine Roundtable / Land / Journal, Google AI, OpenAI and Hugging Face. Refreshed every few hours.';
+  document.getElementById('news-src').textContent = isB ? 'Latest news & PR mentions from Google News (last 30 days) for the brands of your projects. Uses each project\'s first brand term — set it in project Settings.' : 'From Search Herald (algorithm updates), Google Search Central, Search Engine Roundtable / Land / Journal, Google AI, OpenAI and Hugging Face. Refreshed every few hours.';
   const src = isB ? BRAND_NEWS : NEWS;
   if (!src) { box.innerHTML = '<div class="muted small">Loading…</div>'; return; }
   const list = isB ? src.filter((n) => !BRAND_PICK || n.brand === BRAND_PICK) : src.filter((n) => n.cat === NEWS_TAB || (NEWS_TAB === 'google' && n.flag === 'Google update'));
+  if (isB && !list.length) {
+    box.innerHTML = `<div class="small muted" style="padding:8px">${BRAND_ERR ? `Couldn’t reach Google News (${esc(BRAND_ERR)}) — press ⟳ to retry.` : BRANDS.length ? `No news in the last 30 days for ${esc(BRANDS.join(', '))}.` : 'No brands yet — add projects, and set each project’s first <b>Brand term</b> (e.g. <code>myntra</code>) in its ⚙️ Settings.'}</div>`;
+    return;
+  }
   box.innerHTML = list.slice(0, 25).map((n) => `<a class="news-item" href="${esc(n.link)}" target="_blank" rel="noopener">
       <div class="small muted">${n.brand ? `<span class="pill good">${esc(n.brand)}</span> ` : ''}${esc(n.src)} · ${ago(n.ts)}${n.flag ? ` <span class="pill ${n.flag === 'Google update' ? 'bad' : n.flag === 'PR' ? 'warn' : 'info'}">${esc(n.flag)}</span>` : ''}</div>
       <b>${esc(n.title)}</b>${n.summary ? `<div class="small muted clamp2">${esc(n.summary)}</div>` : ''}</a>`).join('') || '<div class="muted small">Nothing new here right now.</div>';
@@ -313,7 +318,7 @@ async function loadNews(fresh) {
   NEWS = a.status === 'fulfilled' ? a.value.items || [] : [];
   BRAND_NEWS = b.status === 'fulfilled' ? b.value.items || [] : [];
   BRANDS = b.status === 'fulfilled' ? b.value.brands || [] : [];
-  if (NEWS_TAB === 'brands' && !BRANDS.length) { NEWS_TAB = 'google'; document.querySelectorAll('[data-news]').forEach((x) => x.classList.toggle('on', x.dataset.news === 'google')); }
+  BRAND_ERR = b.status === 'rejected' ? b.reason?.message || 'failed' : '';
   drawNews();
 }
 document.addEventListener('change', (e) => { if (e.target.id === 'news-brand') { BRAND_PICK = e.target.value; drawNews(); } });
@@ -1762,7 +1767,7 @@ function renderRun(project, { run, pages }, runs, head) {
     <div class="dash section"><nav class="side">${tabs.map((t, i) => `<button class="tab ${i ? '' : 'active'}" data-t="${t}"><span>${TAB_ICON[t] || '•'}</span>${t}</button>`).join('')}</nav>
     <div id="tab" class="dash-main"></div></div>`;
   const views = {
-    Overview: () => viewOverview(run, pages, project),
+    Overview: () => { setTimeout(() => fillUpdateImpact(run, project)); return viewOverview(run, pages, project); },
     Insights: () => viewInsights(project, run, pages),
     'GSC + GA': () => viewGscGa(run, pages, project),
     GSC: () => viewGsc(run, pages),
@@ -1873,7 +1878,32 @@ function viewOverview(run, pages, project) {
         { key: 'p', label: 'Pos', num: 1, render: (x) => fmt(x.p, 1) },
       ], topP, { filter: false })}</div>
     </div>
+    <div class="card section" id="ov-updates"><h3>🧭 Google updates &amp; your traffic</h3><p class="small muted">Checking recent Google updates against this project’s clicks…</p></div>
     <p class="small muted section">Want the AI read-out? Open <a href="#" data-tab="Insights">💡 Insights</a>. Full tables are under 🔍 GSC and 🔗 GSC + GA.</p>`;
+}
+// Compare clicks the 7 days before vs after each Google update that falls inside the run's dates
+async function fillUpdateImpact(run, project) {
+  const box = document.getElementById('ov-updates');
+  if (!box) return;
+  let items = [];
+  try { items = (await api('/api/news')).items || []; } catch {}
+  const daily = (run.gsc?.daily || []).slice().sort((a, b) => (a.d < b.d ? -1 : 1));
+  const first = run.prev_start || run.start_date, last = run.end_date;
+  const ups = items.filter((n) => n.flag === 'Google update' && n.ts).map((n) => ({ ...n, day: new Date(n.ts).toISOString().slice(0, 10) }))
+    .filter((n) => n.day >= first && n.day <= last).slice(0, 8);
+  const sum = (from, to) => { const r = daily.filter((d) => d.d >= from && d.d <= to); return r.length ? r.reduce((t, d) => t + d.c, 0) / r.length : null; };
+  const shift = (day, n) => new Date(new Date(day).getTime() + n * 86400000).toISOString().slice(0, 10);
+  const rows = ups.map((u) => {
+    const before = sum(shift(u.day, -7), shift(u.day, -1)), after = sum(u.day, shift(u.day, 6));
+    const ch = before && after != null ? (after - before) / before : null;
+    return { ...u, before, after, ch };
+  });
+  box.innerHTML = `<h3>🧭 Google updates &amp; your traffic</h3>
+    ${rows.length ? `<p class="small muted" style="margin:-4px 0 10px">Average daily clicks for <b>${esc(project.name)}</b> in the 7 days before vs the 7 days after each update (from this run’s Search Console data). A drop doesn’t prove the update caused it — it tells you which week to check.</p>
+    ${rows.map((r) => `<div class="check"><span class="dot ${r.ch == null ? '' : r.ch <= -0.05 ? 'bad' : r.ch >= 0.05 ? 'good' : 'warn'}">${r.ch == null ? '?' : r.ch <= -0.05 ? '!' : r.ch >= 0.05 ? '↑' : '~'}</span>
+      <div style="flex:1"><a href="${esc(r.link)}" target="_blank" rel="noopener"><b>${esc(r.title)}</b></a><div class="small muted">${esc(r.src)} · ${dmy(r.day)}</div>
+      <div class="small">${r.ch == null ? 'Not enough daily data around this date in this run.' : r.ch <= -0.05 ? `⚠️ <b>Might have impacted ${esc(project.name)}</b>: clicks/day fell <b>${pct(-r.ch)}</b> (${fmt(r.before)} → ${fmt(r.after)}). Check the week of <b>${dmy(r.day)}</b> — which pages and queries dropped (GSC tab → compare those dates).` : r.ch >= 0.05 ? `Clicks/day rose ${pct(r.ch)} (${fmt(r.before)} → ${fmt(r.after)}) — no negative impact seen.` : `No clear change (${r.ch >= 0 ? '+' : ''}${pct(r.ch)}) — likely not affected.`}</div></div></div>`).join('')}`
+    : `<p class="small muted">No Google algorithm updates reported between ${dmy(first)} and ${dmy(last)} in our sources (Search Herald, Search Engine Roundtable/Land/Journal, Google Search Central).</p>`}`;
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('#ov-metric [data-m]');
