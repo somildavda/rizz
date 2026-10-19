@@ -1142,7 +1142,7 @@ async function handleApi(req, env, url) {
   if ((m = path.match(/^\/api\/projects\/(\w+)\/fetch$/))) {
     const project = await getProject(env, m[1], user.email);
     requireRun(project);
-    return json(await fetchPage(project, url.searchParams.get('url')));
+    return json(await fetchPage(project, url.searchParams.get('url'), url.searchParams.get('ua') || ''));
   }
 
   if ((m = path.match(/^\/api\/runs\/(\w+)\/pages$/)) && method === 'POST') {
@@ -1637,7 +1637,7 @@ async function pullGa(token, project, run) {
 
 // Fetches a page of the project's own site (never arbitrary hosts) so the browser can analyse it.
 const UA_HINT = new Map(); // host → index of the crawler identity that last worked (per Worker instance)
-async function fetchPage(project, raw) {
+async function fetchPage(project, raw, ua = '') {
   let target;
   try {
     target = new URL(raw);
@@ -1670,8 +1670,10 @@ async function fetchPage(project, raw) {
   const BLOCKED = new Set([401, 403, 405, 406, 429, 503, 520, 521, 522, 523, 525, 526, 999]);
   // remember per site which identity worked, so the next pages go straight to it
   const hostKey = target.hostname;
-  let idx = Math.min(UA_HINT.get(hostKey) || 0, IDS.length - 1);
-  let tried = 0;
+  // a chosen crawler is used on its own; "auto" (empty) walks the list until one is let in
+  const forced = IDS.findIndex(([n]) => n === ua);
+  let idx = forced >= 0 ? forced : Math.min(UA_HINT.get(hostKey) || 0, IDS.length - 1);
+  let tried = forced >= 0 ? IDS.length : 0;
   for (let hop = 0; hop < 6; hop++) {
     try {
       res = await fetch(current, { redirect: 'manual', headers: IDS[idx][1] });

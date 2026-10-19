@@ -633,6 +633,9 @@ async function renderRunner(pid) {
           ${[[25, 'Top 25 — quick check (~30 sec)'], [50, 'Top 50 (~1 min)'], [100, 'Top 100 — weekly check (~1–2 min)'], [250, 'Top 250 — monthly audit (~3 min)'], [500, 'Top 500 — deep audit (~5–6 min)'], [750, 'Top 750 (~8 min)'], [1000, 'Max 1,000 — full / all LOB pages (~10–12 min)'], ['custom', 'Custom number…']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>
         <div id="r-max-wrap" class="hidden"><label class="small" style="margin-top:0">Custom</label><input id="r-max" type="number" min="5" max="1000" value="${project.max_pages}" style="width:110px"></div>
         <label class="row small" style="margin:0 0 10px;gap:6px;font-weight:400"><input type="checkbox" id="r-sitemap" style="width:auto"> Also crawl URLs from the sitemap</label>
+        <div><label class="small" style="margin-top:0">🕷️ Crawl as</label><select id="r-ua" style="width:auto">
+          ${[['', 'Auto — try each until the site lets one in (recommended)'], ['SearchverseBot', 'SearchverseBot (our own crawler)'], ['Googlebot Smartphone', 'Googlebot Smartphone'], ['Googlebot Desktop', 'Googlebot Desktop'], ['Chrome (mobile)', 'Chrome on Android (normal visitor)'], ['Chrome (desktop)', 'Chrome on Mac (normal visitor)'], ['Bingbot', 'Bingbot']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+          <div class="hint">Which browser/bot Searchverse pretends to be when opening pages. Use <b>Googlebot Smartphone</b> to see pages the way Google indexes them (mobile-first); use Auto if the site's firewall blocks crawlers.</div></div>
       </div>
       <div class="banner small" id="r-rec" style="margin:10px 0 6px"></div>
       <div class="hint"><b>Pages to crawl</b> = how many pages get opened and audited (on-page, content vs. keywords, technical, AI-search). It doesn't limit the Search Console / GA numbers — those always cover the whole site or the chosen LOBs.<br>💰 ${money.length ? `<b>${money.length} money page${money.length > 1 ? 's' : ''}</b> always crawled first` : 'No money pages set'}${canManage(project) ? ` · <a href="#/p/${pid}/edit">edit money pages</a>` : ''}. Then the top Search Console pages by clicks & impressions${' '}fill up the rest. Maximum 1,000 pages per run (≈ 1 min per 100 pages).</div>
@@ -761,7 +764,7 @@ async function renderRunner(pid) {
   }).catch(() => $('sugg').remove());
   $('r-go').onclick = () => runAnalysis(project, {
     start: $('r-start').value, end: $('r-end').value, compare: $('r-compare').value, pstart: $('r-pstart').value, pend: $('r-pend').value, allGroups: lobGroups,
-    maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money,
+    maxPages: Math.min(1000, Math.max(5, +$('r-max').value || 25)), sitemap: $('r-sitemap').checked, rows: +$('r-rows').value, money, ua: $('r-ua').value,
     scope: $('r-scope').value,
     customUrls: $('r-scope').value === 'custom' ? customList().filter((x) => /^https?:/i.test(x)) : [],
     scopeGroups: $('r-scope').value === 'custom' ? (customList().length ? [{ name: 'Custom URLs', patterns: customList().join('\n') }] : []) : $('r-scope').value === 'all' ? lobGroups : $('r-scope').value.startsWith('cat:') ? lobGroups.filter((g) => g.category === $('r-scope').value.slice(4)) : [],
@@ -916,7 +919,7 @@ async function runAnalysis(project, opt) {
     const prevBrand = brandSplit(prevQ, isBranded);
     if (inScope && prevQ.length) gsc.prevQueries = prevQ.slice().sort((a, b) => b.c - a.c).slice(0, 5000); // comparison numbers for LOB queries (capped to keep the run row small)
 
-    const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
+    const fetchUrl = (u) => api(`/api/projects/${project.id}/fetch?url=${encodeURIComponent(u)}${opt.ua ? '&ua=' + encodeURIComponent(opt.ua) : ''}`).catch((e) => ({ url: u, finalUrl: u, status: 0, error: e.message, redirects: [], html: '' }));
     step('Checking robots.txt & sitemap', 16);
     const origin = new URL(project.site_url).origin;
     const robots = await fetchUrl(origin + '/robots.txt');
@@ -1010,6 +1013,7 @@ async function runAnalysis(project, opt) {
         engagementRate: organic?.cur?.engagementRate ?? null,
       },
       pagesCrawled: pages.length,
+      crawledAs: opt.ua || 'Auto',
       crawlBlocked: blockedN ? { n: blockedN, total: pages.length, codes: blockCodes, host: new URL(project.site_url).hostname } : null,
       moneyPages: opt.money.length,
       scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : opt.scope === 'custom' ? `Custom URLs (${opt.scopeGroups[0].patterns.split('\n').length})` : 'LOB: ' + opt.scope.slice(4)) : null,
@@ -1660,7 +1664,7 @@ function renderRun(project, { run, pages }, runs, head) {
   const kpi = (label, v, d) => `<div class="card kpi"><div class="label">${label}</div><div class="value">${v}</div>${d || '<span class="delta muted">&nbsp;</span>'}</div>`;
   const tabs = ['Overview', 'Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
-    <div class="muted small" style="margin-top:6px">Data ${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
+    <div class="muted small" style="margin-top:6px">Data ${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.crawledAs ? ` as ${esc(s.crawledAs)}` : ''}${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
     ${s.crawlBlocked ? `<div class="banner section">🛡️ <b>${fmt(s.crawlBlocked.n)} of ${fmt(s.crawlBlocked.total)} pages were blocked by ${esc(s.crawlBlocked.host)}'s firewall</b> (${Object.entries(s.crawlBlocked.codes).map(([c, n]) => `HTTP ${c} ×${n}`).join(', ')}), so they weren't audited.
       ${s.crawlBlocked.n >= s.crawlBlocked.total ? 'On-page and content scores need at least one page that loads, so they show “–” and the overall score uses the technical checks only.' : 'Scores use only the pages that loaded.'}
       Search Console and GA4 numbers are <b>not</b> affected. <span class="small">Fix: ask the site's tech team to allow-list the user-agent <code>SearchverseBot</code> (or Cloudflare Workers) in their bot protection.</span></div>` : ''}
