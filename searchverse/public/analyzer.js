@@ -441,9 +441,11 @@ export function overallScores(pages, site) {
     const tw = ok.reduce((s, p) => s + w(p), 0);
     return tw ? ok.reduce((s, p) => s + p[key] * w(p), 0) / tw : 0;
   };
+  const technical = site.score;
+  // nothing could be crawled (e.g. the site's firewall blocked us): don't pretend pages scored 0
+  if (!ok.length) return { overall: technical, onpage: null, content: null, technical, crawlBlocked: true };
   const onpage = Math.round(avg('onpage_score'));
   const content = Math.round(avg('content_score'));
-  const technical = site.score;
   const overall = Math.round(onpage * 0.4 + content * 0.4 + technical * 0.2);
   return { overall, onpage, content, technical };
 }

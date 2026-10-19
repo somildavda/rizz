@@ -1648,14 +1648,24 @@ async function fetchPage(project, raw) {
   const redirects = [];
   let res;
   let current = target.toString();
+  // our own bot name first; if the site's firewall refuses it, retry once looking like a normal browser
+  const BOT = { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0; +https://developers.google.com/search)', accept: 'text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.5' };
+  const BROWSER = {
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'accept-language': 'en-IN,en;q=0.9', 'cache-control': 'no-cache', 'upgrade-insecure-requests': '1',
+    'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"macOS"',
+    'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-user': '?1',
+  };
+  const BLOCKED = new Set([401, 403, 405, 406, 429, 503, 520, 521, 522, 523, 525, 526, 999]);
+  let headers = BOT, retried = false;
   for (let hop = 0; hop < 6; hop++) {
-    res = await fetch(current, {
-      redirect: 'manual',
-      headers: {
-        'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0; +https://developers.google.com/search)',
-        accept: 'text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.5',
-      },
-    });
+    try {
+      res = await fetch(current, { redirect: 'manual', headers });
+    } catch (e) {
+      res = new Response('', { status: 520 });
+    }
+    if (BLOCKED.has(res.status) && !retried) { retried = true; headers = BROWSER; hop--; continue; }
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       const next = new URL(res.headers.get('location'), current);
       redirects.push({ from: current, to: next.toString(), status: res.status });
@@ -1675,6 +1685,8 @@ async function fetchPage(project, raw) {
     url: target.toString(),
     finalUrl: current,
     status: res.status,
+    blocked: BLOCKED.has(res.status),
+    asBrowser: retried && headers === BROWSER,
     redirects,
     contentType: type,
     xRobotsTag: res.headers.get('x-robots-tag') || '',
@@ -1719,6 +1731,8 @@ STRICT RULES:
    so server-rendered, clearly structured, attributable content is what gets cited. Use "aiSearchGeo" data for AI-search recommendations.
 
 ${(project.ignored || []).length ? `10. The team marked these past points as IRRELEVANT for this site — do not repeat them or close variants:\n${project.ignored.map((x) => '   - ' + x).join('\n')}\n` : ''}
+11. If "crawlBlocked" is present in the data, the site's firewall stopped the crawler for those pages: never describe them as having
+   0 / missing titles, schema or content — base page advice only on pages that loaded, and recommend allow-listing the crawler once in the action plan.
 Return ONLY JSON in this exact shape:
 {
   "summary": "3-4 sentence overview with the headline numbers",

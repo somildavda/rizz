@@ -920,6 +920,7 @@ async function runAnalysis(project, opt) {
 
     // pick pages: money pages → homepage → top by clicks → top by impressions → sitemap
     const moneySet = new Set(opt.money);
+    let blockedN = 0; const blockCodes = {};
     const urls = [];
     const add = (u) => { if (u && !urls.includes(u) && urls.length < Math.max(maxPages, opt.money.length) && (!inScope || moneySet.has(u) || inScope(u))) urls.push(u); };
     (opt.customUrls || []).forEach(add);
@@ -956,10 +957,12 @@ async function runAnalysis(project, opt) {
         pages.push(res);
         done++;
         step(`Crawling pages (${done}/${total})`, 20 + (done / total) * 55);
-        log(`${f.status} ${moneySet.has(u) ? '💰 ' : ''}${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}`, f.status === 200 ? '' : 'no');
+        if (f.blocked) { blockedN++; blockCodes[f.status] = (blockCodes[f.status] || 0) + 1; res.blocked = true; }
+        log(f.blocked ? `${f.status} ${shortUrl(u)} — blocked by the site's firewall (not audited)` : `${f.status} ${moneySet.has(u) ? '💰 ' : ''}${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}${f.asBrowser ? ' (fetched as browser)' : ''}`, f.status === 200 ? '' : 'no');
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
+    if (blockedN) log(`⚠️ ${blockedN} of ${total} pages were blocked by ${new URL(project.site_url).hostname}'s firewall (${Object.entries(blockCodes).map(([c, n]) => `${n}× HTTP ${c}`).join(', ')}). Search Console & GA4 numbers are complete; page audits use only the ${total - blockedN} pages that loaded. To audit every page, ask the site's tech team to allow-list the user-agent "SearchverseBot".`, 'no');
 
     step('Scoring & finding opportunities', 78);
     const site = siteChecks(pages, robots, sitemap, project.site_url);
@@ -1001,6 +1004,7 @@ async function runAnalysis(project, opt) {
         engagementRate: organic?.cur?.engagementRate ?? null,
       },
       pagesCrawled: pages.length,
+      crawlBlocked: blockedN ? { n: blockedN, total: pages.length, codes: blockCodes, host: new URL(project.site_url).hostname } : null,
       moneyPages: opt.money.length,
       scope: inScope ? (opt.scope === 'all' ? 'All LOB groups' : opt.scope === 'custom' ? `Custom URLs (${opt.scopeGroups[0].patterns.split('\n').length})` : 'LOB: ' + opt.scope.slice(4)) : null,
       brand: project.brand_terms ? { ...brand, terms: project.brand_terms } : null,
@@ -1651,8 +1655,11 @@ function renderRun(project, { run, pages }, runs, head) {
   const tabs = ['Overview', 'Insights', 'GSC + GA', 'GSC', 'GA', 'Quick wins', 'Major optimisations', 'AI search & GEO', 'Rendering', 'Pages', 'Technical', 'History'];
   app.innerHTML = head + `
     <div class="muted small" style="margin-top:6px">Data ${range(run.start_date, run.end_date)} vs ${range(run.prev_start, run.prev_end)}${s.compare === 'year' ? ' (last year)' : s.compare === 'custom' ? ' (custom)' : ''} · ${s.pagesCrawled} pages crawled${s.moneyPages ? ` (💰 ${s.moneyPages} money)` : ''}${s.full ? ` · full export: ${fmt(s.full.queries)} queries` : ''}${s.scope ? ` · <b>scope: ${esc(s.scope)}</b>` : ''} · run by ${esc(run.created_by)}</div>
+    ${s.crawlBlocked ? `<div class="banner section">🛡️ <b>${fmt(s.crawlBlocked.n)} of ${fmt(s.crawlBlocked.total)} pages were blocked by ${esc(s.crawlBlocked.host)}'s firewall</b> (${Object.entries(s.crawlBlocked.codes).map(([c, n]) => `HTTP ${c} ×${n}`).join(', ')}), so they weren't audited.
+      ${s.crawlBlocked.n >= s.crawlBlocked.total ? 'On-page and content scores need at least one page that loads, so they show “–” and the overall score uses the technical checks only.' : 'Scores use only the pages that loaded.'}
+      Search Console and GA4 numbers are <b>not</b> affected. <span class="small">Fix: ask the site's tech team to allow-list the user-agent <code>SearchverseBot</code> (or Cloudflare Workers) in their bot protection.</span></div>` : ''}
     <div class="card section"><div class="scores">
-      <div class="score click-score" data-score="overall">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
+      <div class="score click-score" data-score="overall">${ring(s.scores.overall, true)}<div><b>Overall SEO score</b><div class="muted small">${s.scores.crawlBlocked ? 'Technical checks only' : s.scores.overall >= 80 ? 'Strong' : s.scores.overall >= 55 ? 'Needs work' : 'Poor'}</div></div></div>
       <div class="score click-score" data-score="onpage">${ring(s.scores.onpage)}<div><b>On-page</b><div class="muted small">Titles, meta, headings, links, schema</div></div></div>
       <div class="score click-score" data-score="content">${ring(s.scores.content)}<div><b>Content</b><div class="muted small">Query coverage & depth</div></div></div>
       <div class="score click-score" data-score="technical">${ring(s.scores.technical)}<div><b>Technical</b><div class="muted small">Indexability, sitemap, robots</div></div></div>
