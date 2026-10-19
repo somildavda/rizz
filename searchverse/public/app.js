@@ -958,11 +958,11 @@ async function runAnalysis(project, opt) {
         done++;
         step(`Crawling pages (${done}/${total})`, 20 + (done / total) * 55);
         if (f.blocked) { blockedN++; blockCodes[f.status] = (blockCodes[f.status] || 0) + 1; res.blocked = true; }
-        log(f.blocked ? `${f.status} ${shortUrl(u)} — blocked by the site's firewall (not audited)` : `${f.status} ${moneySet.has(u) ? '💰 ' : ''}${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}${f.asBrowser ? ' (fetched as browser)' : ''}`, f.status === 200 ? '' : 'no');
+        log(f.blocked ? `${f.status} ${shortUrl(u)} — blocked by the site's firewall (not audited)` : `${f.status} ${moneySet.has(u) ? '💰 ' : ''}${shortUrl(u)} — on-page ${res.onpage_score}, content ${res.content_score}${f.crawledAs && f.crawledAs !== 'SearchverseBot' ? ` (as ${f.crawledAs})` : ''}`, f.status === 200 ? '' : 'no');
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    if (blockedN) log(`⚠️ ${blockedN} of ${total} pages were blocked by ${new URL(project.site_url).hostname}'s firewall (${Object.entries(blockCodes).map(([c, n]) => `${n}× HTTP ${c}`).join(', ')}). Search Console & GA4 numbers are complete; page audits use only the ${total - blockedN} pages that loaded. To audit every page, ask the site's tech team to allow-list the user-agent "SearchverseBot".`, 'no');
+    if (blockedN) log(`⚠️ ${blockedN} of ${total} pages were blocked by ${new URL(project.site_url).hostname}'s firewall (${Object.entries(blockCodes).map(([c, n]) => `${n}× HTTP ${c}`).join(', ')}). Search Console & GA4 numbers are complete; page audits use only the ${total - blockedN} pages that loaded. To audit every page, ask the site's tech team to allow-list the user-agent "SearchverseBot". (We already tried SearchverseBot, Chrome mobile/desktop, Googlebot smartphone/desktop and Bingbot.)`, 'no');
 
     step('Scoring & finding opportunities', 78);
     const site = siteChecks(pages, robots, sitemap, project.site_url);

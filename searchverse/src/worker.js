@@ -1636,6 +1636,7 @@ async function pullGa(token, project, run) {
 }
 
 // Fetches a page of the project's own site (never arbitrary hosts) so the browser can analyse it.
+const UA_HINT = new Map(); // host → index of the crawler identity that last worked (per Worker instance)
 async function fetchPage(project, raw) {
   let target;
   try {
@@ -1648,24 +1649,37 @@ async function fetchPage(project, raw) {
   const redirects = [];
   let res;
   let current = target.toString();
-  // our own bot name first; if the site's firewall refuses it, retry once looking like a normal browser
-  const BOT = { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0; +https://developers.google.com/search)', accept: 'text/html,application/xhtml+xml,application/xml,text/plain;q=0.9,*/*;q=0.5' };
-  const BROWSER = {
-    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'accept-language': 'en-IN,en;q=0.9', 'cache-control': 'no-cache', 'upgrade-insecure-requests': '1',
-    'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"macOS"',
+  // try identities in order until the site's firewall lets one through (like Screaming Frog's user-agent switch)
+  const HTML = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8';
+  const chrome = (mobile) => ({
+    'user-agent': mobile
+      ? 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36'
+      : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    accept: HTML, 'accept-language': 'en-IN,en;q=0.9', 'cache-control': 'no-cache', 'upgrade-insecure-requests': '1',
+    'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"', 'sec-ch-ua-mobile': mobile ? '?1' : '?0', 'sec-ch-ua-platform': mobile ? '"Android"' : '"macOS"',
     'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-user': '?1',
-  };
+  });
+  const IDS = [
+    ['SearchverseBot', { 'user-agent': 'Mozilla/5.0 (compatible; SearchverseBot/1.0; +https://developers.google.com/search)', accept: HTML }],
+    ['Chrome (mobile)', chrome(true)],
+    ['Chrome (desktop)', chrome(false)],
+    ['Googlebot Smartphone', { 'user-agent': 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', accept: HTML, 'accept-language': 'en' }],
+    ['Googlebot Desktop', { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', accept: HTML }],
+    ['Bingbot', { 'user-agent': 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)', accept: HTML }],
+  ];
   const BLOCKED = new Set([401, 403, 405, 406, 429, 503, 520, 521, 522, 523, 525, 526, 999]);
-  let headers = BOT, retried = false;
+  // remember per site which identity worked, so the next pages go straight to it
+  const hostKey = target.hostname;
+  let idx = Math.min(UA_HINT.get(hostKey) || 0, IDS.length - 1);
+  let tried = 0;
   for (let hop = 0; hop < 6; hop++) {
     try {
-      res = await fetch(current, { redirect: 'manual', headers });
+      res = await fetch(current, { redirect: 'manual', headers: IDS[idx][1] });
     } catch (e) {
       res = new Response('', { status: 520 });
     }
-    if (BLOCKED.has(res.status) && !retried) { retried = true; headers = BROWSER; hop--; continue; }
+    if (BLOCKED.has(res.status) && tried < IDS.length - 1) { tried++; idx = (idx + 1) % IDS.length; hop--; continue; }
+    if (!BLOCKED.has(res.status)) UA_HINT.set(hostKey, idx);
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       const next = new URL(res.headers.get('location'), current);
       redirects.push({ from: current, to: next.toString(), status: res.status });
@@ -1686,7 +1700,7 @@ async function fetchPage(project, raw) {
     finalUrl: current,
     status: res.status,
     blocked: BLOCKED.has(res.status),
-    asBrowser: retried && headers === BROWSER,
+    crawledAs: IDS[idx][0],
     redirects,
     contentType: type,
     xRobotsTag: res.headers.get('x-robots-tag') || '',
