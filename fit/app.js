@@ -62,8 +62,18 @@ const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
 const blockIndex = () => Math.floor(Math.max(0, (new Date(today() < START_DATE ? START_DATE : today()) - new Date(START_DATE)) / 864e5) / 28);
 function applyProgram() { const p = program(); WEEK = p.blocks ? p.blocks[blockIndex() % p.blocks.length] : p.week; }
 applyProgram();
-// Workouts follow journey days (Day 1 = 21 Oct), not weekdays.
-const cyc = (d = new Date()) => ((Math.floor((new Date(iso(d)) - START) / DAY_MS) % 7) + 7) % 7;
+// Session order: the gym is closed on Sundays, so Sunday is always the rest slot (index 6).
+// Mon–Sat run the program's sessions in order from Day 1; a skipped day pushes the
+// rest of the sequence to the next day instead of losing the session.
+function cyc(d = new Date()) {
+  const k = iso(new Date(d));
+  if (new Date(k).getDay() === 0) return 6;
+  let n = 0;
+  for (let x = START_DATE; x < k; x = iso(new Date(new Date(x).getTime() + DAY_MS))) {
+    if (new Date(x).getDay() !== 0 && !S.days[x]?.checks?.skipGym) n++;
+  }
+  return n % 6;
+}
 const isGymDay = (d = new Date()) => WEEK[cyc(d)].ex.length > 2;
 const runStage = () => RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
 // The day the plan shows by default: today, or Day 1 if the journey hasn't started yet.
@@ -276,9 +286,9 @@ function ring(val, max, color, unit) {
       stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - f)}"/></svg>
     <div class="v"><span>${Math.round(val)}<small>/ ${max}${unit ? " " + unit : ""}</small></span></div></div>`;
 }
-// The 7-day cycle shown on Train: the one containing the plan day (Day 1 before the start).
+// The calendar week (Mon–Sun) shown on Train: the one containing the plan day.
 function dateOfCyc(i) {
-  const pd = new Date(planDay()); pd.setDate(pd.getDate() - cyc(pd) + i);
+  const pd = new Date(planDay()); pd.setDate(pd.getDate() - dayIdx(pd) + i);
   return pd;
 }
 function workoutsThisWeek() {
@@ -429,12 +439,14 @@ function mealTicks(T, d = today()) {
 }
 
 // ---------- train ----------
-let trainSeg = "gym", trainDay = cyc(new Date(planDay())), showProgs = false;
+let trainSeg = "gym", trainDay = dayIdx(new Date(planDay())), showProgs = false;
 V.train = () => seg(trainSeg, "trainseg", [["gym", "Gym"], ["run", "Walk / Run"], ["skills", "Skills"]]) +
   (trainSeg === "run" ? trainRun() : trainSeg === "skills" ? trainSkills() : trainGym());
 
 function trainGym() {
-  const w = WEEK[trainDay], ex = exList(trainDay), wk = workoutsThisWeek(), rest = w.ex.length <= 2, pr = program();
+  const tdate = iso(dateOfCyc(trainDay)), early = tdate < START_DATE, si = cyc(tdate);
+  const w = early ? { title: "Before Day 1", ex: [["Your plan starts on " + fmt(START_DATE), 1, "—", ""]] } : WEEK[si];
+  const ex = early ? w.ex : exList(si), wk = workoutsThisWeek(), rest = w.ex.length <= 2, pr = program();
   return `
   <div class="card"><div class="spread"><div><span class="eyebrow">Your program</span><h2 class="h2">${esc(pr.name)}</h2></div>
     <span class="pill">${pr.days} days / week</span></div>
@@ -447,7 +459,7 @@ function trainGym() {
       <p class="small">${esc(p.why)}</p><p class="sub">${esc(p.by)}</p>
       ${p.id === pr.id ? `<span class="pill ok">Current</span>` : `<button class="btn sm" data-program="${p.id}">Choose this</button>`}</div>`).join("") : ""}
   </div>
-  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${iso(dateOfCyc(i)) === planDay() ? "today" : ""} ${wk[i] ? "done" : ""}"
+  <div class="week">${[0, 1, 2, 3, 4, 5, 6].map((i) => `<button class="${i === trainDay ? "on" : ""} ${iso(dateOfCyc(i)) === planDay() ? "today" : ""} ${wk[i] ? "done" : ""}"
     data-trainday="${i}"><span>${dateOfCyc(i).toLocaleDateString("en-IN", { weekday: "short" })}</span><small>${dateOfCyc(i).getDate()} ${dateOfCyc(i).toLocaleDateString("en-IN", { month: "short" })}</small></button>`).join("")}</div>
   <div class="card">
     <span class="eyebrow">Day ${journeyDay(iso(dateOfCyc(trainDay)))} · ${esc(dayLabel(iso(dateOfCyc(trainDay))))}</span>
@@ -471,7 +483,8 @@ function trainGym() {
           ${skill ? "" : `<button class="btn ghost xs" data-swap="${esc(name)}">Swap</button>`}</div><pre class="ai"></pre>` : ""}
       </div></div>`;
     }).join("")}
-    ${!rest ? `<button class="btn block mt" data-startworkout="${trainDay}">Start guided workout</button>` : ""}
+    ${!rest ? `<button class="btn block mt" data-startworkout="${si}">Start guided workout</button>` : ""}
+    ${new Date(tdate).getDay() === 0 ? `<p class="sub">Sunday: gym closed. Rest, walk, meal prep and grocery order.</p>` : ""}
   </div>
   <div class="card"><h3 class="h3">How to progress</h3>
     <p class="sub">Weeks 1–2: use the starting weights and learn the form. After that, when every set reaches the top of the rep range,

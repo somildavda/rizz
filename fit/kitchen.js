@@ -11,7 +11,7 @@ const journeyDay = (k) => Math.floor((new Date(k) - START) / DAY_MS) + 1;
 // Same rotation as the main app, so both show the same menu for a date.
 const mealIdx = (i, k) => defaultMealIdx(i, k);
 // Gym days follow the default Beginner Full Body cycle (gym on journey days 1, 3 and 5 of each 7).
-const isGymDay = (k) => FULL_BODY[(((journeyDay(k) - 1) % 7) + 7) % 7].ex.length > 2;
+const isGymDay = (k) => new Date(k).getDay() !== 0; // Sundays: gym closed
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
   new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 

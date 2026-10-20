@@ -93,7 +93,7 @@ const ATHLETE_WEEK = [
   ]},
   { day: "Day 6", title: "Walk / run day", ex: [
     ["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""] ]},
-  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 7", title: "Sunday rest · gym closed", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 // Milkha Athlete block B: same muscles, new exercises. Blocks alternate every 4 weeks.
 const ATHLETE_WEEK_B = [
@@ -165,7 +165,7 @@ const UPPER_LOWER = [
     ["Bike warm-up", 1, "6 min", ""], ["Dumbbell Romanian deadlift", 3, "10–12", ""], ["Single-leg glute bridge", 3, "10/side", ""],
     ["Hip abduction machine", 3, "15", ""], ["Lying leg curl", 3, "12", ""], ["Bike intervals", 6, "30 s hard / 90 s easy", ""] ]},
   { day: "Day 6", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
-  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 7", title: "Sunday rest · gym closed", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 const FULL_BODY = [
   { day: "Day 1", title: "Full body A", ex: [
@@ -183,7 +183,7 @@ const FULL_BODY = [
     ["Dumbbell bench press", 3, "8–12", ""], ["Face pull", 3, "15", ""], ["Dumbbell curl", 2, "12", ""],
     ["Farmer's carry", 3, "40 m", ""] ]},
   { day: "Day 6", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
-  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 7", title: "Sunday rest · gym closed", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 
 const PROGRAMS = [
