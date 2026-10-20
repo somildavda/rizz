@@ -343,9 +343,22 @@ function restSec(name) {
 }
 const fmtRest = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 const repRange = (reps) => { const m = String(reps).match(/(\d+)(?:–(\d+))?/); return m ? [+m[1], +(m[2] || m[1])] : null; };
+// Gym weights are stored in kg and shown in the chosen unit (lb by default; Settings).
+const LB = 2.20462;
+const lbMode = () => (S.settings.unit || "lb") === "lb";
+const U = () => (lbMode() ? "lb" : "kg");
+const toDisp = (kg) => (kg === "" || kg == null || isNaN(+kg) ? "" : lbMode() ? Math.round((+kg * LB) / 2.5) * 2.5 : Math.round(+kg * 4) / 4);
+const fromDisp = (v) => (v === "" || isNaN(+v) ? "" : String(Math.round((lbMode() ? +v / LB : +v) * 1000) / 1000));
+const wt = (kg) => `${toDisp(kg)} ${U()}`;
+// "20–25 kg stack" → "45–55 lb stack" in lb mode.
+const wtText = (t) => (lbMode() ? String(t).replace(/(\d+(?:\.\d+)?)(?:–(\d+(?:\.\d+)?))?\s*kg/g,
+  (m, a, b) => `${Math.round((a * LB) / 2.5) * 2.5}${b ? "–" + Math.round((b * LB) / 2.5) * 2.5 : ""} lb`) : t);
 const startKg = (name) => { const m = (START_WEIGHTS[name] || "").match(/(\d+(?:\.\d+)?)/); return m ? +m[1] : null; };
-const kgStep = (name) => (/lateral|fly|face pull|pushdown|curl|rear delt|cable crunch/i.test(name) ? 1.25 : 2.5);
-const roundKg = (x) => Math.round(x / 1.25) * 1.25;
+// Progression step: +5 lb (+2.5 kg) on big lifts, +2.5 lb (+1.25 kg) on small cable/isolation moves.
+const smallMove = (name) => /lateral|fly|face pull|pushdown|curl|rear delt|cable crunch|triceps/i.test(name);
+const kgStep = (name) => (lbMode() ? (smallMove(name) ? 2.5 : 5) / LB : smallMove(name) ? 1.25 : 2.5);
+const stepText = (name) => (lbMode() ? `+${smallMove(name) ? 2.5 : 5} lb` : `+${smallMove(name) ? 1.25 : 2.5} kg`);
+const roundKg = (x) => (lbMode() ? (Math.round((x * LB) / 2.5) * 2.5) / LB : Math.round(x / 1.25) * 1.25);
 function history(name, n = 3) {
   return Object.keys(S.days).filter((k) => k < today()).sort().reverse()
     .map((k) => ({ date: k, sets: (S.days[k].sets?.[name] || []).filter((x) => x && x.kg && x.reps) }))
@@ -361,7 +374,7 @@ function target(name, reps) {
     kg = startKg(name); why = kg ? "Starting weight. Last 2 reps should feel hard." : "Find a weight where the last 2 reps are hard.";
   } else {
     const last = h[0].sets, lastKg = Math.max(...last.map((x) => +x.kg)), repsDone = last.map((x) => +x.reps);
-    if (repsDone.every((x) => x >= hi)) { kg = lastKg + kgStep(name); why = `You hit ${hi} reps on every set last time, so +${kgStep(name)} kg.`; }
+    if (repsDone.every((x) => x >= hi)) { kg = lastKg + kgStep(name); why = `You hit ${hi} reps on every set last time, so ${stepText(name)}.`; }
     else if (repsDone.some((x) => x < lo)) {
       const prevLow = h[1]?.sets.some((x) => +x.reps < lo);
       kg = prevLow ? roundKg(lastKg * 0.9) : lastKg;
@@ -492,9 +505,9 @@ function trainGym() {
         ${(() => {
           const t = target(name, reps), h = history(name);
           if (!t) return "";
-          return `<div class="kg">${t.kg ? `Today: ${t.kg} kg × ${t.reps}` : `Today: × ${t.reps}`} · rest ${fmtRest(restSec(name))}</div>
-            <div class="sub why">${esc(t.why)}${!h.length && start ? ` (${esc(start)})` : ""}</div>
-            ${h.length ? `<div class="hist">${h.map((x) => `<span>${esc(fmt(x.date))}: ${x.sets.map((y) => `${esc(y.kg)}×${esc(y.reps)}`).join(", ")}</span>`).join("")}</div>` : ""}`;
+          return `<div class="kg">${t.kg ? `Today: ${wt(t.kg)} × ${t.reps}` : `Today: × ${t.reps}`} · rest ${fmtRest(restSec(name))}</div>
+            <div class="sub why">${esc(t.why)}${!h.length && start ? ` (${esc(wtText(start))})` : ""}</div>
+            ${h.length ? `<div class="hist">${h.map((x) => `<span>${esc(fmt(x.date))}: ${x.sets.map((y) => `${toDisp(y.kg)}×${esc(y.reps)}`).join(", ")}</span>`).join("")}</div>` : ""}`;
         })()}
         ${stepList(name, iso(dateOfCyc(trainDay)))}
         ${!rest && !stepList(name, today()) ? `<div class="row xs-gap">${vid(skill ? SKILLS[skillIndex()].drills[0] : cleanName(name) + " proper form")}
@@ -506,7 +519,7 @@ function trainGym() {
   </div>
   <div class="card"><h3 class="h3">How to progress</h3>
     <p class="sub">Weeks 1–2: use the starting weights and learn the form. After that, when every set reaches the top of the rep range,
-    add 2.5 kg (or the next dumbbell). The app shows your last numbers so you always know what to beat.</p></div>`;
+    add 5 lb (2.5 kg) on big lifts or 2.5 lb on small cable moves. The app shows your last numbers so you always know what to beat.</p></div>`;
 }
 
 function trainRun() {
@@ -567,16 +580,16 @@ function renderWM() {
     <div class="wm-name">${esc(name)}</div>
     <div class="sub">${sets > 1 ? sets + " sets × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
     ${stepList(name, today()) ? "" : `<div class="row xs-gap mt">${vid(cleanName(name) + " proper form", "Watch the form")}</div>`}
-    ${tg ? `<div class="note"><b>Today: ${tg.kg ? `${tg.kg} kg × ${tg.reps}` : `${tg.reps} reps`}</b> · ${sets} sets · rest ${fmtRest(restSec(name))}<br><span class="sub">${esc(tg.why)}</span>
-      ${last ? `<br><span class="sub">Last time: ${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} × ${esc(x.reps)}`).join(" · ")}</span>` : ""}</div>` : ""}
+    ${tg ? `<div class="note"><b>Today: ${tg.kg ? `${wt(tg.kg)} × ${tg.reps}` : `${tg.reps} reps`}</b> · ${sets} sets · rest ${fmtRest(restSec(name))}<br><span class="sub">${esc(tg.why)}</span>
+      ${last ? `<br><span class="sub">Last time: ${last.sets.filter((x) => x?.kg).map((x) => `${toDisp(x.kg)} × ${esc(x.reps)}`).join(" · ")} ${U()}</span>` : ""}</div>` : ""}
     <div class="timer" id="restBox" ${WM.restEnd > Date.now() ? "" : "hidden"}><span class="sub">Rest</span><b id="restT">0:00</b>
       <button class="btn ghost sm" id="restSkip">Skip rest</button></div>
-    ${stepList(name, today()) || (timed ? "" : `<div class="sethead"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>`) + Array.from({ length: n }, (_, s) => {
+    ${stepList(name, today()) || (timed ? "" : `<div class="sethead"><span>Set</span><span>${U()}</span><span>Reps</span><span></span></div>`) + Array.from({ length: n }, (_, s) => {
       const x = logged[s] || {}, prev = last?.sets[s] || {};
       return timed
         ? `<div class="setrow timed"><span>Done: ${esc(reps)}</span><button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Done">✓</button></div>`
         : `<div class="setrow"><span class="sn">${s + 1}</span>
-          <input inputmode="decimal" placeholder="${esc(tg?.kg ?? prev.kg ?? "kg")}" data-setf="kg" data-s="${s}" value="${esc(x.kg || "")}" aria-label="Set ${s + 1} kg">
+          <input inputmode="decimal" placeholder="${esc(toDisp(tg?.kg ?? prev.kg) || U())}" data-setf="kg" data-s="${s}" value="${esc(toDisp(x.kg))}" aria-label="Set ${s + 1} ${U()}">
           <input inputmode="numeric" placeholder="${esc(tg?.reps ?? prev.reps ?? "")}" data-setf="reps" data-s="${s}" value="${esc(x.reps || "")}" aria-label="Set ${s + 1} reps">
           <button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Set ${s + 1} done">✓</button></div>`;
     }).join("")}
@@ -715,6 +728,31 @@ function foodShop() {
   <p class="sub center">Prices are estimates. Edit them to match the app and the budget updates.</p>`;
 }
 
+// Progressive overload proof: first vs latest top weight for each lift.
+function strengthGains() {
+  const first = {}, last = {};
+  for (const k of Object.keys(S.days).sort()) for (const [name, sets] of Object.entries(S.days[k].sets || {})) {
+    const top = Math.max(0, ...(Array.isArray(sets) ? sets : []).filter((x) => x && +x.kg && +x.reps).map((x) => +x.kg));
+    if (!top) continue;
+    first[name] ??= { kg: top, date: k }; last[name] = { kg: top, date: k };
+  }
+  return Object.keys(first).map((n) => ({ name: n, from: first[n].kg, to: last[n].kg, pct: Math.round(((last[n].kg - first[n].kg) / first[n].kg) * 100) }))
+    .sort((a, b) => b.pct - a.pct);
+}
+// Planned gym sessions done in the last 28 days (Sundays excluded; a skip counts as missed).
+function consistency() {
+  let planned = 0, done = 0;
+  for (let i = 0; i < 28; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i); const k = iso(d);
+    if (k < START_DATE || k > today() || d.getDay() === 0) continue;
+    const c = S.days[k]?.checks || {};
+    if (!isGymDay(d) && !c.skipGym) continue;
+    if (k === today() && !c.workout) continue; // today isn't over yet
+    planned++; if (c.workout) done++;
+  }
+  return planned ? { pct: Math.round((done / planned) * 100), done, planned } : null;
+}
+
 // ---------- journey (progress) ----------
 V.journey = () => {
   const pi = phaseIndex(), w = latestWeight(), exp = expectedKg(new Date()), diff = w - exp, p = S.profile, L = latest();
@@ -730,6 +768,16 @@ V.journey = () => {
       <label class="field">Shoulders cm<input id="wSh" inputmode="decimal" placeholder="widest"></label></div>
     <button class="btn block mt" id="wSave">Save today's numbers</button>
   </section>
+  ${(() => {
+    const c = consistency(), g = strengthGains();
+    return `<div class="card"><div class="spread"><h3 class="h3" style="margin:0">Consistency · last 4 weeks</h3>
+      <span class="pill ${!c ? "grey" : c.pct >= 85 ? "ok" : "warn"}">${c ? c.pct + "%" : "—"}</span></div>
+      <p class="sub">${!c ? "Your first workout starts the count." : `${c.done} of ${c.planned} gym sessions done. ${c.pct >= 85 ? "This is the pace that gets results." : "Aim for 85%+: a missed day just moves to tomorrow, so get the next one in."}`}</p>
+      <h3 class="h3 mt">Strength gains (progressive overload)</h3>
+      ${g.length ? g.slice(0, 8).map((x) => `<div class="tick static"><div class="t"><b>${esc(x.name)}</b>
+        <span class="sub">${wt(x.from)} → ${wt(x.to)}</span></div><span class="meta ${x.pct > 0 ? "ok-text" : ""}">${x.pct > 0 ? "+" : ""}${x.pct}%</span></div>`).join("")
+        : `<p class="sub">Log your sets in the guided workout and your lifts will show here as they go up.</p>`}</div>`;
+  })()}
   <div class="grid2">
     <div class="card stat"><span class="eyebrow">V-taper ratio</span><b>${ratio ?? "—"}</b><span class="sub">Shoulders ÷ waist. Goal 1.45+</span></div>
     <div class="card stat"><span class="eyebrow">Waist</span><b>${L.waist ? L.waist + " cm" : "—"}</b><span class="sub">Abs show around 80–84 cm</span></div>
@@ -883,6 +931,8 @@ V.settings = () => {
       <label class="field">Body fat %<input id="pBF" inputmode="decimal" value="${p.bodyFat}"></label>
       <label class="field">Abs reveal date<input id="pDate" type="date" value="${esc(p.targetDate)}"></label>
       <label class="field">Budget ₹/month<input id="pBud" inputmode="numeric" value="${p.budget}"></label>
+      <label class="field">Gym weights in<select id="pUnit"><option value="lb" ${lbMode() ? "selected" : ""}>lb (pounds)</option>
+        <option value="kg" ${lbMode() ? "" : "selected"}>kg</option></select></label>
     </div>
     <button class="btn block mt" id="sSave">Save</button></div>
   <div class="card"><h3 class="h3">Backup</h3>
@@ -914,7 +964,8 @@ document.addEventListener("input", (e) => {
   const el = e.target;
   if (el.dataset.setf && WM) {
     const name = exList(WM.di)[WM.i][0], s = (day().sets[name] ||= []);
-    s[+el.dataset.s] = { ...(s[+el.dataset.s] || {}), [el.dataset.setf]: el.value }; save();
+    const v = el.dataset.setf === "kg" ? fromDisp(el.value) : el.value;
+    s[+el.dataset.s] = { ...(s[+el.dataset.s] || {}), [el.dataset.setf]: v }; save();
   }
 });
 document.addEventListener("change", (e) => {
@@ -985,8 +1036,8 @@ document.addEventListener("click", async (e) => {
     s[i] = { ...(s[i] || {}), done: !s[i]?.done };
     if (s[i].done && !s[i].kg && !isTimed(String(reps))) {
       const kg = document.querySelector(`[data-setf="kg"][data-s="${i}"]`), rp = document.querySelector(`[data-setf="reps"][data-s="${i}"]`);
-      s[i].kg = kg && kg.placeholder !== "kg" ? kg.placeholder : ""; s[i].reps = rp?.placeholder || "";
-      toast(`Saved ${s[i].kg ? s[i].kg + " kg × " : ""}${s[i].reps} reps. Type real numbers if different.`);
+      s[i].kg = kg && !isNaN(+kg.placeholder) ? fromDisp(kg.placeholder) : ""; s[i].reps = rp?.placeholder || "";
+      toast(`Saved ${s[i].kg ? wt(s[i].kg) + " × " : ""}${s[i].reps} reps. Type real numbers if different.`);
     }
     if (s[i].done) WM.restEnd = Date.now() + restSec(name) * 1000;
     save(); return renderWM();
@@ -1050,6 +1101,7 @@ document.addEventListener("click", async (e) => {
     }
     case "sSave": {
       S.settings.syncKey = $("#sSync").value.trim();
+      S.settings.unit = $("#pUnit").value;
       S.settings.geminiKey = $("#sKey").value.trim(); S.settings.model = $("#sModel").value.trim() || "gemini-2.5-flash";
       Object.assign(S.profile, { age: +$("#pAge").value, heightCm: +$("#pH").value, startWeight: +$("#pW").value,
         bodyFat: +$("#pBF").value, targetDate: $("#pDate").value, budget: +$("#pBud").value });
