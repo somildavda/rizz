@@ -86,9 +86,27 @@ function exList(di) {
   return ex;
 }
 
+// Meal swaps shared with the kitchen view through the Claude page's shared store.
+// Only {date: {slot: dish}} is shared; weight, workouts and everything else stay on this device.
+let SHARED = {}, menuDb = null;
+(async () => {
+  try { menuDb = window.claude?.use ? await window.claude.use("db") : null; } catch { menuDb = null; }
+  if (!menuDb) return;
+  menuDb.collection("menu").onSnapshot((qs) => {
+    SHARED = Object.fromEntries(qs.docs.map((d) => [d.id, d.data()?.picks || {}]));
+    render();
+  }, () => {});
+})();
+let pushing = Promise.resolve();
+function sharePicks(d) {
+  if (!menuDb) return;
+  const picks = { ...(S.days[d]?.mealPick || {}) };
+  pushing = pushing.then(() => menuDb.doc(`menu/${d}`).set({ picks })).catch(() => toast("Couldn't sync this swap to the kitchen view"));
+}
+
 // Meals rotate by date so every day differs; a hand-picked option for that day wins.
 function mealPickIdx(i, d = today()) {
-  const own = S.days[d]?.mealPick?.[i];
+  const own = S.days[d]?.mealPick?.[i] ?? SHARED[d]?.[i];
   if (own != null) return own;
   return defaultMealIdx(i, d);
 }
@@ -793,6 +811,27 @@ function looksDerm() {
     <li>Do I need anything for hair fall? Any issue with whey or creatine?</li></ul></div>`;
 }
 
+// ---------- kitchen (food only, for the person cooking) ----------
+let kitchenDate = null;
+V.kitchen = () => {
+  const k = kitchenDate || planDay(), T = dayTargets(k);
+  return `
+  <div class="card pager"><button class="iconbtn" data-kitchendate="${addDays(k, -1)}" ${k <= today() ? "disabled" : ""} aria-label="Previous day">‹</button>
+    <div class="center grow"><b>${esc(dayLabel(k))}</b><div class="sub">${fmt(k)}${journeyDay(k) >= 1 ? ` · Day ${journeyDay(k)}` : ""}</div></div>
+    <button class="iconbtn" data-kitchendate="${addDays(k, 1)}" aria-label="Next day">›</button></div>
+  <button class="btn ghost block sm" id="copyCook" data-date="${k}">📋 Copy this day's menu</button>
+  ${MEALS.map((slot, i) => {
+    if (slot.gymOnly && (!T.gym || T.skippedGym)) return "";
+    const m = meal(i, k);
+    return `<div class="card"><span class="eyebrow">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span>
+      <h2 class="h2">${esc(m.name)}</h2>
+      <h3 class="h3 mt">Take</h3><ul class="bullets">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+      <h3 class="h3 mt">Method</h3><ol class="bullets">${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>`;
+  }).join("")}
+  <div class="card"><h3 class="h3">Kitchen rules</h3><ul class="bullets">${COOK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}
+    <li>Never use tofu, rajma, chole or kabuli chana.</li></ul></div>`;
+};
+
 // ---------- settings ----------
 V.settings = () => {
   const p = S.profile, s = S.settings;
@@ -823,11 +862,12 @@ let tab = location.hash.slice(1) || "today";
 if (tab === "plan") tab = "journey";
 function render() {
   if (!V[tab]) tab = "today";
+  document.body.classList.toggle("kitchen", tab === "kitchen");
   $("#view").innerHTML = V[tab]();
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
   const name = S.profile.name ? `, ${S.profile.name}` : "";
   const h = new Date().getHours();
-  $("#greet").textContent = `${h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"}${name}`;
+  $("#greet").textContent = tab === "kitchen" ? "Kitchen" : `${h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"}${name}`;
   $("#sub").textContent = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
 }
 window.addEventListener("hashchange", () => {
@@ -878,7 +918,7 @@ document.addEventListener("click", async (e) => {
     (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % MEALS[i].options.length;
     const at = x.food.findIndex((f) => f.plan === i);
     if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, fib: m.fib, plan: i }; }
-    save(); render(); return toast(`Swapped to ${meal(i, dt).name}`);
+    save(); sharePicks(dt); render(); return toast(`Swapped to ${meal(i, dt).name}`);
   }
   if (d.meal) {
     const i = +d.meal, dt = d.date || today(), f = day(dt).food, at = f.findIndex((x) => x.plan === i);
@@ -887,11 +927,12 @@ document.addEventListener("click", async (e) => {
   }
   if (d.pickmeal) {
     const [i, j, dt] = d.pickmeal.split(":"), x = day(dt);
-    (x.mealPick ??= {})[+i] = +j; save(); return render();
+    (x.mealPick ??= {})[+i] = +j; save(); sharePicks(dt); return render();
   }
   if (d.shopweek) { shopWeek = Math.max(1, +d.shopweek); return render(); }
   if (d.bought) { const b = (S.weekly[`shop${d.week}`] ??= {}); b[d.bought] = !b[d.bought]; save(); return render(); }
   if (d.fooddate) { foodDate = d.fooddate < today() ? today() : d.fooddate; return render(); }
+  if (d.kitchendate) { kitchenDate = d.kitchendate < today() ? today() : d.kitchendate; return render(); }
   if (d.planday) { planOffset = +d.planday; return render(); }
   if (d.feel) { const [k, v] = d.feel.split(":"), x = day(); x.feel = { ...(x.feel || {}), [k]: +v }; save(); return render(); }
   if (d.trdone) { const t = S.treatments.find((x) => x.id === d.trdone); if (t) t.done = !t.done; save(); return render(); }
