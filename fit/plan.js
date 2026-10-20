@@ -8,8 +8,28 @@ const PROFILE_DEFAULT = {
   gym: "Gold's Gym, Kandivali West", knee: "Left knee pain — avoid deep squats",
 };
 
-// ~600 kcal/day deficit from estimated maintenance (~2,850 kcal).
-const TARGETS = { kcal: 2200, protein: 150, carbs: 250, fat: 60, waterL: 3.5, steps: 10000, sleepH: 7.5 };
+// Realistic roadmap. Maintenance is ~2,850 kcal; deficits grow slowly so a beginner
+// keeps strength and muscle. Expected loss ~0.6–0.8 kg/week after the first weeks.
+const PHASES = [
+  { name: "Foundation", start: "2026-10-20", end: "2026-11-16", fromKg: 94.5, toKg: 91.5,
+    kcal: 2300, protein: 140, carbs: 270, fat: 65, steps: 8000,
+    focus: "Learn every exercise with light weights. Build the daily habits. The first 1–2 kg is partly water.",
+    food: "Follow the meal plan as written." },
+  { name: "Fat loss", start: "2026-11-17", end: "2027-01-10", fromKg: 91.5, toKg: 86.5,
+    kcal: 2150, protein: 150, carbs: 240, fat: 60, steps: 10000,
+    focus: "Add weight whenever you hit the top of the rep range. Push the Thursday intervals harder.",
+    food: "Swap the night milk for 200 g dahi. Max 1 cheat meal a week (Christmas/New Year included)." },
+  { name: "Sharpen", start: "2027-01-11", end: "2027-02-12", fromKg: 86.5, toKg: 84,
+    kcal: 2000, protein: 155, carbs: 200, fat: 55, steps: 12000,
+    focus: "Keep lifting heavy, add 10 min incline walk after every session. Grooming and posture at their best for photos.",
+    food: "Dinner: replace rice with extra sabzi + tofu. No cheat meals." },
+  { name: "Milkha level", start: "2027-02-13", end: "2027-07-31", fromKg: 84, toKg: 78,
+    kcal: 2100, protein: 150, carbs: 220, fat: 60, steps: 10000,
+    focus: "Slower cut towards ~12% body fat. Add light jogging only if the left knee is pain-free.",
+    food: "Take 1 week at maintenance (2,700 kcal) every 8 weeks." },
+];
+const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% weight
+const DAILY = { waterL: 3.5, sleepH: 7.5 };
 
 // Mon..Sun. Each exercise: [name, sets, reps, note]
 const WEEK = [

@@ -2,8 +2,11 @@
 const KEY = "milkha-mode-v1";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const today = () => new Date().toLocaleDateString("en-CA");
+const iso = (d) => d.toLocaleDateString("en-CA");
+const today = () => iso(new Date());
 const dayIdx = (d = new Date()) => (d.getDay() + 6) % 7; // Mon = 0
+const DAY_MS = 864e5;
+const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 
 let S = load();
 function load() {
@@ -18,29 +21,53 @@ function load() {
   };
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
-function day(d = today()) { return (S.days[d] ??= { checks: {}, food: [], sets: {} }); }
+function day(d = today()) {
+  const x = (S.days[d] ??= { checks: {}, food: [], sets: {} });
+  x.checks ??= {}; x.food ??= []; x.sets ??= {};
+  return x;
+}
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---------- phases ----------
+const START = new Date(PHASES[0].start);
+const phaseIndex = (d = new Date()) => {
+  const k = iso(d), i = PHASES.findIndex((p) => k >= p.start && k <= p.end);
+  return i >= 0 ? i : k < PHASES[0].start ? 0 : PHASES.length - 1;
+};
+const phase = () => PHASES[phaseIndex()];
+const weekNo = (d = new Date()) => Math.max(1, Math.floor((d - START) / (7 * DAY_MS)) + 1);
+const isDeload = () => DELOAD_WEEKS.includes(weekNo());
+function expectedKg(d) {
+  const p = PHASES[phaseIndex(d)], a = new Date(p.start), b = new Date(p.end);
+  const t = Math.min(1, Math.max(0, (d - a) / (b - a)));
+  return p.fromKg + (p.toKg - p.fromKg) * t;
+}
+const latestWeight = () => S.weights.at(-1)?.kg ?? S.profile.startWeight;
 
 // ---------- Gemini ----------
 async function gemini(prompt, { json = false, image = null } = {}) {
   const k = S.settings.geminiKey.trim();
-  if (!k) throw new Error("Add your Gemini API key in Settings first.");
+  if (!k) throw new Error("Add your Gemini API key in Settings (⚙️ top right) first.");
   const parts = [{ text: prompt }];
   if (image) parts.push({ inline_data: { mime_type: image.type, data: image.data } });
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(S.settings.model)}:generateContent`,
     { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": k },
-      body: JSON.stringify({ contents: [{ parts }],
-        generationConfig: json ? { responseMimeType: "application/json" } : {} }) });
+      body: JSON.stringify({ contents: [{ parts }], generationConfig: json ? { responseMimeType: "application/json" } : {} }) });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `Gemini error ${res.status}`);
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
   return json ? JSON.parse(text) : text;
 }
 const coachContext = () => {
-  const p = S.profile;
-  return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat, vegetarian (loves tofu), beginner,
-${p.knee}. Trains 60 min at ${p.gym}. Goal: Farhan Akhtar's Bhaag Milkha Bhaag physique by ${p.targetDate}.
-Budget ₹${p.budget}/month, orders groceries on Zepto, cooks at home. Daily target ${TARGETS.kcal} kcal, ${TARGETS.protein} g protein.`;
+  const p = S.profile, ph = phase();
+  return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian (loves tofu), beginner lifter,
+${p.knee}. Trains 60 min, 5 days/week at ${p.gym}. Goal: Farhan Akhtar's Bhaag Milkha Bhaag physique; phase 1 deadline ${p.targetDate}.
+Current phase: ${ph.name} (${ph.kcal} kcal, ${ph.protein} g protein, ${ph.steps} steps). Budget ₹${p.budget}/month, orders on Zepto, cooks at home.
+${p.derm ? "Dermatologist routine: " + p.derm : ""}`;
 };
 function fileToB64(file) {
   return new Promise((ok, bad) => {
@@ -51,189 +78,339 @@ function fileToB64(file) {
 }
 
 // ---------- helpers ----------
-const latestWeight = () => S.weights.at(-1)?.kg ?? S.profile.startWeight;
 const foodTotals = (d) => d.food.reduce((t, f) => ({ kcal: t.kcal + (+f.kcal || 0), p: t.p + (+f.p || 0),
   c: t.c + (+f.c || 0), f: t.f + (+f.f || 0) }), { kcal: 0, p: 0, c: 0, f: 0 });
-function checkbox(id, text) {
+const tick = (id, title, meta = "", sub = "") => {
   const on = !!day().checks[id];
-  return `<label class="check ${on ? "done" : ""}"><input type="checkbox" data-check="${esc(id)}" ${on ? "checked" : ""}><span>${text}</span></label>`;
+  return `<div class="tick ${on ? "on" : ""}" data-check="${esc(id)}"><span class="box"></span>
+    <div class="t"><b>${title}</b>${sub ? `<span class="muted small">${sub}</span>` : ""}</div>${meta ? `<span class="meta">${meta}</span>` : ""}</div>`;
+};
+function ring(val, max, color, unit) {
+  const r = 36, c = 2 * Math.PI * r, f = Math.min(1, max ? val / max : 0);
+  return `<div class="ring"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" stroke="var(--surface2)" stroke-width="8"/>
+    <circle cx="42" cy="42" r="${r}" fill="none" stroke="${color}" stroke-width="8" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - f)}"/></svg>
+    <div class="v"><span>${Math.round(val)}<small>/ ${max} ${unit}</small></span></div></div>`;
 }
-function weekStreak() {
-  let n = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    if (S.days[d.toLocaleDateString("en-CA")]?.checks.workout) n++;
+function workoutsThisWeek() {
+  const mon = new Date(); mon.setDate(mon.getDate() - dayIdx());
+  return WEEK.map((_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return !!S.days[iso(d)]?.checks.workout; });
+}
+function lastSets(name) {
+  const keys = Object.keys(S.days).filter((k) => k < today()).sort().reverse();
+  for (const k of keys) {
+    const s = S.days[k].sets?.[name];
+    if (Array.isArray(s) && s.some((x) => x && typeof x === "object" && x.kg)) return { date: k, sets: s };
   }
-  return n;
+  return null;
 }
+const isTimed = (reps) => /min|s$|s\/|m$|\/ /.test(reps);
 
 // ---------- views ----------
 const V = {};
 
 V.today = () => {
-  const w = WEEK[dayIdx()], d = day(), t = foodTotals(d);
+  const ph = phase(), w = WEEK[dayIdx()], d = day(), t = foodTotals(d);
+  const done = d.checks.workout, rest = w.ex.length <= 2;
+  const needsWeigh = !S.weights.some((x) => x.date === today());
+  const habits = [
+    ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", `${(ph.steps / 1000).toFixed(0)}k steps`],
+    ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "🧴", "AM skin + SPF"],
+    ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
+    ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🚫", "No junk today"],
+  ];
+  const doneHabits = habits.filter(([id]) => d.checks[id]).length;
   return `
-  <div class="card"><div class="stats">
-    <div><b>${latestWeight()}</b><span class="muted">kg</span></div>
-    <div><b>${Math.round(t.kcal)}</b><span class="muted">/ ${TARGETS.kcal} kcal</span></div>
-    <div><b>${Math.round(t.p)}</b><span class="muted">/ ${TARGETS.protein} g P</span></div>
-    <div><b>${weekStreak()}/5</b><span class="muted">workouts (7d)</span></div>
-  </div></div>
-  <div class="card"><h2>Today: ${esc(w.title)}</h2>
-    ${checkbox("workout", `Finish workout — <a href="#train" style="color:var(--accent)">open plan</a>`)}
-    ${checkbox("protein", `Hit ${TARGETS.protein} g protein`)}
-    ${checkbox("water", `Drink ${TARGETS.waterL} L water`)}
-    ${checkbox("steps", `${TARGETS.steps.toLocaleString("en-IN")} steps`)}
-    ${checkbox("creatine", "Creatine 5 g")}
-    ${checkbox("skinAM", "Morning skin routine + sunscreen")}
-    ${checkbox("posture", "Posture drills (5 min)")}
-    ${checkbox("skinPM", "Night skin routine")}
-    ${checkbox("sleep", `Sleep ${TARGETS.sleepH} h`)}
+  <div class="card hero">
+    <div class="spread"><span class="pill">${esc(ph.name)} · Week ${weekNo()}</span>
+      ${isDeload() ? `<span class="pill grey">Deload week</span>` : ""}</div>
+    <h2 style="margin:12px 0 4px">${rest ? esc(w.title) : esc(w.title)}</h2>
+    <div class="muted">${rest ? "Recovery day — walk, stretch, prep meals." : `${w.ex.length} exercises · ~60 min`}</div>
+    <div class="row" style="margin-top:14px">
+      ${rest ? "" : done
+        ? `<span class="pill ok" style="padding:10px 14px">✓ Workout done</span><button class="btn ghost sm" data-go="train">View</button>`
+        : `<button class="btn grow" data-startworkout="${dayIdx()}">▶ Start workout</button><button class="btn ghost" data-go="train">Plan</button>`}
+    </div>
   </div>
-  <div class="card"><h2>Today's meals</h2>
-    ${MEALS.map((m, i) => checkbox("meal" + i, `<b>${esc(m.time)}</b> — ${esc(m.items)} <span class="muted">(${m.kcal} kcal, ${m.p} g P)</span>`)).join("")}
-  </div>`;
+
+  <div class="card"><div class="rings">
+    <div>${ring(t.kcal, ph.kcal, "var(--accent)", "kcal")}<div class="lbl">Calories</div></div>
+    <div>${ring(t.p, ph.protein, "var(--ok)", "g")}<div class="lbl">Protein</div></div>
+    <div>${ring(workoutsThisWeek().filter(Boolean).length, 5, "var(--blue)", "")}<div class="lbl">Workouts</div></div>
+  </div></div>
+
+  ${needsWeigh ? `<div class="card"><div class="spread"><div><b>Morning weigh-in</b><div class="muted small">After toilet, before food</div></div></div>
+    <div class="row" style="margin-top:10px"><input class="grow" id="qWeigh" inputmode="decimal" placeholder="kg">
+      <button class="btn" id="qWeighSave">Save</button></div></div>` : ""}
+
+  <div class="section-title"><h2>Habits</h2><span class="muted">${doneHabits}/${habits.length}</span></div>
+  <div class="chips">${habits.map(([id, e, label]) =>
+    `<button class="chip ${d.checks[id] ? "on" : ""}" data-check="${id}"><span class="e">${e}</span><span>${label}</span></button>`).join("")}</div>
+
+  <div class="section-title"><h2>Meals</h2><a href="#food" class="small">Log other food →</a></div>
+  <div class="card" style="padding:4px 16px">
+    ${MEALS.map((m, i) => mealTick(m, i)).join("")}
+  </div>
+  <p class="muted small" style="text-align:center">${esc(ph.food)}</p>`;
 };
+function mealTick(m, i) {
+  const on = day().food.some((f) => f.plan === i);
+  return `<div class="tick ${on ? "on" : ""}" data-meal="${i}"><span class="box"></span>
+    <div class="t"><b>${esc(m.name)}</b><span class="muted small">${esc(m.items)}</span></div>
+    <span class="meta">${esc(m.time.split(" ")[0])}<br>${m.p} g P</span></div>`;
+}
 
 let trainDay = dayIdx();
 V.train = () => {
-  const w = WEEK[trainDay], d = day();
+  const w = WEEK[trainDay], wk = workoutsThisWeek(), rest = w.ex.length <= 2;
   return `
-  <div class="daytabs">${WEEK.map((x, i) => `<button class="small ${i === trainDay ? "on" : ""}" data-trainday="${i}">${x.day}</button>`).join("")}</div>
-  <div class="card"><h2>${esc(w.day)} — ${esc(w.title)}</h2>
-    <p class="warn">Left knee: stop any move that causes sharp pain. Pain-free range only.</p>
+  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${i === dayIdx() ? "today" : ""} ${wk[i] ? "done" : ""}"
+    data-trainday="${i}">${x.day}</button>`).join("")}</div>
+  <div class="card">
+    <div class="spread"><h2 style="margin:0">${esc(w.title)}</h2></div>
+    ${isDeload() ? `<p class="note-box" style="margin-top:10px">Deload week: same exercises, use ~60% of your usual weight.</p>` : ""}
+    ${!rest ? `<p class="warn small" style="margin:10px 0 0">Left knee: pain-free range only. Sharp pain = stop and use AI swap.</p>` : ""}
     ${w.ex.map(([name, sets, reps, note], i) => {
-      const id = `${trainDay}-${i}`, logged = d.sets[id] || [];
-      const showSets = sets > 1 && !/min|s$|m$/.test(reps);
-      return `<div class="ex"><b>${esc(name)}</b> <span class="tag">${sets} × ${esc(reps)}</span>
-        ${note ? `<div class="muted">${esc(note)}</div>` : ""}
-        ${showSets ? `<div class="sets">${Array.from({ length: Math.min(sets, 4) }, (_, s) =>
-          `<input inputmode="decimal" placeholder="kg×reps" data-set="${id}" data-s="${s}" value="${esc(logged[s] || "")}">`).join("")}</div>` : ""}
-        <button class="ghost small" data-swap="${esc(name)}" style="margin-top:6px">AI swap</button>
-        <pre class="ai" id="swap-${id}"></pre></div>`;
+      const last = lastSets(name);
+      return `<div class="ex"><div class="row"><span class="num">${i + 1}</span>
+        <div class="grow"><div class="name">${esc(name)}</div>
+        <div class="note">${sets > 1 ? sets + " × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
+        ${last ? `<div class="note">Last (${esc(last.date.slice(5))}): ${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)}×${esc(x.reps)}`).join(", ")}</div>` : ""}
+        </div></div>
+        ${!rest ? `<button class="btn ghost sm" data-swap="${esc(name)}" style="margin-top:8px">↻ AI swap</button><pre class="ai"></pre>` : ""}</div>`;
     }).join("")}
-    <p style="margin-top:12px">${checkbox("workout", "Mark today's workout done")}</p>
+    ${!rest ? `<button class="btn block" style="margin-top:14px" data-startworkout="${trainDay}">▶ Start guided workout</button>` : ""}
   </div>
-  <div class="card"><h3>How to progress</h3>
-    <p class="muted">When you hit the top of the rep range on every set, add 2.5 kg (or the next dumbbell) next week.
-    Weeks 1–2: learn form, light weights. Every 6th week: lighter "deload" week.</p></div>`;
+  <div class="card"><h2>How to progress</h2>
+    <p class="muted" style="margin:0">Weeks 1–2: learn form with light weights. After that, when every set reaches the top of the rep range,
+    go up 2.5 kg (or the next dumbbell) next time. The app shows your last numbers so you always know what to beat.</p></div>`;
 };
 
-V.food = () => {
-  const d = day(), t = foodTotals(d);
-  const weekly = GROCERY.reduce((s, g) => s + g.qty * (S.prices[g.item] ?? g.price), 0);
-  const extras = MONTHLY_EXTRAS.reduce((s, g) => s + (S.prices[g.item] ?? g.price), 0);
-  const monthly = Math.round(weekly * 4.33 + extras);
-  return `
-  <div class="card"><h2>Log food with AI</h2>
-    <p class="muted">Type what you ate ("2 roti, dal, 100g paneer bhurji") or snap a photo.</p>
-    <textarea id="foodText" placeholder="What did you eat?"></textarea>
-    <div class="row" style="margin-top:8px">
-      <input type="file" id="foodPhoto" accept="image/*" capture="environment">
-      <button id="foodLog">Analyse & log</button>
-    </div>
-    <div id="foodMsg" class="muted"></div>
+// ---------- guided workout overlay ----------
+let WM = null, restTimer = null;
+function openWorkout(di) { WM = { di, i: 0, restEnd: 0 }; renderWM(); }
+function closeWorkout() { WM = null; clearInterval(restTimer); $("#overlay").innerHTML = ""; document.body.style.overflow = ""; render(); }
+function renderWM() {
+  if (!WM) return;
+  document.body.style.overflow = "hidden";
+  const w = WEEK[WM.di], [name, sets, reps, note] = w.ex[WM.i], d = day();
+  const timed = isTimed(String(reps)), n = timed ? 1 : sets;
+  const logged = (d.sets[name] = Array.isArray(d.sets[name]) ? d.sets[name] : []);
+  const last = lastSets(name);
+  const pct = ((WM.i + 1) / w.ex.length) * 100, isLast = WM.i === w.ex.length - 1;
+  $("#overlay").innerHTML = `<div class="overlay"><div class="inner">
+    <div class="wm-top"><button class="iconbtn" id="wmClose" aria-label="Close">✕</button>
+      <div class="bar"><i style="width:${pct}%"></i></div><span class="muted small">${WM.i + 1}/${w.ex.length}</span></div>
+    <span class="pill">${esc(w.title)}</span>
+    <div class="wm-name">${esc(name)}</div>
+    <div class="muted">${sets > 1 ? sets + " sets × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
+    ${last ? `<div class="note-box" style="margin-top:12px">Last time: <b>${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} kg × ${esc(x.reps)}`).join(" · ")}</b></div>` : ""}
+    <div class="timer" id="restBox" style="${WM.restEnd > Date.now() ? "" : "display:none"}"><span class="muted small">Rest</span><b id="restT">0:00</b>
+      <button class="btn ghost sm" id="restSkip">Skip rest</button></div>
+    ${timed ? "" : `<div class="sethead"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>`}
+    ${Array.from({ length: n }, (_, s) => {
+      const x = logged[s] || {}, prev = last?.sets[s] || {};
+      return timed
+        ? `<div class="setrow" style="grid-template-columns:1fr 46px"><span>Done ${esc(reps)}</span>
+            <button class="ok ${x.done ? "on" : ""}" data-setdone="${s}">✓</button></div>`
+        : `<div class="setrow"><span class="sn">${s + 1}</span>
+          <input inputmode="decimal" placeholder="${esc(prev.kg || "kg")}" data-setf="kg" data-s="${s}" value="${esc(x.kg || "")}">
+          <input inputmode="numeric" placeholder="${esc(prev.reps || String(reps).split("–")[0])}" data-setf="reps" data-s="${s}" value="${esc(x.reps || "")}">
+          <button class="ok ${x.done ? "on" : ""}" data-setdone="${s}">✓</button></div>`;
+    }).join("")}
+    <button class="btn ghost sm" data-swap="${esc(name)}" style="margin-top:14px">↻ Knee hurts? AI swap</button><pre class="ai"></pre>
   </div>
-  <div class="card"><h2>Today: ${Math.round(t.kcal)} kcal · P ${Math.round(t.p)} · C ${Math.round(t.c)} · F ${Math.round(t.f)}</h2>
-    <p class="muted">Target ${TARGETS.kcal} kcal · P ${TARGETS.protein} · C ${TARGETS.carbs} · F ${TARGETS.fat}</p>
-    <table>${d.food.map((f, i) => `<tr><td>${esc(f.name)}</td><td class="num">${Math.round(f.kcal)} kcal</td>
-      <td class="num">${Math.round(f.p)} g P</td><td class="num"><button class="ghost small" data-delfood="${i}">✕</button></td></tr>`).join("") ||
-      `<tr><td class="muted">Nothing logged yet.</td></tr>`}</table>
-    <h3>Quick add from plan</h3>
-    <div class="row">${MEALS.map((m, i) => `<button class="ghost small" data-addmeal="${i}">+ ${esc(m.name)}</button>`).join("")}</div>
-  </div>
-  <div class="card"><h2>Zepto weekly list</h2>
-    <p class="muted">Tap a price to edit it to what Zepto shows. Tap 📋 to copy the search term.</p>
-    <table><tr><th>Item</th><th class="num">Qty</th><th class="num">₹ each</th><th></th></tr>
-    ${GROCERY.map((g) => `<tr><td>${esc(g.item)}</td><td class="num">${g.qty}</td>
-      <td class="num"><input style="width:70px" inputmode="numeric" data-price="${esc(g.item)}" value="${S.prices[g.item] ?? g.price}"></td>
-      <td><button class="ghost small" data-copy="${esc(g.item.replace(/\s*\(.*\)/, ""))}">📋</button></td></tr>`).join("")}
-    </table>
-    <h3>Monthly buys</h3>
-    <table>${MONTHLY_EXTRAS.map((g) => `<tr><td>${esc(g.item)}</td>
-      <td class="num"><input style="width:80px" inputmode="numeric" data-price="${esc(g.item)}" value="${S.prices[g.item] ?? g.price}"></td></tr>`).join("")}</table>
-    <h3>Budget: ₹${monthly.toLocaleString("en-IN")} / ₹${S.profile.budget.toLocaleString("en-IN")} per month
-      ${monthly > S.profile.budget ? `<span class="warn">— over budget</span>` : `<span style="color:var(--ok)">✓</span>`}</h3>
-    <p class="muted">Groceries ≈ ₹${Math.round(weekly).toLocaleString("en-IN")}/week. Gym already paid.</p>
-  </div>
-  <div class="card"><h2>Ask the AI coach</h2>
-    <textarea id="askText" placeholder="e.g. Give me 3 high-protein tofu recipes under ₹100"></textarea>
-    <button id="askBtn" style="margin-top:8px">Ask</button><pre class="ai" id="askOut"></pre>
-  </div>`;
-};
-
-V.looks = () => {
-  const list = (key, arr) => arr.map((x, i) => checkbox(`${key}${i}`, esc(x))).join("");
-  const derm = S.profile.derm || "";
-  return `
-  <div class="card"><h2>Dermatologist's routine</h2>
-    <p class="muted">Paste what your dermat prescribes. Follow this over the general routine below.</p>
-    <textarea id="derm" placeholder="e.g. AM: … PM: …">${esc(derm)}</textarea>
-    ${derm ? derm.split("\n").filter((x) => x.trim()).map((x, i) => checkbox("derm" + i, esc(x))).join("") : ""}
-  </div>
-  <div class="card"><h2>Morning skin</h2>${list("gAM", GROOMING.am)}</div>
-  <div class="card"><h2>Night skin</h2>${list("gPM", GROOMING.pm)}</div>
-  <div class="card"><h2>Posture (Milkha stance)</h2>${list("gPos", GROOMING.posture)}</div>
-  <div class="card"><h2>Weekly grooming</h2>${list("gWk", GROOMING.weekly)}</div>
-  <div class="card"><h2>Habits that change your face</h2>
-    <p class="muted">Losing body fat is what shows the jawline and cheekbones. Sleep and water reduce puffiness.</p>${list("gHab", GROOMING.habits)}</div>`;
-};
-
-V.progress = () => {
-  const p = S.profile, w = latestWeight();
-  const lbm = p.startWeight * (1 - p.bodyFat / 100);
-  const weeksLeft = Math.max(0, Math.round((new Date(p.targetDate) - new Date()) / 6048e5));
-  const projected = Math.max(lbm / 0.88, w - weeksLeft * 0.7).toFixed(1);
-  return `
-  <div class="card"><h2>Log weigh-in</h2>
-    <p class="muted">Weigh every morning after the toilet, before food. Watch the weekly trend, not single days.</p>
-    <div class="row"><input id="wKg" inputmode="decimal" placeholder="Weight kg">
-      <input id="wWaist" inputmode="decimal" placeholder="Waist cm (at navel)">
-      <button id="wSave">Save</button></div>
-  </div>
-  <div class="card"><h2>Trend</h2>${chart()}
-    <p class="muted">Start ${p.startWeight} kg → now ${w} kg (${(w - p.startWeight).toFixed(1)} kg).
-    Aim: ~0.5–0.8 kg/week. ${weeksLeft} weeks left → about <b>${projected} kg</b> by ${esc(p.targetDate)}.</p>
-  </div>
-  <div class="card"><h2>History</h2><table>
-    ${S.weights.slice().reverse().slice(0, 30).map((x) => `<tr><td>${esc(x.date)}</td><td class="num">${x.kg} kg</td>
-      <td class="num">${x.waist ? x.waist + " cm" : ""}</td></tr>`).join("") || `<tr><td class="muted">No entries yet.</td></tr>`}
-  </table></div>
-  <div class="card"><h2>Weekly AI review</h2>
-    <p class="muted">Gemini looks at your last 14 days of weight, food and workouts and tells you what to change.</p>
-    <button id="reviewBtn">Review my week</button><pre class="ai" id="reviewOut"></pre></div>`;
-};
-
-function chart() {
-  const pts = S.weights.slice(-60);
-  if (pts.length < 2) return `<p class="muted">Log at least 2 weigh-ins to see a chart.</p>`;
-  const ys = pts.map((x) => x.kg), lo = Math.min(...ys) - 1, hi = Math.max(...ys) + 1;
-  const xy = pts.map((x, i) => `${(i / (pts.length - 1)) * 300},${150 - ((x.kg - lo) / (hi - lo)) * 140}`).join(" ");
-  return `<svg viewBox="0 0 300 160" preserveAspectRatio="none"><polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${xy}"/>
-    <text x="2" y="12" fill="var(--muted)" font-size="10">${hi.toFixed(0)}</text><text x="2" y="158" fill="var(--muted)" font-size="10">${lo.toFixed(0)}</text></svg>`;
+  <div class="wm-foot">
+    <button class="btn ghost" id="wmPrev" ${WM.i === 0 ? "disabled" : ""}>← Back</button>
+    <button class="btn" id="wmNext">${isLast ? "Finish 🎉" : "Next →"}</button>
+  </div></div>`;
+  tickRest();
+}
+function tickRest() {
+  clearInterval(restTimer);
+  const upd = () => {
+    const box = $("#restBox"), left = Math.max(0, Math.ceil((WM?.restEnd - Date.now()) / 1000));
+    if (!box) return clearInterval(restTimer);
+    box.style.display = left > 0 ? "" : "none";
+    $("#restT").textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    if (left <= 0) { clearInterval(restTimer); if (WM?.restEnd) { WM.restEnd = 0; navigator.vibrate?.([200, 100, 200]); } }
+  };
+  upd(); restTimer = setInterval(upd, 500);
 }
 
+// ---------- food ----------
+let foodSeg = "log";
+V.food = () => {
+  const d = day(), t = foodTotals(d), ph = phase();
+  const seg = `<div class="seg">${[["log", "Log"], ["plan", "Meal plan"], ["zepto", "Zepto list"]].map(([k, l]) =>
+    `<button class="${foodSeg === k ? "on" : ""}" data-foodseg="${k}">${l}</button>`).join("")}</div>`;
+  if (foodSeg === "plan") return seg + `
+    <div class="card"><h2>${esc(ph.name)} targets</h2>
+      <div class="grid2"><div><b>${ph.kcal}</b> <span class="muted">kcal</span></div><div><b>${ph.protein} g</b> <span class="muted">protein</span></div>
+      <div><b>${ph.carbs} g</b> <span class="muted">carbs</span></div><div><b>${ph.fat} g</b> <span class="muted">fat</span></div></div>
+      <p class="note-box" style="margin-bottom:0">${esc(ph.food)}</p></div>
+    ${MEALS.map((m) => `<div class="card"><div class="spread"><span class="pill grey">${esc(m.time)}</span>
+      <span class="muted small">${m.kcal} kcal · ${m.p} g P</span></div>
+      <h2 style="margin:10px 0 4px">${esc(m.name)}</h2><div class="muted">${esc(m.items)}</div></div>`).join("")}
+    <div class="card"><h2>Need ideas?</h2><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian tofu or soya recipes for my current phase with grams and macros, under ₹100 each.">✨ 3 new tofu/soya recipes</button></div>`;
+
+  if (foodSeg === "zepto") {
+    const price = (g) => S.prices[g.item] ?? g.price;
+    const weekly = GROCERY.reduce((s, g) => s + g.qty * price(g), 0);
+    const extras = MONTHLY_EXTRAS.reduce((s, g) => s + price(g), 0);
+    const monthly = weekly * 4.33 + extras, over = monthly > S.profile.budget;
+    return seg + `
+    <div class="card hero"><div class="muted small">Monthly spend (gym already paid)</div>
+      <div class="spread" style="margin:4px 0 10px"><h2 style="margin:0;font-size:26px">${inr(monthly)}</h2>
+        <span class="pill ${over ? "" : "ok"}">${over ? "Over" : "Within"} ${inr(S.profile.budget)}</span></div>
+      <div class="bar"><i style="width:${Math.min(100, (monthly / S.profile.budget) * 100)}%;${over ? "background:var(--warn)" : ""}"></i></div>
+      <div class="muted small" style="margin-top:8px">Groceries ${inr(weekly)}/week · Supplements & grooming ${inr(extras)}/month</div></div>
+    <div class="card"><div class="spread"><h2 style="margin:0">Weekly order</h2><button class="btn ghost sm" id="copyAll">📋 Copy list</button></div>
+      <p class="muted small">Edit a price to match Zepto. Tap an item to copy its name for search.</p>
+      <table><tr><th>Item</th><th class="n">Qty</th><th class="n">₹</th></tr>
+      ${GROCERY.map((g) => `<tr><td data-copy="${esc(g.item.replace(/\s*\(.*\)/, ""))}">${esc(g.item)}</td><td class="n">${g.qty}</td>
+        <td class="n"><input class="price" inputmode="numeric" data-price="${esc(g.item)}" value="${price(g)}"></td></tr>`).join("")}</table></div>
+    <div class="card"><h2>Monthly buys</h2><table>
+      ${MONTHLY_EXTRAS.map((g) => `<tr><td data-copy="${esc(g.item.replace(/\s*\(.*\)/, ""))}">${esc(g.item)}</td>
+        <td class="n"><input class="price" inputmode="numeric" data-price="${esc(g.item)}" value="${price(g)}"></td></tr>`).join("")}</table></div>`;
+  }
+
+  return seg + `
+  <div class="card"><div class="rings" style="grid-template-columns:repeat(4,1fr)">
+    <div>${ring(t.kcal, ph.kcal, "var(--accent)", "")}<div class="lbl">kcal</div></div>
+    <div>${ring(t.p, ph.protein, "var(--ok)", "")}<div class="lbl">Protein g</div></div>
+    <div>${ring(t.c, ph.carbs, "var(--blue)", "")}<div class="lbl">Carbs g</div></div>
+    <div>${ring(t.f, ph.fat, "var(--warn)", "")}<div class="lbl">Fat g</div></div>
+  </div></div>
+  <div class="card"><h2>Log with AI</h2>
+    <textarea id="foodText" placeholder="e.g. 2 roti, 1 katori dal, 100 g paneer bhurji"></textarea>
+    <div class="row" style="margin-top:10px">
+      <label class="btn ghost" style="flex:none">📷 Photo<input type="file" id="foodPhoto" accept="image/*" capture="environment" hidden></label>
+      <button class="btn grow" id="foodLog">Analyse & log</button></div>
+    <div id="foodMsg" class="muted small" style="margin-top:8px"></div></div>
+  <div class="card" style="padding:4px 16px">
+    ${d.food.map((f, i) => `<div class="tick on" style="cursor:default"><div class="t"><b style="color:var(--text)">${esc(f.name)}</b>
+      <span class="muted small">${Math.round(f.kcal)} kcal · P ${Math.round(f.p)} · C ${Math.round(f.c || 0)} · F ${Math.round(f.f || 0)}</span></div>
+      <button class="btn ghost sm" data-delfood="${i}" aria-label="Remove">✕</button></div>`).join("") ||
+      `<div class="empty">Nothing logged yet. Tick meals on Today or log above.</div>`}</div>
+  <div class="card"><h2>Ask the coach</h2>
+    <textarea id="askText" placeholder="e.g. I'm at a wedding tonight, what should I eat?"></textarea>
+    <button class="btn block" id="askBtn" style="margin-top:10px">Ask</button><pre class="ai" id="askOut"></pre></div>`;
+};
+
+// ---------- plan / progress ----------
+V.plan = () => {
+  const pi = phaseIndex(), w = latestWeight(), exp = expectedKg(new Date()), diff = w - exp;
+  const p = S.profile;
+  const status = !S.weights.length ? ["grey", "Log your first weigh-in"]
+    : diff <= 0.3 ? ["ok", "On track"] : diff <= 1.5 ? ["", "Slightly behind"] : ["", "Behind — check food logs"];
+  return `
+  <div class="card hero">
+    <div class="spread"><span class="muted small">Now</span><span class="pill ${status[0]}">${status[1]}</span></div>
+    <div class="spread" style="margin-top:6px">
+      <div><div style="font-size:30px;font-weight:800">${w} <span class="muted" style="font-size:15px">kg</span></div>
+        <div class="muted small">Plan says ${exp.toFixed(1)} kg today</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:700;color:var(--ok)">${(w - p.startWeight).toFixed(1)} kg</div>
+        <div class="muted small">since start</div></div></div>
+    <div class="row" style="margin-top:12px"><input class="grow" id="wKg" inputmode="decimal" placeholder="Weight kg">
+      <input class="grow" id="wWaist" inputmode="decimal" placeholder="Waist cm"><button class="btn" id="wSave">Save</button></div>
+  </div>
+  <div class="card chart"><h2>Weight vs plan</h2>${chart()}
+    <div class="legend"><span><i style="background:var(--accent)"></i>You</span><span><i style="background:var(--muted)"></i>Plan</span></div></div>
+
+  <div class="section-title"><h2>Roadmap</h2><span class="muted small">Week ${weekNo()}</span></div>
+  <div class="card" style="padding:4px 16px">
+    ${PHASES.map((ph, i) => `<div class="phase ${i < pi ? "past" : i === pi ? "now" : "future"}"><span class="dot"></span><div class="body">
+      <div class="spread"><b>${i + 1}. ${esc(ph.name)}</b><span class="muted small">${fmt(ph.start)} – ${fmt(ph.end)}</span></div>
+      <div class="muted small">${ph.fromKg} → ${ph.toKg} kg · ${ph.kcal} kcal · ${ph.protein} g protein</div>
+      ${i === pi ? `<p class="small" style="margin:6px 0 0">${esc(ph.focus)}</p>` : ""}</div></div>`).join("")}
+  </div>
+
+  <div class="card"><h2>What's realistic</h2>
+    <p class="muted" style="margin:0">By <b style="color:var(--text)">${fmt(p.targetDate)}</b>: about <b style="color:var(--text)">84 kg, ~19% body fat</b> —
+    clearly leaner face, visible shoulders and arms, waist down 8–10 cm. Farhan's full Milkha look (~10–12% body fat) needs phase 4,
+    around <b style="color:var(--text)">July 2027</b>. Rough weeks are normal; the trend matters.</p></div>
+
+  <div class="card"><h2>Weekly AI review</h2>
+    <p class="muted small">Gemini checks the last 14 days of weight, food and workouts and tells you what to change.</p>
+    <button class="btn ghost block" id="reviewBtn">✨ Review my last 2 weeks</button><pre class="ai" id="reviewOut"></pre></div>
+
+  <div class="card" style="padding:4px 16px">
+    ${S.weights.slice().reverse().slice(0, 14).map((x) => `<div class="tick" style="cursor:default"><div class="t"><b>${fmt(x.date)}</b></div>
+      <span class="meta">${x.kg} kg${x.waist ? ` · ${x.waist} cm` : ""}</span></div>`).join("") || `<div class="empty">No weigh-ins yet.</div>`}</div>`;
+};
+const fmt = (k) => new Date(k).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+function chart() {
+  const W = 320, H = 180, end = new Date(S.profile.targetDate);
+  const t0 = +START, t1 = Math.max(+end, ...S.weights.map((x) => +new Date(x.date)));
+  const ys = [...S.weights.map((x) => x.kg), PHASES[0].fromKg, expectedKg(end)];
+  const lo = Math.floor(Math.min(...ys) - 1), hi = Math.ceil(Math.max(...ys) + 1);
+  const X = (t) => 28 + ((t - t0) / (t1 - t0)) * (W - 34), Y = (kg) => 10 + ((hi - kg) / (hi - lo)) * (H - 30);
+  const plan = []; for (let t = t0; t <= t1; t += 7 * DAY_MS) plan.push(`${X(t)},${Y(expectedKg(new Date(t)))}`);
+  const you = S.weights.map((x) => `${X(+new Date(x.date))},${Y(x.kg)}`);
+  const grid = [hi, (hi + lo) / 2, lo].map((v) => `<line x1="28" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/>
+    <text x="0" y="${Y(v) + 4}" fill="var(--muted)" font-size="10">${Math.round(v)}</text>`).join("");
+  const nowX = X(Date.now());
+  return `<svg viewBox="0 0 ${W} ${H}">${grid}
+    <line x1="${nowX}" x2="${nowX}" y1="6" y2="${H - 18}" stroke="var(--accent)" stroke-dasharray="2 3" opacity=".5"/>
+    <polyline fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4" points="${plan.join(" ")}"/>
+    ${you.length > 1 ? `<polyline fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" points="${you.join(" ")}"/>` : ""}
+    ${you.map((pt) => `<circle cx="${pt.split(",")[0]}" cy="${pt.split(",")[1]}" r="3" fill="var(--accent)"/>`).join("")}
+    <text x="28" y="${H - 2}" fill="var(--muted)" font-size="10">${fmt(PHASES[0].start)}</text>
+    <text x="${W}" y="${H - 2}" fill="var(--muted)" font-size="10" text-anchor="end">${fmt(iso(new Date(t1)))}</text></svg>`;
+}
+
+// ---------- looks ----------
+let looksSeg = "daily";
+V.looks = () => {
+  const list = (key, arr) => arr.map((x, i) => tick(`${key}${i}`, esc(x))).join("");
+  const derm = S.profile.derm || "";
+  const seg = `<div class="seg">${[["daily", "Daily"], ["weekly", "Weekly"], ["derm", "Dermat"]].map(([k, l]) =>
+    `<button class="${looksSeg === k ? "on" : ""}" data-looksseg="${k}">${l}</button>`).join("")}</div>`;
+  if (looksSeg === "derm") return seg + `
+    <div class="card"><h2>Dermatologist's routine</h2>
+      <p class="muted small">Type or paste what your dermat prescribed, one step per line. It becomes your daily checklist and replaces the general skin routine.</p>
+      <textarea id="derm" placeholder="AM: Face wash&#10;AM: Sunscreen SPF 50&#10;PM: Tretinoin 0.025% pea size">${esc(derm)}</textarea>
+      <button class="btn block" id="dermSave" style="margin-top:10px">Save routine</button></div>
+    <div class="card"><h2>Ask before using</h2><p class="muted small" style="margin:0">Questions to ask your dermat: oily or dry skin type? Anything for dark circles or acne marks?
+      Which sunscreen? Is a hair-fall check (minoxidil/biotin) needed? Any reaction with whey/creatine?</p></div>`;
+  if (looksSeg === "weekly") return seg + `
+    <div class="card" style="padding:4px 16px">${list("gWk", GROOMING.weekly)}</div>
+    <div class="card"><h2>The Milkha look</h2><p class="muted small" style="margin:0">Short, textured hair with a slightly longer top, sharp sideburns,
+      short stubble with a thick moustache. Fitted plain tees, track jackets and an upright stance sell the athlete look more than any product.</p></div>`;
+  const dermLines = derm.split("\n").map((x) => x.trim()).filter(Boolean);
+  return seg + (dermLines.length
+    ? `<h3>Dermat routine</h3><div class="card" style="padding:4px 16px">${list("derm", dermLines)}</div>`
+    : `<h3>Morning</h3><div class="card" style="padding:4px 16px">${list("gAM", GROOMING.am)}</div>
+       <h3>Night</h3><div class="card" style="padding:4px 16px">${list("gPM", GROOMING.pm)}</div>`) + `
+    <h3>Posture</h3><div class="card" style="padding:4px 16px">${list("gPos", GROOMING.posture)}</div>
+    <p class="muted small" style="text-align:center">Losing fat is what reveals the jawline. Sleep and water cut face puffiness.</p>`;
+};
+
+// ---------- settings ----------
 V.settings = () => {
   const p = S.profile, s = S.settings;
   return `
   <div class="card"><h2>Gemini API key</h2>
-    <p class="muted">Get a free key at aistudio.google.com → "Get API key". It is stored only on this device.</p>
+    <p class="muted small">Free at <b>aistudio.google.com</b> → Get API key. Stored only on this phone.</p>
     <input id="sKey" type="password" placeholder="Paste Gemini API key" value="${esc(s.geminiKey)}">
-    <input id="sModel" style="margin-top:8px" placeholder="Model" value="${esc(s.model)}">
-    <button id="sTest" class="ghost" style="margin-top:8px">Test key</button> <span id="sTestOut" class="muted"></span>
-  </div>
+    <label class="field" style="margin-top:10px">Model<input id="sModel" value="${esc(s.model)}"></label>
+    <div class="row" style="margin-top:10px"><button class="btn ghost" id="sTest">Test key</button><span id="sTestOut" class="muted small grow"></span></div></div>
   <div class="card"><h2>Profile</h2>
-    <div class="row"><label>Age<input id="pAge" value="${p.age}"></label><label>Height cm<input id="pH" value="${p.heightCm}"></label></div>
-    <div class="row"><label>Start kg<input id="pW" value="${p.startWeight}"></label><label>Body fat %<input id="pBF" value="${p.bodyFat}"></label></div>
-    <div class="row"><label>Target date<input id="pDate" type="date" value="${esc(p.targetDate)}"></label>
-      <label>Budget ₹/month<input id="pBud" value="${p.budget}"></label></div>
-  </div>
-  <button id="sSave">Save settings</button>
+    <div class="grid2">
+      <label class="field">Age<input id="pAge" inputmode="numeric" value="${p.age}"></label>
+      <label class="field">Height (cm)<input id="pH" inputmode="numeric" value="${p.heightCm}"></label>
+      <label class="field">Start weight (kg)<input id="pW" inputmode="decimal" value="${p.startWeight}"></label>
+      <label class="field">Body fat %<input id="pBF" inputmode="decimal" value="${p.bodyFat}"></label>
+      <label class="field">Phase 1 target<input id="pDate" type="date" value="${esc(p.targetDate)}"></label>
+      <label class="field">Budget ₹/month<input id="pBud" inputmode="numeric" value="${p.budget}"></label>
+    </div>
+    <button class="btn block" id="sSave" style="margin-top:14px">Save</button></div>
   <div class="card"><h2>Backup</h2>
-    <p class="muted">Your data lives only in this browser. Export a backup now and then.</p>
-    <div class="row"><button class="ghost" id="exp">Export</button>
-      <label class="ghost" style="text-align:center">Import<input type="file" id="imp" accept="application/json" hidden></label></div>
-  </div>`;
+    <p class="muted small">Data lives only on this phone. Export a backup every couple of weeks (the API key is not included).</p>
+    <div class="grid2"><button class="btn ghost" id="exp">⬇ Export</button>
+      <label class="btn ghost">⬆ Import<input type="file" id="imp" accept="application/json" hidden></label></div></div>`;
 };
 
 // ---------- render + events ----------
@@ -241,51 +418,98 @@ let tab = location.hash.slice(1) || "today";
 function render() {
   if (!V[tab]) tab = "today";
   $("#view").innerHTML = V[tab]();
-  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  const days = Math.ceil((new Date(S.profile.targetDate) - new Date()) / 864e5);
-  $("#countdown").textContent = days > 0 ? `${days} days to target (${S.profile.targetDate})` : "Target date reached — set a new one in Settings";
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
+  const days = Math.ceil((new Date(S.profile.targetDate) - new Date()) / DAY_MS);
+  $("#sub").textContent = `${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}` +
+    (days > 0 ? ` · ${days} days to ${fmt(S.profile.targetDate)}` : "");
 }
-window.addEventListener("hashchange", () => { tab = location.hash.slice(1); render(); });
-document.querySelectorAll("nav button").forEach((b) => b.onclick = () => { location.hash = b.dataset.tab; });
+window.addEventListener("hashchange", () => {
+  tab = location.hash.slice(1);
+  if (WM) return closeWorkout(); // leaving the screen (e.g. phone back button) closes the guided workout
+  render(); window.scrollTo(0, 0);
+});
 
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el.dataset.setf && WM) {
+    const name = WEEK[WM.di].ex[WM.i][0], s = (day().sets[name] ||= []);
+    s[+el.dataset.s] = { ...(s[+el.dataset.s] || {}), [el.dataset.setf]: el.value }; save();
+  }
+});
 document.addEventListener("change", (e) => {
   const el = e.target;
-  if (el.dataset.check) { day().checks[el.dataset.check] = el.checked; save(); render(); }
-  if (el.dataset.set) { const s = (day().sets[el.dataset.set] ||= []); s[+el.dataset.s] = el.value; save(); }
-  if (el.id === "derm") { S.profile.derm = el.value; save(); render(); }
   if (el.dataset.price) { S.prices[el.dataset.price] = +el.value || 0; save(); render(); }
+  if (el.id === "foodPhoto" && el.files[0]) $("#foodMsg").textContent = `Photo added: ${el.files[0].name}`;
   if (el.id === "imp" && el.files[0]) el.files[0].text().then((t) => {
-    try { localStorage.setItem(KEY, JSON.stringify(JSON.parse(t))); S = load(); render(); alert("Imported."); }
-    catch { alert("That file isn't a valid backup."); }
+    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), settings: keep })); S = load(); render(); toast("Backup imported"); }
+    catch { toast("That file isn't a valid backup"); }
   });
 });
 
 document.addEventListener("click", async (e) => {
-  const el = e.target.closest("button");
+  const el = e.target.closest("[data-go],[data-check],[data-meal],[data-copy],button");
   if (!el) return;
   const d = el.dataset;
-  if (d.trainday) { trainDay = +d.trainday; render(); }
-  if (d.addmeal) { const m = MEALS[+d.addmeal]; day().food.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0 }); save(); render(); }
-  if (d.delfood) { day().food.splice(+d.delfood, 1); save(); render(); }
-  if (d.copy) { navigator.clipboard?.writeText(d.copy); el.textContent = "✓"; }
+  if (d.go) { location.hash = d.go; return; }
+  if (d.check) {
+    const c = day().checks; c[d.check] = !c[d.check]; save(); render();
+    if (d.check === "workout" && c.workout) toast("Workout logged 💪");
+    return;
+  }
+  if (d.meal) {
+    const i = +d.meal, f = day().food, at = f.findIndex((x) => x.plan === i);
+    if (at >= 0) f.splice(at, 1); else { const m = MEALS[i]; f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
+    save(); return render();
+  }
+  if (d.copy) { navigator.clipboard?.writeText(d.copy); return toast(`Copied “${d.copy}” — paste in Zepto`); }
+  if (d.trainday) { trainDay = +d.trainday; return render(); }
+  if (d.foodseg) { foodSeg = d.foodseg; return render(); }
+  if (d.looksseg) { looksSeg = d.looksseg; return render(); }
+  if (d.startworkout) return openWorkout(+d.startworkout);
+  if (d.delfood) { day().food.splice(+d.delfood, 1); save(); return render(); }
+  if (d.ask) { foodSeg = "log"; render(); $("#askText").value = d.ask; return ask(d.ask, $("#askOut")); }
+  if (d.setdone && WM) {
+    const name = WEEK[WM.di].ex[WM.i][0], s = (day().sets[name] ||= []), i = +d.setdone;
+    s[i] = { ...(s[i] || {}), done: !s[i]?.done };
+    if (s[i].done && !s[i].kg && !isTimed(String(WEEK[WM.di].ex[WM.i][2]))) {
+      const inp = document.querySelector(`[data-setf="kg"][data-s="${i}"]`), rp = document.querySelector(`[data-setf="reps"][data-s="${i}"]`);
+      s[i].kg = inp?.placeholder !== "kg" ? inp.placeholder : ""; s[i].reps = rp?.placeholder || "";
+    }
+    if (s[i].done) WM.restEnd = Date.now() + 90e3;
+    save(); return renderWM();
+  }
   if (d.swap) {
     const out = el.nextElementSibling; out.textContent = "Thinking…";
     try { out.textContent = await gemini(`${coachContext()}\nSuggest 2 alternatives to "${d.swap}" available in a commercial gym, safe for the left knee. One line each, with sets × reps.`); }
     catch (err) { out.textContent = err.message; }
+    return;
   }
   switch (el.id) {
+    case "wmClose": return closeWorkout();
+    case "wmPrev": WM.i--; WM.restEnd = 0; return renderWM();
+    case "wmNext":
+      if (WM.i < WEEK[WM.di].ex.length - 1) { WM.i++; window.scrollTo(0, 0); return renderWM(); }
+      day().checks.workout = true; save(); closeWorkout(); location.hash = "today"; return toast("Workout complete 🎉 Great job!");
+    case "restSkip": WM.restEnd = 0; return renderWM();
     case "foodLog": return logFood();
     case "askBtn": return ask($("#askText").value, $("#askOut"));
-    case "reviewBtn": return ask(`Review my last 14 days and give 5 specific changes:\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
-    case "wSave": {
-      const kg = parseFloat($("#wKg").value);
-      if (!kg) return;
-      S.weights = S.weights.filter((x) => x.date !== today());
-      S.weights.push({ date: today(), kg, waist: parseFloat($("#wWaist").value) || null });
-      save(); return render();
+    case "reviewBtn": return ask(`Review my last 14 days against my phase plan. Give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
+    case "copyAll": {
+      const text = GROCERY.map((g) => `${g.item.replace(/\s*\(.*\)/, "")} × ${g.qty}`).join("\n");
+      navigator.clipboard?.writeText(text); return toast("Weekly list copied");
     }
+    case "qWeighSave": case "wSave": {
+      const kg = parseFloat($(el.id === "wSave" ? "#wKg" : "#qWeigh").value);
+      if (!kg || kg < 30 || kg > 250) return toast("Enter a valid weight");
+      S.weights = S.weights.filter((x) => x.date !== today());
+      S.weights.push({ date: today(), kg, waist: parseFloat($("#wWaist")?.value) || null });
+      S.weights.sort((a, b) => a.date.localeCompare(b.date));
+      save(); render(); return toast(`Saved ${kg} kg`);
+    }
+    case "dermSave": S.profile.derm = $("#derm").value; save(); looksSeg = "daily"; render(); return toast("Dermat routine saved");
     case "sTest": {
-      $("#sTestOut").textContent = "Testing…"; S.settings.geminiKey = $("#sKey").value; S.settings.model = $("#sModel").value || "gemini-2.5-flash";
+      $("#sTestOut").textContent = "Testing…";
+      S.settings.geminiKey = $("#sKey").value.trim(); S.settings.model = $("#sModel").value.trim() || "gemini-2.5-flash";
       try { await gemini("Reply with OK"); $("#sTestOut").textContent = "✓ Key works"; save(); }
       catch (err) { $("#sTestOut").textContent = err.message; }
       return;
@@ -294,11 +518,10 @@ document.addEventListener("click", async (e) => {
       S.settings.geminiKey = $("#sKey").value.trim(); S.settings.model = $("#sModel").value.trim() || "gemini-2.5-flash";
       Object.assign(S.profile, { age: +$("#pAge").value, heightCm: +$("#pH").value, startWeight: +$("#pW").value,
         bodyFat: +$("#pBF").value, targetDate: $("#pDate").value, budget: +$("#pBud").value });
-      save(); render(); return alert("Saved.");
+      save(); render(); return toast("Saved");
     }
     case "exp": {
-      const a = document.createElement("a");
-      const { settings, ...rest } = S; // never export the API key
+      const a = document.createElement("a"), { settings, ...rest } = S; // never export the API key
       a.href = URL.createObjectURL(new Blob([JSON.stringify(rest, null, 2)], { type: "application/json" }));
       a.download = `milkha-backup-${today()}.json`; a.click(); return;
     }
@@ -306,9 +529,9 @@ document.addEventListener("click", async (e) => {
 });
 
 function recent(n) {
-  const out = { weights: S.weights.slice(-n), days: {} };
+  const out = { phase: phase(), weights: S.weights.slice(-n), days: {} };
   for (let i = 0; i < n; i++) {
-    const dt = new Date(); dt.setDate(dt.getDate() - i); const k = dt.toLocaleDateString("en-CA");
+    const dt = new Date(); dt.setDate(dt.getDate() - i); const k = iso(dt);
     if (S.days[k]) out.days[k] = { checks: S.days[k].checks, totals: foodTotals(S.days[k]) };
   }
   return out;
@@ -317,22 +540,22 @@ function recent(n) {
 async function ask(q, out) {
   if (!q.trim()) return;
   out.textContent = "Thinking…";
-  try { out.textContent = await gemini(`${coachContext()}\nAnswer briefly and practically (Indian vegetarian context, Zepto prices in ₹).\n\n${q}`); }
+  try { out.textContent = await gemini(`${coachContext()}\nAnswer briefly and practically (Indian vegetarian context, Zepto prices in ₹). Plain text, no markdown.\n\n${q}`); }
   catch (err) { out.textContent = err.message; }
 }
 
 async function logFood() {
-  const text = $("#foodText").value.trim(), file = $("#foodPhoto").files[0], msg = $("#foodMsg");
+  const text = $("#foodText").value.trim(), file = $("#foodPhoto").files[0], msg = $("#foodMsg"), btn = $("#foodLog");
   if (!text && !file) return (msg.textContent = "Type something or add a photo.");
-  msg.textContent = "Analysing…";
+  msg.textContent = "Analysing…"; btn.disabled = true;
   try {
     const image = file ? await fileToB64(file) : null;
     const r = await gemini(`Estimate nutrition for this Indian vegetarian meal using typical home-cooked portions.
 ${text ? "Description: " + text : "Use the photo."}
 Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":number}]} (p/c/f in grams).`, { json: true, image });
     (r.items || []).forEach((it) => day().food.push(it));
-    save(); render(); $("#foodMsg").textContent = `Logged ${r.items?.length || 0} item(s).`;
-  } catch (err) { msg.textContent = err.message; }
+    save(); render(); toast(`Logged ${r.items?.length || 0} item(s)`);
+  } catch (err) { msg.textContent = err.message; btn.disabled = false; }
 }
 
 render();
