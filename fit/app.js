@@ -265,6 +265,44 @@ function stepList(name, d) {
       <div class="t"><b>${esc(n)}</b><span class="sub">${esc(r)}</span></div><span class="meta">${vid(q, "Video")}</span></div>`;
   }).join("")}</div>`;
 }
+// ---------- progression ----------
+// Rest by exercise type: big compound lifts 2:00, smaller moves 1:15, core/carries 1:00.
+function restSec(name) {
+  const n = name.toLowerCase();
+  if (/plank|dead bug|crunch|knee raise|pallof|side plank|carry/.test(n)) return 60;
+  if (/press|row|pulldown|pull-up|thrust|deadlift|leg press|swing/.test(n) && !/pushdown/.test(n)) return 120;
+  return 75;
+}
+const fmtRest = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+const repRange = (reps) => { const m = String(reps).match(/(\d+)(?:–(\d+))?/); return m ? [+m[1], +(m[2] || m[1])] : null; };
+const startKg = (name) => { const m = (START_WEIGHTS[name] || "").match(/(\d+(?:\.\d+)?)/); return m ? +m[1] : null; };
+const kgStep = (name) => (/lateral|fly|face pull|pushdown|curl|rear delt|cable crunch/i.test(name) ? 1.25 : 2.5);
+const roundKg = (x) => Math.round(x / 1.25) * 1.25;
+function history(name, n = 3) {
+  return Object.keys(S.days).filter((k) => k < today()).sort().reverse()
+    .map((k) => ({ date: k, sets: (S.days[k].sets?.[name] || []).filter((x) => x && x.kg && x.reps) }))
+    .filter((h) => h.sets.length).slice(0, n);
+}
+// Double progression: top of the range on every set → add weight; otherwise add reps.
+function target(name, reps) {
+  const range = repRange(reps);
+  if (!range || isTimed(String(reps))) return null;
+  const [lo, hi] = range, h = history(name, 2), deload = isDeload();
+  let kg, r = lo, why;
+  if (!h.length) {
+    kg = startKg(name); why = kg ? "Starting weight. Last 2 reps should feel hard." : "Find a weight where the last 2 reps are hard.";
+  } else {
+    const last = h[0].sets, lastKg = Math.max(...last.map((x) => +x.kg)), repsDone = last.map((x) => +x.reps);
+    if (repsDone.every((x) => x >= hi)) { kg = lastKg + kgStep(name); why = `You hit ${hi} reps on every set last time, so +${kgStep(name)} kg.`; }
+    else if (repsDone.some((x) => x < lo)) {
+      const prevLow = h[1]?.sets.some((x) => +x.reps < lo);
+      kg = prevLow ? roundKg(lastKg * 0.9) : lastKg;
+      why = prevLow ? "Below the range twice in a row, so about 10% lighter." : "Below the range last time, so repeat the same weight.";
+    } else { kg = lastKg; r = Math.min(hi, Math.max(...repsDone) + 1); why = `Same weight, aim for ${r} reps on each set.`; }
+  }
+  if (kg && deload) { kg = roundKg(kg * 0.6); why = "Deload week: 60% of your usual weight."; }
+  return { kg, reps: r, range: `${lo}${hi !== lo ? "–" + hi : ""}`, why };
+}
 const isTimed = (reps) => /min|s$|s\/|m$|\/ |—|tab/.test(reps);
 const seg = (cur, key, items) => `<div class="seg" role="tablist">${items.map(([k, l]) =>
   `<button role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" data-${key}="${k}">${l}</button>`).join("")}</div>`;
@@ -379,8 +417,13 @@ function trainGym() {
       return `<div class="ex"><span class="num">${i + 1}</span><div class="grow">
         <div class="name">${esc(name)}</div>
         <div class="sub">${sets > 1 ? sets + " × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
-        ${last ? `<div class="kg">Last ${esc(fmt(last.date))}: ${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} kg × ${esc(x.reps)}`).join(", ")}</div>`
-          : start ? `<div class="kg">Start with ${esc(start)}</div>` : ""}
+        ${(() => {
+          const t = target(name, reps), h = history(name);
+          if (!t) return "";
+          return `<div class="kg">${t.kg ? `Today: ${t.kg} kg × ${t.reps}` : `Today: × ${t.reps}`} · rest ${fmtRest(restSec(name))}</div>
+            <div class="sub why">${esc(t.why)}${!h.length && start ? ` (${esc(start)})` : ""}</div>
+            ${h.length ? `<div class="hist">${h.map((x) => `<span>${esc(fmt(x.date))}: ${x.sets.map((y) => `${esc(y.kg)}×${esc(y.reps)}`).join(", ")}</span>`).join("")}</div>` : ""}`;
+        })()}
         ${stepList(name, iso(dateOfCyc(trainDay)))}
         ${!rest && !stepList(name, today()) ? `<div class="row xs-gap">${vid(skill ? SKILLS[skillIndex()].drills[0] : cleanName(name) + " proper form")}
           ${skill ? "" : `<button class="btn ghost xs" data-swap="${esc(name)}">Swap</button>`}</div><pre class="ai"></pre>` : ""}
@@ -442,7 +485,7 @@ function renderWM() {
   const list = exList(WM.di), [name, sets, reps, note] = list[WM.i], d = day();
   const timed = isTimed(String(reps)), n = timed ? 1 : sets;
   const logged = (d.sets[name] = Array.isArray(d.sets[name]) ? d.sets[name] : []);
-  const last = lastSets(name), start = START_WEIGHTS[name];
+  const last = lastSets(name), tg = target(name, reps);
   const pct = ((WM.i + 1) / list.length) * 100, isLast = WM.i === list.length - 1;
   $("#overlay").innerHTML = `<div class="overlay"><div class="inner">
     <div class="wm-top"><button class="iconbtn" id="wmClose" aria-label="Close workout">✕</button>
@@ -451,8 +494,8 @@ function renderWM() {
     <div class="wm-name">${esc(name)}</div>
     <div class="sub">${sets > 1 ? sets + " sets × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
     ${stepList(name, today()) ? "" : `<div class="row xs-gap mt">${vid(cleanName(name) + " proper form", "Watch the form")}</div>`}
-    ${last ? `<div class="note">Last time: <b>${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} kg × ${esc(x.reps)}`).join(" · ")}</b>. Beat one number today.</div>`
-      : start ? `<div class="note">Suggested start: <b>${esc(start)}</b>. Last 2 reps should feel hard with clean form.</div>` : ""}
+    ${tg ? `<div class="note"><b>Today: ${tg.kg ? `${tg.kg} kg × ${tg.reps}` : `${tg.reps} reps`}</b> · ${sets} sets · rest ${fmtRest(restSec(name))}<br><span class="sub">${esc(tg.why)}</span>
+      ${last ? `<br><span class="sub">Last time: ${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} × ${esc(x.reps)}`).join(" · ")}</span>` : ""}</div>` : ""}
     <div class="timer" id="restBox" ${WM.restEnd > Date.now() ? "" : "hidden"}><span class="sub">Rest</span><b id="restT">0:00</b>
       <button class="btn ghost sm" id="restSkip">Skip rest</button></div>
     ${stepList(name, today()) || (timed ? "" : `<div class="sethead"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>`) + Array.from({ length: n }, (_, s) => {
@@ -460,8 +503,8 @@ function renderWM() {
       return timed
         ? `<div class="setrow timed"><span>Done: ${esc(reps)}</span><button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Done">✓</button></div>`
         : `<div class="setrow"><span class="sn">${s + 1}</span>
-          <input inputmode="decimal" placeholder="${esc(prev.kg || "kg")}" data-setf="kg" data-s="${s}" value="${esc(x.kg || "")}" aria-label="Set ${s + 1} kg">
-          <input inputmode="numeric" placeholder="${esc(prev.reps || String(reps).split("–")[0])}" data-setf="reps" data-s="${s}" value="${esc(x.reps || "")}" aria-label="Set ${s + 1} reps">
+          <input inputmode="decimal" placeholder="${esc(tg?.kg ?? prev.kg ?? "kg")}" data-setf="kg" data-s="${s}" value="${esc(x.kg || "")}" aria-label="Set ${s + 1} kg">
+          <input inputmode="numeric" placeholder="${esc(tg?.reps ?? prev.reps ?? "")}" data-setf="reps" data-s="${s}" value="${esc(x.reps || "")}" aria-label="Set ${s + 1} reps">
           <button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Set ${s + 1} done">✓</button></div>`;
     }).join("")}
     ${name.startsWith("Skill") || stepList(name, today()) ? "" : `<button class="btn ghost sm mt" data-swap="${esc(name)}">Knee hurts? Swap with AI</button><pre class="ai"></pre>`}
@@ -843,8 +886,9 @@ document.addEventListener("click", async (e) => {
     if (s[i].done && !s[i].kg && !isTimed(String(reps))) {
       const kg = document.querySelector(`[data-setf="kg"][data-s="${i}"]`), rp = document.querySelector(`[data-setf="reps"][data-s="${i}"]`);
       s[i].kg = kg && kg.placeholder !== "kg" ? kg.placeholder : ""; s[i].reps = rp?.placeholder || "";
+      toast(`Saved ${s[i].kg ? s[i].kg + " kg × " : ""}${s[i].reps} reps. Type real numbers if different.`);
     }
-    if (s[i].done) WM.restEnd = Date.now() + 90e3;
+    if (s[i].done) WM.restEnd = Date.now() + restSec(name) * 1000;
     save(); return renderWM();
   }
   if (d.swap) {
