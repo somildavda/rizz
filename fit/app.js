@@ -131,7 +131,27 @@ async function freeAI(prompt) {
   const data = await res.json();
   return data.choices?.[0]?.message?.content || "";
 }
+// Inside the Claude app the page can ask Claude directly (the viewer's own account, no key).
+// claude.use resolves null outside a Claude viewer, e.g. on GitHub Pages.
+let sampleFn;
+const getSample = async () => {
+  if (sampleFn !== undefined) return sampleFn;
+  try { sampleFn = window.claude?.use ? await window.claude.use("sample") : null; } catch { sampleFn = null; }
+  return sampleFn;
+};
+const HIDE_CODES = ["not_granted", "sampling_disabled", "not_declared", "capability_disabled", "capability_removed", "images_unavailable"];
 async function ai(prompt, opts = {}) {
+  const smp = await getSample();
+  if (smp) {
+    try {
+      const o = opts.file ? { images: opts.file } : {};
+      return opts.json ? await smp.json(prompt, o) : (await smp(prompt, o)).text;
+    } catch (e) {
+      if (e?.code === "rate_limited") throw new Error("Too many AI requests right now. Try again in a few minutes.");
+      if (!HIDE_CODES.includes(e?.code)) throw new Error("Claude couldn't answer that. Try again or rephrase.");
+      // not allowed here: fall through to Gemini / the free model
+    }
+  }
   if (S.settings.geminiKey.trim()) return gemini(prompt, opts);
   if (opts.image) throw new Error("Photo analysis needs a Gemini key (Settings). Type the food instead.");
   try {
@@ -773,7 +793,7 @@ V.settings = () => {
   const p = S.profile, s = S.settings;
   return `
   <div class="card"><h3 class="h3">Gemini API key</h3>
-    <p class="sub">Free at aistudio.google.com → Get API key. Stored only on this phone.</p>
+    <p class="sub">Not needed inside the Claude app: there the AI uses your Claude account. On your own website, a free key from aistudio.google.com powers it. Stored only on this phone.</p>
     <input id="sKey" type="password" placeholder="Paste Gemini API key" value="${esc(s.geminiKey)}" aria-label="Gemini API key">
     <label class="field mt">Model<input id="sModel" value="${esc(s.model)}"></label>
     <div class="row mt"><button class="btn ghost" id="sTest">Test key</button><span id="sTestOut" class="sub grow"></span></div></div>
@@ -995,7 +1015,7 @@ async function logFood() {
     const missedText = text && !file ? parseFood(text).missed.join(", ") : text;
     const r = await ai(`Estimate nutrition for this Indian vegetarian food using typical portions.
 ${missedText ? "Description: " + missedText : "Use the photo."}
-Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":number}]} (p/c/f in grams).`, { json: true, image });
+Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":number}]} (p/c/f in grams).`, { json: true, image, file });
     (r.items || []).forEach((it) => day().food.push(it));
     save(); render(); toast(`Logged ${r.items?.length || 0} item(s)`);
   } catch (err) { render(); $("#foodMsg").textContent = err.message; }
