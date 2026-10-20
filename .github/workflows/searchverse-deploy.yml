@@ -1,8 +1,8 @@
 name: Deploy SearchVerse hub
 on:
   push:
-    branches: [main]
-    paths: ["searchverse/**"]
+    branches: [main, claude/festive-ramanujan-b4894r]
+    paths: ["searchverse/**", ".github/workflows/searchverse-deploy.yml"]
   workflow_dispatch:
 jobs:
   deploy:
@@ -12,5 +12,5 @@ jobs:
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: 20e3561f83fd2e0b7a868adab82391e9
           workingDirectory: searchverse
