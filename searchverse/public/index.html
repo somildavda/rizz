@@ -1,23 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>SearchVerse — Search Intelligence Suite</title>
-<meta name="description" content="SearchVerse: search intelligence tools for performance, speed and video visibility.">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SearchVerse — Search Intelligence Suite</title>
+<meta name="description" content="SearchVerse: search intelligence tools for performance, speed and video visibility.">
 <meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/style.css">
+<style>
+:root{--bg:#07080F;--panel:#0F1220;--line:#1E2236;--text:#E8EAF5;--muted:#8A90AB;--a:#7C5CFF;--b:#22D3EE}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:inherit;text-decoration:none}
+.glow{position:fixed;inset:-20% -10% auto;height:70vh;background:radial-gradient(closest-side,rgba(124,92,255,.25),transparent),radial-gradient(closest-side at 80% 30%,rgba(34,211,238,.15),transparent);pointer-events:none;z-index:0}
+nav{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:18px max(16px,5vw);background:rgba(7,8,15,.7);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
+.brand img{width:34px;height:34px}
+.grad{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+nav .links{display:flex;gap:24px;color:var(--muted);font-size:14px}
+nav .links a:hover{color:var(--text)}
+main,footer{position:relative;z-index:1}
+.wrap{max-width:1100px;margin:auto;padding:0 max(16px,5vw)}
+.hero{padding:96px 0 56px;text-align:center}
+.pill{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--muted);margin-bottom:24px}
+h1{font-size:clamp(36px,6vw,68px);line-height:1.05;letter-spacing:-.035em;font-weight:800}
+.lead{max-width:640px;margin:22px auto 0;color:var(--muted);font-size:18px;line-height:1.6}
+.cta{margin-top:36px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.btn{display:inline-block;padding:13px 22px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid var(--line);cursor:pointer;background:var(--panel);color:var(--text)}
+.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:8px 0 72px}
+.stat{text-align:center;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+.stat b{display:block;font-size:30px;letter-spacing:-.02em}
+.stat span{color:var(--muted);font-size:13px}
+section{padding-bottom:88px}
+.sec-h{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px;gap:16px;flex-wrap:wrap}
+.sec-h h2{font-size:28px;letter-spacing:-.02em}
+.sec-h p{color:var(--muted);font-size:14px;margin-top:4px}
+.search{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:var(--text);font:inherit;width:260px;max-width:100%}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.card{position:relative;display:block;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;transition:.25s;overflow:hidden}
+a.card:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.6);box-shadow:0 20px 50px -20px rgba(124,92,255,.5)}
+.ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:18px;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.2))}
+.ic.big{width:72px;height:72px;font-size:34px;border-radius:18px;margin:0 auto 22px}
+.card h3{font-size:18px;margin-bottom:8px}
+.card p{color:var(--muted);font-size:14px;line-height:1.55}
+.go{margin-top:18px;font-size:13px;font-weight:600;color:var(--b)}
+.tag{position:absolute;top:18px;right:18px;font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.steps{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
+.steps li{display:flex;gap:14px;align-items:center;padding:20px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+.steps b{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,var(--a),var(--b));color:#fff}
+.note{color:var(--muted);font-size:13px;margin-top:16px}
+.crumb{color:var(--muted);font-size:13px;margin-bottom:20px}
+.crumb a:hover{color:var(--text)}
+.band{text-align:center;padding:48px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,rgba(124,92,255,.15),rgba(34,211,238,.08))}
+.band h2{font-size:28px;margin-bottom:10px}
+.band p{color:var(--muted);margin-bottom:22px}
+footer{border-top:1px solid var(--line);padding:28px max(16px,5vw);display:flex;justify-content:space-between;color:var(--muted);font-size:13px;flex-wrap:wrap;gap:8px}
+#viewer{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
+#viewer.on{display:flex}
+.vbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.vbar .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vbar .btn{padding:8px 14px;font-size:13px}
+#frame{flex:1;border:0;width:100%;background:#fff}
+@media(max-width:640px){nav .links{display:none}.hero{padding-top:64px}.stats{grid-template-columns:1fr}.band{padding:32px 20px}}
+[hidden]{display:none!important}
+</style>
 </head>
 <body>
 <div class="glow"></div>
 <nav>
-  <a class="brand" href="/"><img src="/assets/logo.svg" alt=""><span class="grad">SearchVerse</span></a>
-  <div class="links"><a href="/#suite">Suite</a><a href="/#how">How it works</a><a href="/#about">About</a></div>
+  <a class="brand" href="#"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""><span class="grad">SearchVerse</span></a>
+  <div class="links"><a href="#suite">Suite</a><a href="#how">How it works</a><a href="#about">About</a></div>
 </nav>
-<main class="wrap">
+<main class="wrap" id="view-home">
   <header class="hero">
     <div class="pill">Search Intelligence Suite</div>
     <h1>One universe for every<br><span class="grad">search signal</span> that matters.</h1>
@@ -36,7 +93,7 @@
       <div><h2>The Suite</h2><p>Each module has its own page. Pick one to get started.</p></div>
       <input id="q" class="search" type="search" placeholder="Search modules…" aria-label="Search modules">
     </div>
-    <div class="grid" id="grid" data-tool-grid></div>
+    <div class="grid" id="grid"></div>
   </section>
 
   <section id="how">
@@ -57,8 +114,147 @@
     </div>
   </section>
 </main>
+<main class="wrap" id="view-tool" hidden>
+  <header class="hero">
+    <div class="crumb"><a href="#">Home</a> / <a href="#suite">Suite</a> / <span data-f="name"></span></div>
+    <div class="ic big" data-f="icon"></div>
+    <div class="pill" data-f="tag"></div>
+    <h1 data-f="name"></h1>
+    <p class="lead" data-f="tagline"></p>
+    <div class="cta"><a class="btn primary" data-launch>Launch</a><a class="btn" href="#suite">All modules</a></div>
+    <p class="note" data-f="note"></p>
+  </header>
+  <section>
+    <div class="sec-h"><div><h2>Overview</h2><p data-f="desc"></p></div></div>
+    <div class="grid" data-f="features"></div>
+  </section>
+  <section>
+    <div class="sec-h"><div><h2>How to use it</h2></div></div>
+    <ol class="steps" data-f="steps"></ol>
+  </section>
+  <section>
+    <div class="band"><h2>Ready to dive in?</h2><p>Open the module and start working.</p><a class="btn primary" data-launch>Launch</a></div>
+  </section>
+  <section>
+    <div class="sec-h"><div><h2>More from the suite</h2></div></div>
+    <div class="grid" id="more"></div>
+  </section>
+</main>
 <footer><span>© <span data-year></span> SearchVerse. All rights reserved.</span><span>Search intelligence, unified.</span></footer>
-<script defer src="/assets/tools.js"></script>
-<script defer src="/assets/app.js"></script>
+<div id="viewer">
+  <div class="vbar"><a class="btn" id="back" href="#">← Back</a><div class="t" id="vtitle"></div><a class="btn" id="ext" target="_blank" rel="noopener">Open full screen ↗</a></div>
+  <iframe id="frame" title="Module" allow="clipboard-write; fullscreen"></iframe>
+</div>
+<script>
+/* ===== SearchVerse modules — add a new tool by adding one object here
+   and a folder public/tools/<id>/index.html (copy an existing one). ===== */
+window.SV_TOOLS = [
+  {
+    id: "performance", icon: "📊", name: "Performance Explorer", tag: "Analytics",
+    tagline: "See exactly where your search visibility comes from.",
+    desc: "Impressions, clicks, CTR and position trends broken down by line of business, so every team sees its own story.",
+    url: "https://searchverse.somildavda.workers.dev/#/p/c9a1ceb992e94e6cba34417b06f261bc/lob?metric=impressions",
+    features: [
+      ["Line-of-business views", "Split performance by product line, category or market."],
+      ["Metric switching", "Flip between impressions, clicks, CTR and average position."],
+      ["Trend spotting", "Catch rises and drops early, before they hit the monthly report."]
+    ],
+    steps: ["Open the explorer", "Pick a line of business and metric", "Share the view with your team"]
+  },
+  {
+    id: "workspace", icon: "🗂️", name: "Search Workspace", tag: "Workspace",
+    tagline: "Your team's reporting and automation hub.",
+    desc: "A shared workspace for running reports and automations against your organisation's search data.",
+    url: "https://script.google.com/a/macros/infidigit.com/s/AKfycbwBVzrOdMxxjUvouiIrFUm2p-Res919oq2CgCgVk0IkNupDR3FU8Pa5Z0VbIhaxbYHwYw/exec",
+    newTab: true, note: "Requires sign-in with your organisation Google account.",
+    features: [
+      ["Automated reports", "Generate recurring reports without manual exports."],
+      ["Organisation sign-in", "Access is limited to your company Google accounts."],
+      ["Sheets-native", "Output lands where your team already works."]
+    ],
+    steps: ["Sign in with your work account", "Choose a report or automation", "Run it and collect the output"]
+  },
+  {
+    id: "speed", icon: "🚀", name: "PageSpeed Lab", tag: "Core Web Vitals",
+    tagline: "Bulk page-speed checks in one run.",
+    desc: "Test many URLs at once for Core Web Vitals and performance scores on mobile and desktop.",
+    url: "https://searchverse-psi.shred-app.workers.dev/",
+    features: [
+      ["Bulk URL testing", "Paste a list and test every page in one go."],
+      ["Core Web Vitals", "LCP, INP and CLS at a glance, with pass/fail status."],
+      ["Mobile & desktop", "Compare both strategies side by side."]
+    ],
+    steps: ["Paste your URLs", "Run the test", "Export results for your audit"]
+  },
+  {
+    id: "youtube", icon: "▶️", name: "Video Visibility", tag: "YouTube",
+    tagline: "Know how your videos show up in search.",
+    desc: "Track YouTube search presence, rankings and video-level insights for your brand and competitors.",
+    url: "https://searchverse-youtube.searchverse-infidigit.workers.dev/",
+    features: [
+      ["Search presence", "See which queries surface your videos."],
+      ["Competitor view", "Benchmark against other channels in your space."],
+      ["Video insights", "Spot the videos worth optimising first."]
+    ],
+    steps: ["Enter a channel or keyword", "Review visibility and rankings", "Act on the top opportunities"]
+  }
+];
+(function () {
+  var T = window.SV_TOOLS;
+  function $(s) { return document.querySelector(s); }
+  function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function set(sel, v) { document.querySelectorAll(sel).forEach(function (e) { e.textContent = v; }); }
+  function card(t) {
+    var a = h("a", "card"); a.href = "#/tools/" + t.id;
+    a.appendChild(h("span", "tag", t.tag)); a.appendChild(h("div", "ic", t.icon));
+    a.appendChild(h("h3", null, t.name)); a.appendChild(h("p", null, t.tagline));
+    a.appendChild(h("div", "go", "View module →")); return a;
+  }
+  function fillGrid(g, skip) { g.innerHTML = ""; T.forEach(function (t) { if (t.id !== skip) g.appendChild(card(t)); }); }
+  set("[data-year]", new Date().getFullYear());
+  fillGrid($("#grid"));
+
+  var q = $("#q");
+  q.addEventListener("input", function () {
+    var v = q.value.toLowerCase();
+    document.querySelectorAll("#grid .card").forEach(function (c) {
+      c.style.display = c.textContent.toLowerCase().indexOf(v) > -1 ? "" : "none";
+    });
+  });
+
+  var home = $("#view-home"), page = $("#view-tool"), viewer = $("#viewer"), frame = $("#frame");
+  function showTool(t) {
+    set("[data-f=icon]", t.icon); set("[data-f=tag]", t.tag); set("[data-f=name]", t.name);
+    set("[data-f=tagline]", t.tagline); set("[data-f=desc]", t.desc); set("[data-f=note]", t.note || "");
+    var fl = $("[data-f=features]"); fl.innerHTML = "";
+    t.features.forEach(function (f) { var c = h("div", "card"); c.appendChild(h("h3", null, f[0])); c.appendChild(h("p", null, f[1])); fl.appendChild(c); });
+    var sl = $("[data-f=steps]"); sl.innerHTML = "";
+    t.steps.forEach(function (s, i) { var li = h("li"); li.appendChild(h("b", null, String(i + 1))); li.appendChild(h("span", null, s)); sl.appendChild(li); });
+    fillGrid($("#more"), t.id);
+    document.querySelectorAll("[data-launch]").forEach(function (b) {
+      if (t.newTab) { b.href = t.url; b.target = "_blank"; b.rel = "noopener"; b.textContent = "Launch ↗"; }
+      else { b.href = "#/tools/" + t.id + "/launch"; b.removeAttribute("target"); b.textContent = "Launch"; }
+    });
+    $("#back").href = "#/tools/" + t.id;
+    $("#ext").href = t.url; set("#vtitle", t.name);
+  }
+  function route() {
+    var m = location.hash.match(/^#\/tools\/([\w-]+)(\/launch)?/);
+    var t = m && T.filter(function (x) { return x.id === m[1]; })[0];
+    var launch = !!(t && m[2] && !t.newTab);
+    home.hidden = !!t; page.hidden = !t;
+    viewer.classList.toggle("on", launch);
+    document.documentElement.style.overflow = launch ? "hidden" : "";
+    if (t) { showTool(t); document.title = t.name + " — SearchVerse"; }
+    else document.title = "SearchVerse — Search Intelligence Suite";
+    if (launch) { if (frame.getAttribute("src") !== t.url) frame.src = t.url; }
+    else frame.removeAttribute("src");
+    var anchor = !t && location.hash.match(/^#([a-z][\w-]*)$/);
+    var target = anchor && document.getElementById(anchor[1]);
+    if (target) target.scrollIntoView(); else if (!launch) window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", route); route();
+})();
+</script>
 </body>
 </html>
