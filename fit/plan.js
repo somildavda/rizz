@@ -187,9 +187,9 @@ const START_WEIGHTS = {
 // for the cook. Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
 // Each slot has 4 options; the app rotates them by date so every day is different.
 const PANEER = "iD Fresh High Protein Paneer";
-// Whey: Avvatar (Indian, vegetarian, fresh-milk whey). Cheaper: AS-IT-IS ATOM Whey.
-// If whey bloats, switch to the isolate version of either. 1 level scoop ≈ 30 g ≈ 24 g protein.
-const WHEY = "Avvatar whey";
+// Whey: Big Muscles Premium Gold Whey 1.5 kg (₹2,127 on Zepto, Informed Choice tested).
+// The plan uses ~1–1.5 scoops a day, so 1.5 kg lasts ~5 weeks. If whey bloats, switch to an isolate.
+const WHEY = "Big Muscles Gold whey";
 const COOK_RULES = [
   "Weigh dal, rice, oats, poha, soya and atta DRY, before soaking or cooking.",
   `Paneer = ${PANEER} (from the fridge pack). Dahi = Amul Masti dahi, plain. Milk = Amul Taaza toned milk.`,
@@ -324,7 +324,7 @@ const GROCERY = [
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
 ];
 const MONTHLY_EXTRAS = [
-  { item: "Avvatar Whey Protein 1 kg (cheaper: AS-IT-IS ATOM Whey; if it bloats you, the isolate version)", price: 2450, q: "avvatar whey protein" },
+  { item: "Big Muscles Premium Gold Whey 1.5 kg (₹2,127, lasts ~5 weeks; monthly share shown)", price: 1750, q: "big muscles premium gold whey 1.5 kg" },
   { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },
   { item: "Skin basics refill (sunscreen, face wash)", price: 400, q: "sunscreen spf 50" },
 ];
