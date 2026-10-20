@@ -18,8 +18,14 @@ function load() {
     days: s.days || {},
     weights: s.weights || [],
     prices: s.prices || {},
+    program: s.program || "athlete",
+    mealPick: s.mealPick || {},
   };
 }
+const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
+const meal = (i) => MEALS[i].options[S.mealPick[i] ?? 0] || MEALS[i].options[0];
+function applyProgram() { WEEK = program().week; }
+applyProgram();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
 function day(d = today()) {
   const x = (S.days[d] ??= { checks: {}, food: [], sets: {} });
@@ -65,7 +71,7 @@ async function gemini(prompt, { json = false, image = null } = {}) {
 const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian (loves tofu), beginner lifter,
-${p.knee}. Trains 60 min, 5 days/week at ${p.gym}. Goal: Farhan Akhtar's Bhaag Milkha Bhaag physique; phase 1 deadline ${p.targetDate}.
+${p.knee}. Trains 60 min, ${program().days} days/week ("${program().name}" program) at ${p.gym}. Goal: Farhan Akhtar's Bhaag Milkha Bhaag physique; phase 1 deadline ${p.targetDate}.
 Current phase: ${ph.name} (${ph.kcal} kcal, ${ph.protein} g protein, ${ph.steps} steps). Budget ₹${p.budget}/month, orders on Zepto, cooks at home.
 ${p.derm ? "Dermatologist routine: " + p.derm : ""}`;
 };
@@ -136,7 +142,7 @@ V.today = () => {
   <div class="card"><div class="rings">
     <div>${ring(t.kcal, ph.kcal, "var(--accent)", "kcal")}<div class="lbl">Calories</div></div>
     <div>${ring(t.p, ph.protein, "var(--ok)", "g")}<div class="lbl">Protein</div></div>
-    <div>${ring(workoutsThisWeek().filter(Boolean).length, 5, "var(--blue)", "")}<div class="lbl">Workouts</div></div>
+    <div>${ring(workoutsThisWeek().filter(Boolean).length, program().days, "var(--blue)", "")}<div class="lbl">Workouts</div></div>
   </div></div>
 
   ${needsWeigh ? `<div class="card"><div class="spread"><div><b>Morning weigh-in</b><div class="muted small">After toilet, before food</div></div></div>
@@ -149,21 +155,33 @@ V.today = () => {
 
   <div class="section-title"><h2>Meals</h2><a href="#food" class="small">Log other food →</a></div>
   <div class="card" style="padding:4px 16px">
-    ${MEALS.map((m, i) => mealTick(m, i)).join("")}
+    ${MEALS.map((_, i) => mealTick(i)).join("")}
   </div>
   <p class="muted small" style="text-align:center">${esc(ph.food)}</p>`;
 };
-function mealTick(m, i) {
-  const on = day().food.some((f) => f.plan === i);
+function mealTick(i) {
+  const m = meal(i), on = day().food.some((f) => f.plan === i);
   return `<div class="tick ${on ? "on" : ""}" data-meal="${i}"><span class="box"></span>
     <div class="t"><b>${esc(m.name)}</b><span class="muted small">${esc(m.items)}</span></div>
-    <span class="meta">${esc(m.time.split(" ")[0])}<br>${m.p} g P</span></div>`;
+    <span class="meta">${esc(MEALS[i].time.split(" ")[0])}<br>${m.p} g P<br>
+      <button class="btn ghost sm" data-cyclemeal="${i}" aria-label="Next option" style="margin-top:4px">⇄</button></span></div>`;
 }
 
-let trainDay = dayIdx();
+let trainDay = dayIdx(), showProgs = false;
 V.train = () => {
   const w = WEEK[trainDay], wk = workoutsThisWeek(), rest = w.ex.length <= 2;
+  const pr = program();
   return `
+  <div class="card"><div class="spread"><div><div class="muted small">Your program</div><h2 style="margin:2px 0 0">${esc(pr.name)}</h2></div>
+    <span class="pill">${pr.days} days/week</span></div>
+    <div class="muted small" style="margin-top:6px">${esc(pr.by)}</div>
+    <button class="btn ghost sm" data-toggleprog style="margin-top:10px">${showProgs ? "Close" : "Change program"}</button>
+    ${showProgs ? PROGRAMS.map((p) => `<div class="note-box" style="margin-top:10px">
+      <div class="spread"><b>${esc(p.name)}</b><span class="muted small">${p.days} days/week</span></div>
+      <div class="small" style="margin:4px 0">${esc(p.why)}</div><div class="muted small">${esc(p.by)}</div>
+      ${p.id === pr.id ? `<span class="pill ok" style="margin-top:8px">✓ Current</span>`
+        : `<button class="btn sm" data-program="${p.id}" style="margin-top:8px">Choose this</button>`}</div>`).join("") : ""}
+  </div>
   <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${i === dayIdx() ? "today" : ""} ${wk[i] ? "done" : ""}"
     data-trainday="${i}">${x.day}</button>`).join("")}</div>
   <div class="card">
@@ -249,9 +267,12 @@ V.food = () => {
       <div class="grid2"><div><b>${ph.kcal}</b> <span class="muted">kcal</span></div><div><b>${ph.protein} g</b> <span class="muted">protein</span></div>
       <div><b>${ph.carbs} g</b> <span class="muted">carbs</span></div><div><b>${ph.fat} g</b> <span class="muted">fat</span></div></div>
       <p class="note-box" style="margin-bottom:0">${esc(ph.food)}</p></div>
-    ${MEALS.map((m) => `<div class="card"><div class="spread"><span class="pill grey">${esc(m.time)}</span>
-      <span class="muted small">${m.kcal} kcal · ${m.p} g P</span></div>
-      <h2 style="margin:10px 0 4px">${esc(m.name)}</h2><div class="muted">${esc(m.items)}</div></div>`).join("")}
+    <p class="muted small">Pick one option per meal — all options keep you on target. Inspired by Rujuta Diwekar's "eat home food" approach and Ryan Fernando's high-protein vegetarian advice.</p>
+    ${MEALS.map((slot, i) => `<div class="card"><span class="pill grey">${esc(slot.time)}</span>
+      ${slot.options.map((m, j) => { const on = (S.mealPick[i] ?? 0) === j;
+        return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}"><span class="box"></span>
+          <div class="t"><b>${esc(m.name)}</b><span class="muted small">${esc(m.items)}</span></div>
+          <span class="meta">${m.kcal} kcal<br>${m.p} g P</span></div>`; }).join("")}</div>`).join("")}
     <div class="card"><h2>Need ideas?</h2><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian tofu or soya recipes for my current phase with grams and macros, under ₹100 each.">✨ 3 new tofu/soya recipes</button></div>`;
 
   if (foodSeg === "zepto") {
@@ -330,6 +351,11 @@ V.plan = () => {
     <p class="muted" style="margin:0">By <b style="color:var(--text)">${fmt(p.targetDate)}</b>: about <b style="color:var(--text)">84 kg, ~19% body fat</b> —
     clearly leaner face, visible shoulders and arms, waist down 8–10 cm. Farhan's full Milkha look (~10–12% body fat) needs phase 4,
     around <b style="color:var(--text)">July 2027</b>. Rough weeks are normal; the trend matters.</p></div>
+
+  <div class="card"><h2>Coaches we follow</h2>
+    <p class="muted small">The plan uses their publicly shared principles (not their official programs).</p>
+    ${COACHES.map((c) => `<div class="tick" style="cursor:default"><div class="t"><b>${esc(c.name)}</b>
+      <span class="muted small">${esc(c.note)}</span></div><span class="meta">${esc(c.area)}</span></div>`).join("")}</div>
 
   <div class="card"><h2>Weekly AI review</h2>
     <p class="muted small">Gemini checks the last 14 days of weight, food and workouts and tells you what to change.</p>
@@ -441,13 +467,13 @@ document.addEventListener("change", (e) => {
   if (el.dataset.price) { S.prices[el.dataset.price] = +el.value || 0; save(); render(); }
   if (el.id === "foodPhoto" && el.files[0]) $("#foodMsg").textContent = `Photo added: ${el.files[0].name}`;
   if (el.id === "imp" && el.files[0]) el.files[0].text().then((t) => {
-    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), settings: keep })); S = load(); render(); toast("Backup imported"); }
+    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), settings: keep })); S = load(); applyProgram(); render(); toast("Backup imported"); }
     catch { toast("That file isn't a valid backup"); }
   });
 });
 
 document.addEventListener("click", async (e) => {
-  const el = e.target.closest("[data-go],[data-check],[data-meal],[data-copy],button");
+  const el = e.target.closest("button,[data-go],[data-check],[data-meal],[data-pickmeal],[data-copy]");
   if (!el) return;
   const d = el.dataset;
   if (d.go) { location.hash = d.go; return; }
@@ -456,9 +482,25 @@ document.addEventListener("click", async (e) => {
     if (d.check === "workout" && c.workout) toast("Workout logged 💪");
     return;
   }
+  if (d.cyclemeal) {
+    e.stopPropagation();
+    const i = +d.cyclemeal; S.mealPick[i] = ((S.mealPick[i] ?? 0) + 1) % MEALS[i].options.length;
+    const f = day().food, at = f.findIndex((x) => x.plan === i);
+    if (at >= 0) { const m = meal(i); f[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
+    save(); render(); return toast(`Switched to ${meal(i).name}`);
+  }
+  if (d.pickmeal) {
+    const [i, j] = d.pickmeal.split(":").map(Number); S.mealPick[i] = j; save(); render();
+    return toast(`${MEALS[i].time.split(" ")[1]}: ${meal(i).name}`);
+  }
+  if (d.toggleprog !== undefined) { showProgs = !showProgs; return render(); }
+  if (d.program) {
+    S.program = d.program; applyProgram(); showProgs = false; save(); render();
+    return toast(`Switched to ${program().name}`);
+  }
   if (d.meal) {
     const i = +d.meal, f = day().food, at = f.findIndex((x) => x.plan === i);
-    if (at >= 0) f.splice(at, 1); else { const m = MEALS[i]; f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
+    if (at >= 0) f.splice(at, 1); else { const m = meal(i); f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
     save(); return render();
   }
   if (d.copy) { navigator.clipboard?.writeText(d.copy); return toast(`Copied “${d.copy}” — paste in Zepto`); }
