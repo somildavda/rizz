@@ -183,67 +183,110 @@ const START_WEIGHTS = {
   "Hanging knee raise": "Bodyweight",
 };
 
-// Meals: exact grams and suggested brands (any equivalent brand is fine).
-// "HP paneer" = iD Fresh High Protein Paneer, 200 g pack with 56 g protein (check the label).
-// Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
+// Meals: every ingredient as a RAW / DRY weight with the exact product, plus short steps
+// for the cook. Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
 // Each slot has 4 options; the app rotates them by date so every day is different.
+const PANEER = "iD Fresh High Protein Paneer";
+const COOK_RULES = [
+  "Weigh dal, rice, oats, poha, soya and atta DRY, before soaking or cooking.",
+  `Paneer = ${PANEER} (from the fridge pack). Dahi = Amul Masti dahi, plain. Milk = Amul Taaza toned milk.`,
+  "Oil = Tata Simply Better olive oil spray. 1 spray ≈ 1 second. No ghee, butter or extra oil.",
+  "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka, no ghee on top.",
+  "1 katori = 150 ml. No sugar in anything. Normal salt.",
+  "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
+];
+const TIKKA_STEPS = [
+  "Cut the paneer into 2 cm cubes.",
+  "Mix 30 g Amul Masti dahi + ½ tsp chilli powder + ¼ tsp haldi + ½ tsp garam masala + ½ tsp kasuri methi + ½ tsp ginger-garlic paste + lemon + salt.",
+  "Coat the paneer and rest 15 minutes.",
+  "Hot tawa or air fryer (180 °C), 3 sprays, cook 3 minutes per side until golden.",
+];
 const MEALS = [
   { time: "10:00", label: "Post-gym breakfast", options: [
-    { name: "Protein oats", kcal: 560, p: 40, items: [
-      "50 g rolled oats (Quaker or Saffola) cooked in 250 ml toned milk",
-      "1 scoop (~30 g) whey stirred in after cooking", "1 banana (~120 g), sliced on top"] },
-    { name: "Paneer besan chilla", kcal: 525, p: 49, items: [
-      "50 g besan (Tata Sampann) + chopped onion and tomato → 2 chilla, 4–5 sprays olive oil",
-      "75 g HP paneer, grated, as stuffing", "2 tbsp green chutney", "½ scoop (15 g) whey in 150 ml toned milk"] },
-    { name: "Moong dal chilla + whey", kcal: 435, p: 41, items: [
-      "60 g yellow moong dal, soaked overnight and ground → 2 chilla, 4–5 sprays olive oil",
-      "100 g dahi", "1 scoop whey in 250 ml water"] },
-    { name: "Paneer poha + whey", kcal: 550, p: 51, items: [
-      "50 g thick poha with 50 g peas, onion, curry leaves, 4–5 sprays olive oil",
-      "75 g HP paneer, cubed and tossed in", "1 scoop whey in 250 ml water"] },
+    { name: "Protein oats", kcal: 560, p: 40,
+      items: ["50 g Quaker rolled oats (dry)", "250 ml Amul Taaza toned milk", "30 g whey (1 scoop)", "1 banana (~100 g peeled)"],
+      steps: ["Boil the milk, add the oats, cook 3–4 min stirring.", "Take off the heat, wait 1 min, then stir in the whey so it doesn't lump.", "Top with sliced banana. No sugar."] },
+    { name: "Paneer besan chilla", kcal: 525, p: 49,
+      items: ["50 g Tata Sampann besan", `75 g ${PANEER}, grated`, "30 g onion + 30 g tomato, finely chopped", "1 green chilli, coriander, pinch of ajwain, haldi, salt",
+        "4–5 sprays olive oil", "2 tbsp green chutney (coriander + mint + lemon, no coconut)", "15 g whey (½ scoop) in 150 ml toned milk"],
+      steps: ["Mix besan with ~90 ml water into a pouring batter; add onion, tomato, chilli, coriander, ajwain, haldi, salt.",
+        "Spray a hot tawa, make 2 thin chillas, 2 min each side.", "Fill with grated paneer and chutney, fold.", "Serve with the whey-milk shake."] },
+    { name: "Moong dal chilla + whey", kcal: 435, p: 41,
+      items: ["60 g Tata Sampann yellow moong dal (dry), soaked 4 h or overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", "4–5 sprays olive oil",
+        "100 g Amul Masti dahi", "30 g whey (1 scoop) in 250 ml water"],
+      steps: ["Grind the soaked dal with ginger, chilli and ~60 ml water into a thick batter; add jeera and salt.",
+        "Spray a hot tawa, make 2 chillas, 2 min each side.", "Serve with dahi. Drink the whey shake with it."] },
+    { name: "Paneer poha + whey", kcal: 550, p: 51,
+      items: ["50 g thick poha (dry)", `75 g ${PANEER}, cubed`, "50 g green peas (frozen is fine)", "40 g onion, chopped", "½ tsp mustard seeds, 5 curry leaves, ¼ tsp haldi, salt, ½ lemon",
+        "4–5 sprays olive oil", "30 g whey (1 scoop) in 250 ml water"],
+      steps: ["Rinse poha in a strainer, leave 5 min to soften.", "Spray a kadhai; mustard seeds + curry leaves, then onion 2 min, peas 2 min, haldi + salt.",
+        "Add poha and paneer, mix on low for 2 min.", "Squeeze lemon on top. Drink the whey shake with it."] },
   ]},
   { time: "1:30", label: "Lunch", options: [
-    { name: "Dal-soya thali", kcal: 595, p: 42, items: [
-      "2 phulka (60 g Milld High Protein Atta)", "1 katori dal (40 g dry yellow moong dal)",
-      "Soya sabzi (40 g dry Fortune mini soya chunks) with 4–5 sprays olive oil", "Salad", "100 g dahi"] },
-    { name: "Paneer bhurji thali", kcal: 590, p: 43, items: [
-      "2 phulka (60 g Milld High Protein Atta)", "100 g HP paneer bhurji with onion, tomato, capsicum, 4–5 sprays olive oil",
-      "1 small katori dal (30 g dry moong dal)", "Salad"] },
-    { name: "Moong khichdi + paneer", kcal: 595, p: 39, items: [
-      "Khichdi: 40 g rice + 40 g yellow moong dal + veg, 4–5 sprays olive oil",
-      "75 g HP paneer tikka (tawa)", "150 g dahi"] },
-    { name: "Palak paneer + rice", kcal: 600, p: 42, items: [
-      "100 g HP paneer in palak gravy (200 g spinach, 4–5 sprays olive oil)",
-      "60 g dry rice (≈1 cup cooked)", "100 g cucumber raita"] },
+    { name: "Dal-soya thali", kcal: 595, p: 42,
+      items: ["60 g Milld High Protein Atta → 2 phulka", "40 g Tata Sampann yellow moong dal (dry)", "40 g Fortune mini soya chunks (dry)",
+        "50 g onion + 50 g tomato, 1 tsp ginger-garlic paste, ½ tsp each chilli / dhania / garam masala", "4–5 sprays olive oil",
+        "Salad: 100 g cucumber + 50 g carrot", "100 g Amul Masti dahi"],
+      steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles. Jeera tadka with 2 sprays.",
+        "Soya: boil 5 min in salted water, squeeze out all water.", "Spray kadhai, cook onion → ginger-garlic → tomato + spices into masala, add soya, cook 5 min.",
+        "Make 2 phulkas, no ghee."] },
+    { name: "Paneer bhurji thali", kcal: 590, p: 43,
+      items: ["60 g Milld High Protein Atta → 2 phulka", `100 g ${PANEER}, crumbled`, "50 g onion + 50 g tomato + 50 g capsicum, chopped",
+        "¼ tsp haldi, ½ tsp chilli, ½ tsp garam masala, salt", "30 g Tata Sampann yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
+      steps: ["Spray kadhai, onion 2 min, tomato + capsicum 3 min, add spices.", "Add crumbled paneer, cook 2 min only.",
+        "Dal: pressure-cook with 200 ml water, haldi, salt, 3 whistles.", "Make 2 phulkas, no ghee."] },
+    { name: "Moong khichdi + paneer tikka", kcal: 595, p: 39,
+      items: ["40 g rice (dry) + 40 g Tata Sampann yellow moong dal (dry)", "100 g mixed veg (carrot, beans, peas)", "½ tsp jeera, ¼ tsp haldi, salt",
+        "4–5 sprays olive oil", `75 g ${PANEER} for tikka (see tikka steps)`, "150 g Amul Masti dahi"],
+      steps: ["Wash rice and dal; pressure-cook with veg, haldi, salt and 500 ml water, 3 whistles.", "Jeera tadka with the sprays, pour over.",
+        ...TIKKA_STEPS, "Serve with dahi."] },
+    { name: "Palak paneer + rice", kcal: 600, p: 42,
+      items: [`100 g ${PANEER}, cubed`, "200 g palak (1 small bunch)", "40 g onion + 40 g tomato + 2 garlic cloves + 1 green chilli", "½ tsp garam masala, salt",
+        "60 g rice (dry)", "4–5 sprays olive oil", "Raita: 100 g Amul Masti dahi + 50 g cucumber + roasted jeera powder + salt"],
+      steps: ["Blanch palak 2 min, dip in cold water, blend smooth.", "Spray kadhai, onion + garlic + chilli 2 min, tomato 2 min, add palak purée, salt, garam masala, cook 3 min.",
+        "Add paneer, 2 min only.", "Rice: 60 g rice in 150 ml water, cook covered.",
+        "Raita: grate cucumber and squeeze out water, whisk into dahi with a pinch of roasted jeera powder and salt."] },
   ]},
   { time: "5:00", label: "Snack", options: [
-    { name: "Makhana + protein buttermilk", kcal: 190, p: 17, items: [
-      "25 g roasted makhana (Farmley or Happilo, plain or pudina)",
-      "1 pack Amul High Protein Buttermilk (check label: ~15 g protein)"] },
-    { name: "Whey shake + peanuts", kcal: 350, p: 36, items: [
-      "1 scoop whey in 250 ml toned milk", "15 g roasted peanuts (a small handful)"] },
-    { name: "Paneer tikka bites", kcal: 265, p: 22, items: [
-      "75 g HP paneer tikka, tawa or air-fried with 2–3 sprays olive oil", "2 tbsp mint chutney", "1 guava or apple"] },
-    { name: "Soya chaat + dahi", kcal: 195, p: 21, items: [
-      "30 g dry Fortune mini soya chunks, boiled and squeezed",
-      "Onion, tomato, cucumber, lemon, chaat masala", "100 g dahi on the side"] },
+    { name: "Makhana + protein buttermilk", kcal: 190, p: 17,
+      items: ["25 g Farmley roasted makhana (plain or pudina)", "1 pack Amul High Protein Buttermilk"],
+      steps: ["If plain makhana: dry-roast 3 min on a tawa with 1 spray, add a pinch of salt and pepper."] },
+    { name: "Whey shake + peanuts", kcal: 350, p: 36,
+      items: ["30 g whey (1 scoop)", "250 ml Amul Taaza toned milk, cold", "15 g roasted peanuts (a small handful)"],
+      steps: ["Shake whey in cold milk for 20 seconds. Peanuts on the side."] },
+    { name: "Paneer tikka bites", kcal: 265, p: 22,
+      items: [`75 g ${PANEER}`, "Tikka marinade (30 g dahi + spices)", "2 tbsp mint chutney", "1 guava or apple"],
+      steps: [...TIKKA_STEPS, "Serve with mint chutney and the fruit."] },
+    { name: "Soya chaat + dahi", kcal: 195, p: 21,
+      items: ["30 g Fortune mini soya chunks (dry)", "30 g onion + 30 g tomato + 30 g cucumber, chopped", "½ lemon, chaat masala, coriander", "100 g Amul Masti dahi"],
+      steps: ["Boil soya 5 min in salted water, squeeze dry, cool.", "Mix with the chopped veg, lemon, chaat masala and coriander.", "Dahi on the side."] },
   ]},
   { time: "8:30", label: "Dinner", options: [
-    { name: "Soya pulao + raita", kcal: 490, p: 30, items: [
-      "50 g dry rice + 40 g Fortune mini soya chunks + mixed veg, 4–5 sprays olive oil", "150 g raita"] },
-    { name: "Paneer-veg stir-fry", kcal: 545, p: 39, items: [
-      "100 g HP paneer + 200 g capsicum, beans, broccoli, 4–5 sprays olive oil", "2 phulka (60 g Milld High Protein Atta)"] },
-    { name: "Dal + soya-matar", kcal: 540, p: 36, items: [
-      "1 katori dal (40 g dry moong or masoor)", "Soya-matar sabzi (30 g soya + 50 g peas), 4–5 sprays olive oil",
-      "2 phulka (60 g Milld High Protein Atta)", "Salad"] },
-    { name: "Paneer tikka bowl", kcal: 480, p: 35, items: [
-      "100 g HP paneer tikka", "50 g dry rice (≈¾ cup cooked)", "150 g sautéed veg, 2–3 sprays olive oil"] },
+    { name: "Soya pulao + raita", kcal: 490, p: 30,
+      items: ["50 g basmati rice (dry), soaked 20 min", "40 g Fortune mini soya chunks (dry)", "80 g mixed veg (carrot, beans, peas) + 30 g onion",
+        "1 bay leaf, 2 cloves, ½ tsp jeera, salt", "4–5 sprays olive oil",
+        "Raita: 150 g Amul Masti dahi + 50 g cucumber + 5 mint leaves + roasted jeera powder + salt"],
+      steps: ["Boil soya 5 min in salted water, squeeze dry.", "Spray the cooker; whole spices + onion 2 min, veg + soya 2 min.",
+        "Add rice, 110 ml water and salt; 2 whistles.", "Raita: grate cucumber and squeeze out water, whisk into dahi with chopped mint, jeera powder and salt."] },
+    { name: "Paneer-veg stir-fry", kcal: 545, p: 39,
+      items: [`100 g ${PANEER}, cubed`, "200 g veg: capsicum, beans, broccoli or cabbage", "2 garlic cloves, 1 tsp soy sauce, black pepper",
+        "4–5 sprays olive oil", "60 g Milld High Protein Atta → 2 phulka"],
+      steps: ["Spray kadhai on high heat, garlic 30 seconds.", "Add veg, toss 4 min (keep crunchy).", "Add paneer, soy sauce and pepper, 2 min.", "Make 2 phulkas, no ghee."] },
+    { name: "Dal + soya-matar", kcal: 540, p: 36,
+      items: ["40 g yellow moong or masoor dal (dry)", "30 g Fortune mini soya chunks (dry) + 50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, spices",
+        "4–5 sprays olive oil", "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber"],
+      steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles; jeera tadka with 2 sprays.", "Soya: boil 5 min, squeeze dry.",
+        "Spray kadhai, make onion-tomato masala, add soya + peas, cook 5 min.", "Make 2 phulkas, no ghee."] },
+    { name: "Paneer tikka bowl", kcal: 480, p: 35,
+      items: [`100 g ${PANEER}`, "Tikka marinade (30 g dahi + spices)", "50 g rice (dry)", "150 g veg: capsicum, onion, beans", "2–3 sprays olive oil"],
+      steps: [...TIKKA_STEPS, "Rice: 50 g rice in 125 ml water, cook covered.", "Sauté the veg with the sprays 4 min, salt and pepper.", "Serve paneer and veg on the rice."] },
   ]},
   { time: "10:00", label: "Night", options: [
-    { name: "Dahi", kcal: 120, p: 7, items: ["200 g plain dahi (Amul Masti)"] },
-    { name: "Haldi milk", kcal: 145, p: 8, items: ["250 ml toned milk + ¼ tsp haldi, no sugar"] },
-    { name: "Hung curd + cinnamon", kcal: 120, p: 10, items: ["200 g dahi hung for 2 h (~120 g) + a pinch of cinnamon"] },
-    { name: "Slow protein shake", kcal: 175, p: 19, items: ["½ scoop (15 g) whey in 200 ml toned milk"] },
+    { name: "Dahi", kcal: 120, p: 7, items: ["200 g Amul Masti dahi, plain"], steps: ["Serve as it is. No sugar."] },
+    { name: "Haldi milk", kcal: 145, p: 8, items: ["250 ml Amul Taaza toned milk", "¼ tsp haldi + pinch of black pepper"], steps: ["Boil the milk with haldi and pepper for 2 min. No sugar."] },
+    { name: "Hung curd + cinnamon", kcal: 120, p: 10, items: ["200 g Amul Masti dahi", "Pinch of cinnamon"],
+      steps: ["Tie the dahi in a muslin cloth, hang it in the fridge for 2 hours (leaves ~120 g thick curd).", "Top with cinnamon."] },
+    { name: "Slow protein shake", kcal: 175, p: 19, items: ["15 g whey (½ scoop)", "200 ml Amul Taaza toned milk"], steps: ["Shake together. Drink 30 min before bed."] },
   ]},
 ];
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating

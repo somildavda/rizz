@@ -173,7 +173,7 @@ function localReview() {
     const avg = (f) => Math.round(logged.reduce((a, [, d]) => a + f(d), 0) / logged.length);
     const k = avg((d) => d.totals.kcal), t = avg((d) => d.target), pr = avg((d) => d.totals.p);
     out.push(`Calories: you averaged ${k} kcal against a ${t} kcal target (${k > t + 100 ? "over, trim dinner rice/roti" : k < t - 300 ? "too low, add a whey shake so you don't lose muscle" : "on target"}).`);
-    out.push(`Protein: ${pr} g a day on average; target ${phase().protein} g. ${pr < phase().protein - 15 ? "Add ½ scoop whey or 75 g HP paneer." : "Good."}`);
+    out.push(`Protein: ${pr} g a day on average; target ${phase().protein} g. ${pr < phase().protein - 15 ? "Add ½ scoop whey or 75 g High Protein Paneer." : "Good."}`);
   } else out.push("No food logged yet. Tick your meals on Today so the review has something to work with.");
   const gymDays = days.filter(([k]) => isGymDay(new Date(k))).length, done = days.filter(([, d]) => d.checks.workout).length;
   out.push(`Workouts: ${done} done${gymDays ? ` out of ${gymDays} planned` : ""} in the last 2 weeks.`);
@@ -330,7 +330,8 @@ function mealTicks(T, d = today()) {
     const m = meal(i, d), on = !!S.days[d]?.food?.some((f) => f.plan === i);
     return `<div class="tick meal ${on ? "on" : ""}" data-meal="${i}" data-date="${d}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
       <div class="t"><span class="time">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span><b>${esc(m.name)}</b>
-        <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+        <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+        <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details></div>
       <span class="meta">${m.kcal} kcal<br>${m.p} g P<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
   return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
@@ -481,14 +482,16 @@ function cookText(k) {
   return `Menu for ${dayLabel(k)}${/day$/.test(dayLabel(k)) ? ` (${fmt(k)})` : ""} · Day ${journeyDay(k)}\n` + MEALS.map((slot, i) => {
     if (slot.gymOnly && (!T.gym || T.skippedGym)) return "";
     const m = meal(i, k);
-    return `\n${slot.time} ${slotLabel(slot, T.gym && !T.skippedGym)}: ${m.name}\n` + m.items.map((x) => `- ${x}`).join("\n");
-  }).join("\n") + "\n\nNo tofu, rajma or chole. Use the olive oil spray instead of oil.";
+    return `\n*${slot.time} ${slotLabel(slot, T.gym && !T.skippedGym)}: ${m.name}*\nTake:\n` + m.items.map((x) => `- ${x}`).join("\n") +
+      "\nMethod:\n" + m.steps.map((x, j) => `${j + 1}. ${x}`).join("\n");
+  }).join("\n") + "\n\nKitchen rules:\n" + COOK_RULES.map((x) => `- ${x}`).join("\n") + "\n- Never use tofu, rajma, chole or kabuli chana.";
 }
 function foodToday() {
   const fd = foodDate || planDay(), d = day(fd), t = foodTotals(d), T = dayTargets(fd), min = today();
   const pager = `<div class="card pager"><button class="iconbtn" data-fooddate="${addDays(fd, -1)}" ${fd <= min ? "disabled" : ""} aria-label="Previous day">‹</button>
     <div class="center grow"><b>${esc(dayLabel(fd))}</b><div class="sub">${fmt(fd)}${journeyDay(fd) >= 1 ? ` · Day ${journeyDay(fd)}` : ""} · ${T.gym ? "Gym day" : "Rest day"} · ${T.kcal} kcal</div></div>
     <button class="iconbtn" data-fooddate="${addDays(fd, 1)}" aria-label="Next day">›</button></div>
+    <details class="card rules"><summary>Kitchen rules for the cook</summary><ul class="bullets">${COOK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>
     <button class="btn ghost block sm" id="copyCook" data-date="${fd}">📋 Copy ${esc(dayLabel(fd).toLowerCase())}'s menu for the cook</button>`;
   return pager + `
   <div class="card"><div class="rings four">
@@ -529,7 +532,8 @@ function foodPlan() {
   ${MEALS.map((slot, i) => slot.gymOnly && !gym ? "" : `<div class="card list"><span class="eyebrow">${esc(slot.time)} · ${esc(slot.label)}</span>
     ${slot.options.map((m, j) => { const on = mealPickIdx(i, pd) === j;
       return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}:${pd}" role="radio" aria-checked="${on}" tabindex="0"><span class="box round"></span>
-        <div class="t"><b>${esc(m.name)}</b>${on ? `<ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>
+        <div class="t"><b>${esc(m.name)}</b>${on ? `<ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+          <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>
         <span class="meta">${m.kcal} kcal<br>${m.p} g P</span></div>`; }).join("")}</div>`).join("")}
   <div class="card"><h3 class="h3">Need new ideas?</h3><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian recipes using high-protein paneer or soya for my current phase, with exact grams and macros, under ₹120 each. Nothing that bloats.">✨ 3 new paneer / soya recipes</button></div>`;
 }
@@ -775,7 +779,7 @@ async function copy(text, msg) {
 }
 
 document.addEventListener("click", async (e) => {
-  if (e.target.closest("a.vid, .shoplinks a")) return; // links open normally
+  if (e.target.closest("a.vid, .shoplinks a, details")) return; // links and "How to cook" open normally
   const el = e.target.closest("button,[data-go],[data-check],[data-wcheck],[data-meal],[data-pickmeal],[data-trdone],[data-trainseg],[data-bought]");
   if (!el) return;
   const d = el.dataset;

@@ -278,3 +278,11 @@ nav button.on::before { content: ""; position: absolute; top: 0; width: 28px; he
 .card.pager { display: flex; align-items: center; gap: 10px; padding: 10px; margin-bottom: 8px; }
 .card.pager b { font: 700 17px var(--display); }
 .iconbtn:disabled { opacity: .35; }
+
+.how { margin-top: 6px; }
+.how summary, .rules summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: #ffb38a; list-style: none; }
+.how summary::before, .rules summary::before { content: "▸ "; }
+.how[open] summary::before, .rules[open] summary::before { content: "▾ "; }
+.how ol { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink); display: grid; gap: 4px; }
+.rules { padding: 12px 16px; }
+.rules .bullets { margin-top: 10px; }
