@@ -4,7 +4,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const iso = (d) => d.toLocaleDateString("en-CA");
 const today = () => iso(new Date());
-const dayIdx = (d = new Date()) => (d.getDay() + 6) % 7; // Mon = 0
+const dayIdx = (d = new Date()) => (d.getDay() + 6) % 7; // Mon = 0 (calendar weeks)
 const DAY_MS = 864e5;
 const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
 const fmt = (k) => new Date(k).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -20,11 +20,12 @@ function load() {
   try { s = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(localStorage.getItem(OLD_KEY)) || {}; } catch {}
   const profile = { ...PROFILE_DEFAULT, ...s.profile };
   if (!s.v2) profile.targetDate = PROFILE_DEFAULT.targetDate; // plan restarted on 21 Oct with a new target
+  if (!s.v3) s.program = "fullbody"; // start with the basic program; switch after the Foundation phase
   return {
-    v2: true, profile,
+    v2: true, v3: true, profile,
     settings: { geminiKey: "", model: "gemini-2.5-flash", ...s.settings },
     days: s.days || {}, weights: s.weights || [], prices: s.prices || {},
-    program: s.program || "athlete", treatments: s.treatments || [],
+    program: s.program || "fullbody", treatments: s.treatments || [],
     runs: s.runs || [], skills: s.skills || {}, weekly: s.weekly || {},
   };
 }
@@ -59,7 +60,9 @@ const latestWeight = () => latest().kg ?? S.profile.startWeight;
 const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
 function applyProgram() { WEEK = program().week; }
 applyProgram();
-const isGymDay = (d = new Date()) => WEEK[dayIdx(d)].ex.length > 2;
+// Workouts follow journey days (Day 1 = 21 Oct), not weekdays.
+const cyc = (d = new Date()) => ((Math.floor((new Date(iso(d)) - START) / DAY_MS) % 7) + 7) % 7;
+const isGymDay = (d = new Date()) => WEEK[cyc(d)].ex.length > 2;
 const runStage = () => RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
 const skillIndex = () => Math.min(SKILLS.length - 1, Math.floor((dayNo() - 1) / 30));
 
@@ -70,6 +73,7 @@ function exList(di) {
     const sk = SKILLS[skillIndex()];
     ex.splice(ex.length - 1, 0, [`Skill practice: ${sk.name}`, 1, "10 min", sk.drills.join(" · ")]);
   }
+  if (w.ex.length > 2) { ex.splice(1, 0, WARMUP); ex.push(COOLDOWN); }
   return ex;
 }
 
@@ -100,7 +104,7 @@ function dayTargets(d = today()) {
 // ---------- Gemini ----------
 async function gemini(prompt, { json = false, image = null } = {}) {
   const k = S.settings.geminiKey.trim();
-  if (!k) throw new Error("Add your Gemini API key in Settings (gear icon, top right) first.");
+  if (!k) throw new Error("Add your Gemini API key in Settings (gear icon, top right).");
   const parts = [{ text: prompt }];
   if (image) parts.push({ inline_data: { mime_type: image.type, data: image.data } });
   const res = await fetch(
@@ -112,6 +116,78 @@ async function gemini(prompt, { json = false, image = null } = {}) {
   const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
   return json ? JSON.parse(text) : text;
 }
+// Free fallback (no key): Pollinations' public text endpoint. Text only, may be slow or down.
+async function freeAI(prompt) {
+  const res = await fetch("https://text.pollinations.ai/openai", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "openai", messages: [{ role: "user", content: prompt }] }) });
+  if (!res.ok) throw new Error(`Free AI unavailable (${res.status})`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+async function ai(prompt, opts = {}) {
+  if (S.settings.geminiKey.trim()) return gemini(prompt, opts);
+  if (opts.image) throw new Error("Photo analysis needs a Gemini key (Settings). Type the food instead.");
+  try {
+    const text = await freeAI(prompt);
+    return opts.json ? JSON.parse(text.replace(/^[^{]*/, "").replace(/[^}]*$/, "")) : text;
+  } catch (e) {
+    throw new Error("The free AI didn't respond. Try again later, or add a Gemini key in Settings.");
+  }
+}
+
+// ---- offline food logging ----
+const NUM_WORDS = { a: 1, an: 1, one: 1, half: 0.5, two: 2, three: 3, four: 4, five: 5 };
+function parseFood(text) {
+  const found = [], missed = [];
+  for (const raw of text.toLowerCase().split(/,|\+|\band\b|\n|&/)) {
+    const part = raw.trim(); if (!part) continue;
+    const food = FOODS.slice().sort((a, b) => Math.max(...b.k.map((x) => x.length)) - Math.max(...a.k.map((x) => x.length)))
+      .find((f) => f.k.some((k) => part.includes(k)));
+    if (!food) { missed.push(part); continue; }
+    const g = part.match(/(\d+(?:\.\d+)?)\s*(g|gm|gms|grams?|ml)\b/);
+    const n = part.match(/(\d+(?:\.\d+)?)/), w = part.split(/\s+/).find((x) => NUM_WORDS[x] != null);
+    let m, label;
+    if (g && food.per100) { m = food.per100.map((v) => (v * +g[1]) / 100); label = `${g[1]} ${g[2].startsWith("m") ? "ml" : "g"}`; }
+    else {
+      const qty = n ? +n[1] : w ? NUM_WORDS[w] : 1;
+      const base = food.per || food.per100.map((v) => (v * parseFloat(food.unit)) / 100);
+      m = base.map((v) => v * qty); label = `${qty} ${food.unit}`;
+    }
+    found.push({ name: `${food.k[0][0].toUpperCase() + food.k[0].slice(1)} (${label})`, kcal: Math.round(m[0]), p: Math.round(m[1]), c: Math.round(m[2]), f: Math.round(m[3]) });
+  }
+  return { found, missed };
+}
+
+// ---- offline weekly review ----
+function localReview() {
+  const r = recent(14), days = Object.entries(r.days), out = [];
+  const logged = days.filter(([, d]) => d.totals.kcal > 0);
+  if (logged.length) {
+    const avg = (f) => Math.round(logged.reduce((a, [, d]) => a + f(d), 0) / logged.length);
+    const k = avg((d) => d.totals.kcal), t = avg((d) => d.target), pr = avg((d) => d.totals.p);
+    out.push(`Calories: you averaged ${k} kcal against a ${t} kcal target (${k > t + 100 ? "over, trim dinner rice/roti" : k < t - 300 ? "too low, add a whey shake so you don't lose muscle" : "on target"}).`);
+    out.push(`Protein: ${pr} g a day on average; target ${phase().protein} g. ${pr < phase().protein - 15 ? "Add ½ scoop whey or 75 g HP paneer." : "Good."}`);
+  } else out.push("No food logged yet. Tick your meals on Today so the review has something to work with.");
+  const gymDays = days.filter(([k]) => isGymDay(new Date(k))).length, done = days.filter(([, d]) => d.checks.workout).length;
+  out.push(`Workouts: ${done} done${gymDays ? ` out of ${gymDays} planned` : ""} in the last 2 weeks.`);
+  if (r.weights.length > 1) {
+    const ch = r.weights.at(-1).kg - r.weights[0].kg;
+    out.push(`Weight: ${ch > 0 ? "+" : ""}${ch.toFixed(1)} kg over ${r.weights.length} weigh-ins. Aim for −0.5 to −0.8 kg a week.`);
+  }
+  const bloat = {}, all = {};
+  days.forEach(([, d]) => (d.meals || []).forEach((m) => { all[m] = (all[m] || 0) + 1; if (d.feel?.bloat >= 1) bloat[m] = (bloat[m] || 0) + 1; }));
+  const suspects = Object.keys(bloat).filter((m) => all[m] >= 2 && bloat[m] / all[m] >= 0.6);
+  if (suspects.length) out.push(`Possible bloating triggers: ${suspects.join(", ")}. Try swapping them for a week.`);
+  const en = days.filter(([, d]) => d.feel?.energy);
+  if (en.length >= 4) {
+    const a = (arr) => arr.length ? (arr.reduce((x, [, d]) => x + d.feel.energy, 0) / arr.length).toFixed(1) : "—";
+    out.push(`Energy: ${a(en.filter(([, d]) => d.checks.workout))}/5 on workout days vs ${a(en.filter(([, d]) => !d.checks.workout))}/5 on other days.`);
+  }
+  const sl = days.filter(([, d]) => d.checks.sleep).length;
+  out.push(`Sleep target hit on ${sl} of ${days.length || 14} days. ${sl < 10 ? "Sleep is the biggest testosterone lever; protect it." : ""}`);
+  return "• " + out.join("\n• ");
+}
+
 const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian,
@@ -138,14 +214,14 @@ const tick = (id, title, sub = "", meta = "") => {
     <div class="t"><b>${title}</b>${sub ? `<span class="sub">${sub}</span>` : ""}</div>${meta ? `<span class="meta">${meta}</span>` : ""}</div>`;
 };
 const weekKey = () => `w${weekNo()}`;
-const wtick = (id, title, sub = "") => {
-  const on = !!S.weekly[weekKey()]?.[id];
-  return `<div class="tick ${on ? "on" : ""}" data-wcheck="${esc(id)}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
+const wtick = (id, title, sub = "", bucket = weekKey()) => {
+  const on = !!S.weekly[bucket]?.[id];
+  return `<div class="tick ${on ? "on" : ""}" data-wcheck="${esc(id)}" data-bucket="${bucket}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
     <div class="t"><b>${esc(title)}</b>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}</div></div>`;
 };
 const vid = (q, label = "Watch how") => `<a class="vid" href="${yt(q)}" target="_blank" rel="noopener">▶ ${label}</a>`;
-const shopLinks = (g) => `<span class="shoplinks">${g.link ? `<a href="${g.link}" target="_blank" rel="noopener">Zepto item</a>` :
-  `<a href="${zepto(g.q)}" target="_blank" rel="noopener">Zepto</a>`}<a href="${blinkit(g.q)}" target="_blank" rel="noopener">Blinkit</a></span>`;
+const shopLinks = (g) => `<span class="shoplinks">${g.link ? `<a href="${g.link}" target="_blank" rel="noopener">Zepto ★</a>` :
+  `<a href="${zepto(g.q)}" target="_blank" rel="noopener">Zepto</a>`}<a href="${blinkit(g.q)}" target="_blank" rel="noopener">Blinkit</a><a href="https://www.swiggy.com/instamart/search?custom_back=true&query=${encodeURIComponent(g.q)}" target="_blank" rel="noopener">Instamart</a></span>`;
 function ring(val, max, color, unit) {
   const r = 36, c = 2 * Math.PI * r, f = Math.min(1, max ? val / max : 0);
   return `<div class="ring"><svg viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" fill="none" stroke="var(--track)" stroke-width="7"/>
@@ -153,8 +229,12 @@ function ring(val, max, color, unit) {
       stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - f)}"/></svg>
     <div class="v"><span>${Math.round(val)}<small>/ ${max}${unit ? " " + unit : ""}</small></span></div></div>`;
 }
+function dateOfCyc(i) {
+  const d = new Date(); d.setDate(d.getDate() - cyc() + i);
+  return d.getDate();
+}
 function workoutsThisWeek() {
-  const mon = new Date(); mon.setDate(mon.getDate() - dayIdx());
+  const mon = new Date(); mon.setDate(mon.getDate() - cyc());
   return WEEK.map((_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return !!S.days[iso(d)]?.checks.workout; });
 }
 function lastSets(name) {
@@ -173,7 +253,7 @@ const seg = (cur, key, items) => `<div class="seg" role="tablist">${items.map(([
 const V = {};
 
 V.today = () => {
-  const ph = phase(), w = WEEK[dayIdx()], d = day(), t = foodTotals(d), T = dayTargets();
+  const ph = phase(), w = WEEK[cyc()], d = day(), t = foodTotals(d), T = dayTargets();
   const done = d.checks.workout, rest = !T.gym, feel = d.feel || {};
   const soon = S.treatments.filter((x) => !x.done && x.date >= today() && (new Date(x.date) - new Date(today())) / DAY_MS <= 3);
   const notStarted = today() < START_DATE;
@@ -183,19 +263,20 @@ V.today = () => {
     ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk"],
+    ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds"],
   ];
   return `
   <section class="hero">
     <div class="hero-top"><span class="eyebrow">${notStarted ? `Starts ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(dayIdx()).length} exercises · ~60 min · gym at ${GYM_TIME}`}</p>
+    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc()).length} exercises · ~60 min · gym at ${GYM_TIME}`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`
         : T.skippedGym
         ? `<span class="pill grey big">Skipped · calories lowered</span><button class="btn ghost" data-check="${T.autoSkip ? "trainedLate" : "skipGym"}">${T.autoSkip ? "I did train" : "Undo"}</button>`
-        : `<button class="btn grow" data-startworkout="${dayIdx()}">Start workout</button><button class="btn ghost" data-check="skipGym">Skip today</button>`}
+        : `<button class="btn grow" data-startworkout="${cyc()}">Start workout</button><button class="btn ghost" data-check="skipGym">Skip today</button>`}
     </div>
     <div class="journey-bar"><i style="width:${pct}%"></i></div>
     <div class="journey-meta"><span>${fmt(START_DATE)}</span><span>${pct}% to abs reveal</span><span>${fmt(S.profile.targetDate)}</span></div>
@@ -245,11 +326,11 @@ function mealTicks(T, d = today()) {
         <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
       <span class="meta">${m.kcal} kcal<br>${m.p} g P<br><button class="btn ghost xs" data-cyclemeal="${i}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
-  return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: no pre-gym snack, and 1 phulka or ¼ cup rice less at dinner.</p>` : "");
+  return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
 }
 
 // ---------- train ----------
-let trainSeg = "gym", trainDay = dayIdx(), showProgs = false;
+let trainSeg = "gym", trainDay = cyc(), showProgs = false;
 V.train = () => seg(trainSeg, "trainseg", [["gym", "Gym"], ["run", "Walk / Run"], ["skills", "Skills"]]) +
   (trainSeg === "run" ? trainRun() : trainSeg === "skills" ? trainSkills() : trainGym());
 
@@ -265,8 +346,8 @@ function trainGym() {
       <p class="small">${esc(p.why)}</p><p class="sub">${esc(p.by)}</p>
       ${p.id === pr.id ? `<span class="pill ok">Current</span>` : `<button class="btn sm" data-program="${p.id}">Choose this</button>`}</div>`).join("") : ""}
   </div>
-  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${i === dayIdx() ? "today" : ""} ${wk[i] ? "done" : ""}"
-    data-trainday="${i}">${x.day}</button>`).join("")}</div>
+  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${i === cyc() ? "today" : ""} ${wk[i] ? "done" : ""}"
+    data-trainday="${i}"><span>${x.day.replace("Day ", "D")}</span><small>${dateOfCyc(i)}</small></button>`).join("")}</div>
   <div class="card">
     <h2 class="h2">${esc(w.title)}</h2>
     ${isDeload() ? `<p class="note">Deload week: same exercises at ~60% of your usual weight.</p>` : ""}
@@ -432,6 +513,15 @@ function foodPlan() {
         <span class="meta">${m.kcal} kcal<br>${m.p} g P</span></div>`; }).join("")}</div>`).join("")}
   <div class="card"><h3 class="h3">Need new ideas?</h3><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian recipes using high-protein paneer or soya for my current phase, with exact grams and macros, under ₹120 each. Nothing that bloats.">✨ 3 new paneer / soya recipes</button></div>`;
 }
+let shopWeek = null;
+// What to buy in a given journey week: whole packs every week; fractions every few weeks.
+function weekOrder(w) {
+  const items = GROCERY.map((g) => ({ ...g, buy: g.qty >= 1 ? Math.round(g.qty) : Math.floor(w * g.qty + 1e-9) > Math.floor((w - 1) * g.qty + 1e-9) ? 1 : 0 }))
+    .filter((g) => g.buy > 0);
+  if ((w - 1) % 4 === 0) MONTHLY_EXTRAS.forEach((g) => items.push({ ...g, buy: 1, group: "Monthly" }));
+  return items;
+}
+const instamart = (q) => `https://www.swiggy.com/instamart/search?custom_back=true&query=${encodeURIComponent(q)}`;
 function foodShop() {
   const price = (g) => S.prices[g.item] ?? g.price;
   const weekly = GROCERY.reduce((s, g) => s + g.qty * price(g), 0), extras = MONTHLY_EXTRAS.reduce((s, g) => s + price(g), 0);
@@ -440,12 +530,28 @@ function foodShop() {
   const row = (g, qty = true) => `<div class="shop"><div class="grow"><b>${esc(g.item)}</b>
       <div class="sub">${qty ? `${g.qty < 1 ? `every ${Math.round(1 / g.qty)} weeks` : `× ${g.qty} / week`} · ` : ""}${shopLinks(g)}</div></div>
       <label class="price"><span>₹</span><input inputmode="numeric" data-price="${esc(g.item)}" value="${price(g)}" aria-label="Price of ${esc(g.item)}"></label></div>`;
+  const w = shopWeek ?? weekNo(), order = weekOrder(w), bought = S.weekly[`shop${w}`] || {};
+  const ws = new Date(START); ws.setDate(ws.getDate() + (w - 1) * 7); const we = new Date(ws); we.setDate(we.getDate() + 6);
+  const cost = order.reduce((a, g) => a + g.buy * price(g), 0);
+  const links = (g) => `<span class="shoplinks">${g.link ? `<a href="${g.link}" target="_blank" rel="noopener">Zepto ★</a>` :
+    `<a href="${zepto(g.q)}" target="_blank" rel="noopener">Zepto</a>`}<a href="${blinkit(g.q)}" target="_blank" rel="noopener">Blinkit</a><a href="${instamart(g.q)}" target="_blank" rel="noopener">Instamart</a></span>`;
   return `
+  <div class="card hero-lite"><div class="spread"><button class="iconbtn" data-shopweek="${w - 1}" ${w <= 1 ? "disabled" : ""} aria-label="Previous week">‹</button>
+    <div class="center"><span class="eyebrow">Week ${w} order</span><div class="sub">${fmt(iso(ws))} – ${fmt(iso(we))}</div></div>
+    <button class="iconbtn" data-shopweek="${w + 1}" aria-label="Next week">›</button></div>
+    <div class="spread mt"><h2 class="big-num">${inr(cost)}</h2><span class="sub">${Object.values(bought).filter(Boolean).length}/${order.length} bought</span></div>
+    <p class="sub">Order on Sunday for the week. ★ = the exact product you use. Compare the three apps' prices; they change daily.</p>
+    <button class="btn ghost sm" id="copyWeek">Copy this week's list</button></div>
+  <div class="card list">${order.map((g) => `<div class="tick ${bought[g.item] ? "on" : ""}" data-bought="${esc(g.item)}" data-week="${w}" role="checkbox" tabindex="0">
+    <span class="box"></span><div class="t"><b>${g.buy > 1 ? g.buy + " × " : ""}${esc(g.item)}</b>${links(g)}</div>
+    <span class="meta">${inr(g.buy * price(g))}</span></div>`).join("")}</div>
+
+  <div class="section-title"><h3>Prices and budget</h3></div>
   <div class="card hero-lite"><span class="eyebrow">Monthly spend · gym already paid</span>
     <div class="spread"><h2 class="big-num">${inr(monthly)}</h2><span class="pill ${over ? "warn" : "ok"}">${over ? "Over" : "Within"} ${inr(S.profile.budget)}</span></div>
     <div class="journey-bar"><i style="width:${Math.min(100, (monthly / S.profile.budget) * 100)}%"></i></div>
     <p class="sub">Groceries ${inr(weekly)} / week · supplements and skin ${inr(extras)} / month. Dermat fees are extra.</p>
-    <button class="btn ghost sm" id="copyAll">Copy weekly list</button></div>
+    </div>
   ${groups.map((gr) => `<div class="section-title"><h3>${esc(gr)}</h3></div><div class="card list">${GROCERY.filter((g) => g.group === gr).map((g) => row(g)).join("")}</div>`).join("")}
   <div class="section-title"><h3>Monthly buys</h3></div><div class="card list">${MONTHLY_EXTRAS.map((g) => row(g, false)).join("")}</div>
   <div class="section-title"><h3>One-time looks kit</h3><span class="sub">Not in the monthly budget</span></div>
@@ -487,8 +593,13 @@ V.journey = () => {
     Wider shoulders and lats, a flatter, squarer chest and a visible jawline come with it. Lower abs and full definition take longer and depend on genetics.
     The V-taper build phase after that adds width while you stay lean.</p></div>
 
-  <div class="card"><h3 class="h3">Weekly AI review</h3>
-    <p class="sub">Gemini reads your last 14 days of weight, food, workouts and how you felt, and tells you what to change.</p>
+  <div class="card"><h3 class="h3">Testosterone, naturally</h3>
+    <p class="sub">No booster pills or steroids. These are what actually raise it, and most are already in your plan.</p>
+    <ul class="bullets">${TESTOSTERONE.map(([h, t]) => `<li><b>${esc(h)}.</b> ${esc(t)}</li>`).join("")}</ul>
+    <div class="list mt">${wtick("bloodtest", "Get a blood test this month", BLOOD_TEST, "once")}</div></div>
+
+  <div class="card"><h3 class="h3">Weekly review</h3>
+    <p class="sub">Reads your last 14 days of weight, food, workouts and how you felt. Works without a key; adds AI tips when available.</p>
     <button class="btn ghost block" id="reviewBtn">✨ Review my last 2 weeks</button><pre class="ai" id="reviewOut"></pre></div>
 
   <div class="card"><h3 class="h3">Coaches we follow</h3><p class="sub">Their public advice shapes the plan. These aren't their official programs.</p>
@@ -541,9 +652,9 @@ function looksSharp() {
   return `
   <div class="card hero-lite"><span class="eyebrow">Your to-do</span><h2 class="h2">What you need to do</h2>
     <div class="list">
-      ${wtick("todoDerm", "Book the dermatologist", "Add the date in the Dermat tab so it shows on Today")}
+      ${wtick("todoDerm", "Book the dermatologist", "Add the date in the Dermat tab so it shows on Today", "once")}
       ${wtick("todoBarber", "Barber visit with the note below", "Every 3–4 weeks")}
-      ${wtick("todoKit", "Buy the looks kit after the dermat visit", "Food → Shopping → One-time looks kit")}
+      ${wtick("todoKit", "Buy the looks kit after the dermat visit", "Food → Shopping → One-time looks kit", "once")}
       ${wtick("todoPhotos", "Take Sunday progress photos", "Front, side, back in the same spot")}
     </div></div>
   <div class="card"><h3 class="h3">Note for your barber</h3><p class="quote">${esc(BARBER_NOTE)}</p>
@@ -631,7 +742,7 @@ document.addEventListener("change", (e) => {
   if (el.dataset.price) { S.prices[el.dataset.price] = +el.value || 0; save(); render(); }
   if (el.id === "foodPhoto" && el.files[0]) $("#foodMsg").textContent = `Photo added: ${el.files[0].name}`;
   if (el.id === "imp" && el.files[0]) el.files[0].text().then((t) => {
-    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), v2: true, settings: keep })); S = load(); applyProgram(); render(); toast("Backup imported"); }
+    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), v2: true, v3: true, settings: keep })); S = load(); applyProgram(); render(); toast("Backup imported"); }
     catch { toast("That file isn't a valid backup"); }
   });
 });
@@ -645,7 +756,7 @@ async function copy(text, msg) {
 
 document.addEventListener("click", async (e) => {
   if (e.target.closest("a.vid, .shoplinks a")) return; // links open normally
-  const el = e.target.closest("button,[data-go],[data-check],[data-wcheck],[data-meal],[data-pickmeal],[data-trdone],[data-trainseg]");
+  const el = e.target.closest("button,[data-go],[data-check],[data-wcheck],[data-meal],[data-pickmeal],[data-trdone],[data-trainseg],[data-bought]");
   if (!el) return;
   const d = el.dataset;
   if (d.trainseg) { trainSeg = d.trainseg; if (el.tagName === "A") { location.hash = "train"; e.preventDefault(); } return render(); }
@@ -655,7 +766,7 @@ document.addEventListener("click", async (e) => {
     if (d.check === "skipGym" && c.skipGym) toast("Gym skipped. Today's calories lowered by 250.");
     return;
   }
-  if (d.wcheck) { const w = (S.weekly[weekKey()] ??= {}); w[d.wcheck] = !w[d.wcheck]; save(); return render(); }
+  if (d.wcheck) { const w = (S.weekly[d.bucket || weekKey()] ??= {}); w[d.wcheck] = !w[d.wcheck]; save(); return render(); }
   if (d.cyclemeal) {
     const i = +d.cyclemeal, x = day();
     (x.mealPick ??= {})[i] = (mealPickIdx(i) + 1) % MEALS[i].options.length;
@@ -672,6 +783,8 @@ document.addEventListener("click", async (e) => {
     const [i, j, dt] = d.pickmeal.split(":"), x = day(dt);
     (x.mealPick ??= {})[+i] = +j; save(); return render();
   }
+  if (d.shopweek) { shopWeek = Math.max(1, +d.shopweek); return render(); }
+  if (d.bought) { const b = (S.weekly[`shop${d.week}`] ??= {}); b[d.bought] = !b[d.bought]; save(); return render(); }
   if (d.planday) { planOffset = +d.planday; return render(); }
   if (d.feel) { const [k, v] = d.feel.split(":"), x = day(); x.feel = { ...(x.feel || {}), [k]: +v }; save(); return render(); }
   if (d.trdone) { const t = S.treatments.find((x) => x.id === d.trdone); if (t) t.done = !t.done; save(); return render(); }
@@ -696,8 +809,10 @@ document.addEventListener("click", async (e) => {
     save(); return renderWM();
   }
   if (d.swap) {
-    const out = el.closest(".grow, .inner").querySelector(".ai"); out.textContent = "Thinking…";
-    try { out.textContent = await gemini(`${coachContext()}\nSuggest 2 alternatives to "${d.swap}" available in a commercial gym, safe for the left knee. One line each, with sets × reps and a beginner starting weight.`); }
+    const out = el.closest(".grow, .inner").querySelector(".ai"), local = SWAPS[d.swap];
+    if (local && !el.dataset.more) { out.textContent = "Knee-safe options:\n• " + local.join("\n• "); el.dataset.more = "1"; el.textContent = "More ideas (AI)"; return; }
+    out.textContent = "Thinking…";
+    try { out.textContent = await ai(`${coachContext()}\nSuggest 2 alternatives to "${d.swap}" available in a commercial gym, safe for the left knee. One line each, with sets × reps and a beginner starting weight.`); }
     catch (err) { out.textContent = err.message; }
     return;
   }
@@ -710,8 +825,16 @@ document.addEventListener("click", async (e) => {
     case "restSkip": WM.restEnd = 0; return renderWM();
     case "foodLog": return logFood();
     case "askBtn": return ask($("#askText").value, $("#askOut"));
-    case "reviewBtn": return ask(`Review my last 14 days against my phase plan. Look at energy, mood and bloating next to the meals and workouts, and tell me which foods and days make me feel best and which bloat me. Then give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
-    case "copyAll": return copy(GROCERY.map((g) => `${g.item} × ${g.qty}`).join("\n"), "Weekly list copied");
+    case "reviewBtn": {
+      const out = $("#reviewOut"), local = localReview();
+      out.textContent = local + "\n\nAsking AI for more…";
+      try { out.textContent = local + "\n\nAI coach:\n" + await ai(`${coachContext()}\nPlain text, no markdown, max 120 words.\n` +
+        `Review my last 14 days against my phase plan. Look at energy, mood and bloating next to the meals and workouts. Give 5 short, specific changes.\n${JSON.stringify(recent(14)).slice(0, 3500)}`); }
+      catch { out.textContent = local; }
+      return;
+    }
+    case "reviewBtnOld": return ask(`Review my last 14 days against my phase plan. Look at energy, mood and bloating next to the meals and workouts, and tell me which foods and days make me feel best and which bloat me. Then give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
+    case "copyWeek": return copy(weekOrder(shopWeek ?? weekNo()).map((g) => `${g.buy} × ${g.item}`).join("\n"), "This week's list copied");
     case "copyBarber": return copy(BARBER_NOTE, "Barber note copied");
     case "rSave": {
       const km = parseFloat($("#rKm").value), min = parseFloat($("#rMin").value), pain = parseInt($("#rPain").value) || 0;
@@ -767,21 +890,31 @@ function recent(n) {
 async function ask(q, out) {
   if (!q.trim()) return;
   out.textContent = "Thinking…";
-  try { out.textContent = await gemini(`${coachContext()}\nAnswer briefly and practically (Indian vegetarian context, prices in ₹). Plain text, no markdown.\n\n${q}`); }
+  try { out.textContent = await ai(`${coachContext()}\nAnswer briefly and practically (Indian vegetarian context, prices in ₹). Plain text, no markdown.\n\n${q}`); }
   catch (err) { out.textContent = err.message; }
 }
 async function logFood() {
   const text = $("#foodText").value.trim(), file = $("#foodPhoto").files[0], msg = $("#foodMsg"), btn = $("#foodLog");
   if (!text && !file) return (msg.textContent = "Type what you ate or add a photo.");
-  msg.textContent = "Analysing…"; btn.disabled = true;
+  if (text && !file) {
+    const { found, missed } = parseFood(text);
+    if (found.length && !missed.length) {
+      found.forEach((it) => day().food.push(it)); save(); render(); return toast(`Logged ${found.length} item(s)`);
+    }
+    if (found.length) { found.forEach((it) => day().food.push(it)); save(); }
+    if (missed.length) msg.textContent = `Not in the built-in list: ${missed.join(", ")}. Asking AI…`;
+    if (!missed.length) return;
+  }
+  msg.textContent ||= "Analysing…"; btn.disabled = true;
   try {
     const image = file ? await fileToB64(file) : null;
-    const r = await gemini(`Estimate nutrition for this Indian vegetarian food using typical portions.
-${text ? "Description: " + text : "Use the photo."}
+    const missedText = text && !file ? parseFood(text).missed.join(", ") : text;
+    const r = await ai(`Estimate nutrition for this Indian vegetarian food using typical portions.
+${missedText ? "Description: " + missedText : "Use the photo."}
 Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":number}]} (p/c/f in grams).`, { json: true, image });
     (r.items || []).forEach((it) => day().food.push(it));
     save(); render(); toast(`Logged ${r.items?.length || 0} item(s)`);
-  } catch (err) { msg.textContent = err.message; btn.disabled = false; }
+  } catch (err) { render(); $("#foodMsg").textContent = err.message; }
 }
 
 render();

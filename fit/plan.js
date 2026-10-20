@@ -44,7 +44,7 @@ const ADJUST = { gymDay: 100, restDay: -150, skippedGym: -250, skippedWalk: -150
 
 // Exercise: [name, sets, reps, note]. Beginner starting weights live in START_WEIGHTS.
 const ATHLETE_WEEK = [
-  { day: "Mon", title: "Push · chest, shoulders, triceps", ex: [
+  { day: "Day 1", title: "Push · chest, shoulders, triceps", ex: [
     ["Treadmill incline walk warm-up", 1, "8 min", "Incline 6–8, speed 5"],
     ["Machine chest press", 3, "10–12", ""],
     ["Incline dumbbell press", 3, "10–12", "Upper chest — key for chest shape"],
@@ -54,7 +54,7 @@ const ATHLETE_WEEK = [
     ["Cable triceps pushdown", 3, "12–15", ""],
     ["Incline walk finisher", 1, "10 min", ""],
   ]},
-  { day: "Tue", title: "Legs · knee-friendly + core", ex: [
+  { day: "Day 2", title: "Legs · knee-friendly + core", ex: [
     ["Stationary bike warm-up", 1, "8 min", "Easy on the knee"],
     ["Hip thrust", 3, "10–12", "No knee stress"],
     ["Dumbbell Romanian deadlift", 3, "10–12", "Hinge at hips, soft knees"],
@@ -64,7 +64,7 @@ const ATHLETE_WEEK = [
     ["Standing calf raise", 3, "15", ""],
     ["Dead bug", 3, "10/side", ""],
   ]},
-  { day: "Wed", title: "Pull · back, biceps", ex: [
+  { day: "Day 3", title: "Pull · back, biceps", ex: [
     ["Rowing machine warm-up", 1, "6 min", ""],
     ["Lat pulldown", 3, "10–12", "Builds the V-taper"],
     ["Seated cable row", 3, "10–12", ""],
@@ -73,7 +73,7 @@ const ATHLETE_WEEK = [
     ["Dumbbell curl", 3, "10–12", ""],
     ["Hanging knee raise", 3, "10–12", "Abs"],
   ]},
-  { day: "Thu", title: "Athlete conditioning", ex: [
+  { day: "Day 4", title: "Athlete conditioning", ex: [
     ["Bike or elliptical warm-up", 1, "8 min", ""],
     ["Bike intervals", 8, "30 s hard / 90 s easy", "Low impact on the knee"],
     ["Kettlebell swing", 3, "15", ""],
@@ -82,7 +82,7 @@ const ATHLETE_WEEK = [
     ["Side plank", 3, "30 s/side", ""],
     ["Stretch: hip flexors, hamstrings, chest", 1, "8 min", ""],
   ]},
-  { day: "Fri", title: "Upper · V-taper + arms", ex: [
+  { day: "Day 5", title: "Upper · V-taper + arms", ex: [
     ["Treadmill incline walk warm-up", 1, "6 min", ""],
     ["Assisted pull-up", 3, "8–10", "Goal: first unassisted pull-up"],
     ["Dumbbell bench press", 3, "10–12", ""],
@@ -91,47 +91,47 @@ const ATHLETE_WEEK = [
     ["Hammer curl + overhead triceps", 3, "12 each", "Superset"],
     ["Cable crunch", 3, "15", "Abs"],
   ]},
-  { day: "Sat", title: "Walk / run day", ex: [
+  { day: "Day 6", title: "Walk / run day", ex: [
     ["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""] ]},
-  { day: "Sun", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 const UPPER_LOWER = [
-  { day: "Mon", title: "Upper A · strength", ex: [
+  { day: "Day 1", title: "Upper A · strength", ex: [
     ["Bike warm-up", 1, "5 min", ""], ["Dumbbell bench press", 3, "6–10", "Last set close to failure"],
     ["Chest-supported dumbbell row", 3, "8–12", ""], ["Seated dumbbell shoulder press", 3, "8–12", ""],
     ["Lat pulldown", 3, "10–12", ""], ["Cable lateral raise", 3, "12–15", ""], ["EZ-bar curl + pushdown", 2, "12 each", "Superset"] ]},
-  { day: "Tue", title: "Lower A · knee-friendly", ex: [
+  { day: "Day 2", title: "Lower A · knee-friendly", ex: [
     ["Bike warm-up", 1, "6 min", ""], ["Dumbbell Romanian deadlift", 3, "8–10", ""], ["Hip thrust", 3, "8–12", ""],
     ["Leg press (shallow range)", 3, "12–15", "Stop above 90°"], ["Seated leg curl", 3, "10–15", ""],
     ["Standing calf raise", 3, "12–15", ""], ["Cable crunch", 3, "12–15", ""] ]},
-  { day: "Wed", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "10 min", ""]] },
-  { day: "Thu", title: "Upper B · hypertrophy", ex: [
+  { day: "Day 3", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "10 min", ""]] },
+  { day: "Day 4", title: "Upper B · hypertrophy", ex: [
     ["Rowing machine warm-up", 1, "5 min", ""], ["Incline machine press", 3, "10–12", ""], ["Seated cable row", 3, "10–12", ""],
     ["Assisted pull-up", 3, "8–10", ""], ["Low-to-high cable fly", 2, "12–15", ""], ["Cable lateral raise", 3, "15–20", ""],
     ["Face pull", 2, "15", ""] ]},
-  { day: "Fri", title: "Lower B + conditioning", ex: [
+  { day: "Day 5", title: "Lower B + conditioning", ex: [
     ["Bike warm-up", 1, "6 min", ""], ["Dumbbell Romanian deadlift", 3, "10–12", ""], ["Single-leg glute bridge", 3, "10/side", ""],
     ["Hip abduction machine", 3, "15", ""], ["Lying leg curl", 3, "12", ""], ["Bike intervals", 6, "30 s hard / 90 s easy", ""] ]},
-  { day: "Sat", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
-  { day: "Sun", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 6", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
+  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 const FULL_BODY = [
-  { day: "Mon", title: "Full body A", ex: [
+  { day: "Day 1", title: "Full body A", ex: [
     ["Bike warm-up", 1, "6 min", ""], ["Machine chest press", 3, "8–12", ""], ["Lat pulldown", 3, "8–12", ""],
     ["Hip thrust", 3, "10–12", ""], ["Seated dumbbell shoulder press", 2, "10–12", ""], ["Plank", 3, "30–45 s", ""],
     ["Incline walk finisher", 1, "12 min", ""] ]},
-  { day: "Tue", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
-  { day: "Wed", title: "Full body B", ex: [
+  { day: "Day 2", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
+  { day: "Day 3", title: "Full body B", ex: [
     ["Rowing machine warm-up", 1, "6 min", ""], ["Dumbbell Romanian deadlift", 3, "8–10", ""], ["Incline dumbbell press", 3, "8–12", ""],
     ["Seated cable row", 3, "10–12", ""], ["Cable lateral raise", 3, "12–15", ""], ["Dead bug", 3, "10/side", ""],
     ["Bike intervals", 6, "30 s hard / 90 s easy", ""] ]},
-  { day: "Thu", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
-  { day: "Fri", title: "Full body C", ex: [
+  { day: "Day 4", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
+  { day: "Day 5", title: "Full body C", ex: [
     ["Bike warm-up", 1, "6 min", ""], ["Leg press (shallow range)", 3, "12–15", ""], ["Assisted pull-up", 3, "8–10", ""],
     ["Dumbbell bench press", 3, "8–12", ""], ["Face pull", 3, "15", ""], ["Dumbbell curl", 2, "12", ""],
     ["Farmer's carry", 3, "40 m", ""] ]},
-  { day: "Sat", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
-  { day: "Sun", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
+  { day: "Day 6", title: "Walk / run day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
+  { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
 
 const PROGRAMS = [
@@ -188,43 +188,32 @@ const START_WEIGHTS = {
 // Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
 // Each slot has 4 options; the app rotates them by date so every day is different.
 const MEALS = [
-  { time: "7:45", label: "Pre-gym", gymOnly: true, options: [
-    { name: "Banana + black coffee", kcal: 105, p: 1, items: [
-      "1 medium banana (~120 g)", "1 tsp instant coffee (Nescafé / Bru) in hot water, no sugar"] },
-    { name: "Dates + milk", kcal: 135, p: 5, items: [
-      "2 dates (~16 g)", "150 ml Amul Taaza toned milk"] },
-    { name: "Toast + peanut butter", kcal: 170, p: 7, items: [
-      "1 slice brown bread (~30 g, Harvest Gold or English Oven)",
-      "1 level tbsp (16 g) unsweetened peanut butter (Pintola All Natural or MyFitness Natural)"] },
-    { name: "Apple + black coffee", kcal: 85, p: 0, items: [
-      "1 apple (~150 g)", "Black coffee, no sugar"] },
-  ]},
   { time: "10:00", label: "Post-gym breakfast", options: [
     { name: "Protein oats", kcal: 560, p: 40, items: [
       "50 g rolled oats (Quaker or Saffola) cooked in 250 ml toned milk",
       "1 scoop (~30 g) whey stirred in after cooking", "1 banana (~120 g), sliced on top"] },
-    { name: "Paneer besan chilla", kcal: 495, p: 37, items: [
-      "50 g besan (Tata Sampann) + chopped onion and tomato → 2 chilla, 1 tsp oil",
-      "75 g HP paneer, grated, as stuffing", "2 tbsp green chutney", "150 ml toned milk"] },
+    { name: "Paneer besan chilla", kcal: 525, p: 49, items: [
+      "50 g besan (Tata Sampann) + chopped onion and tomato → 2 chilla, 4–5 sprays olive oil",
+      "75 g HP paneer, grated, as stuffing", "2 tbsp green chutney", "½ scoop (15 g) whey in 150 ml toned milk"] },
     { name: "Moong dal chilla + whey", kcal: 435, p: 41, items: [
-      "60 g yellow moong dal, soaked overnight and ground → 2 chilla, 1 tsp oil",
+      "60 g yellow moong dal, soaked overnight and ground → 2 chilla, 4–5 sprays olive oil",
       "100 g dahi", "1 scoop whey in 250 ml water"] },
     { name: "Paneer poha + whey", kcal: 550, p: 51, items: [
-      "50 g thick poha with 50 g peas, onion, curry leaves, 1 tsp oil",
+      "50 g thick poha with 50 g peas, onion, curry leaves, 4–5 sprays olive oil",
       "75 g HP paneer, cubed and tossed in", "1 scoop whey in 250 ml water"] },
   ]},
   { time: "1:30", label: "Lunch", options: [
     { name: "Dal-soya thali", kcal: 595, p: 42, items: [
-      "2 phulka (60 g atta, Aashirvaad)", "1 katori dal (40 g dry yellow moong dal)",
-      "Soya sabzi (40 g dry Nutrela chunks) with 1 tsp oil", "Salad", "100 g dahi"] },
+      "2 phulka (60 g Milld High Protein Atta)", "1 katori dal (40 g dry yellow moong dal)",
+      "Soya sabzi (40 g dry Fortune mini soya chunks) with 4–5 sprays olive oil", "Salad", "100 g dahi"] },
     { name: "Paneer bhurji thali", kcal: 590, p: 43, items: [
-      "2 phulka (60 g atta)", "100 g HP paneer bhurji with onion, tomato, capsicum, 1 tsp oil",
+      "2 phulka (60 g Milld High Protein Atta)", "100 g HP paneer bhurji with onion, tomato, capsicum, 4–5 sprays olive oil",
       "1 small katori dal (30 g dry moong dal)", "Salad"] },
     { name: "Moong khichdi + paneer", kcal: 595, p: 39, items: [
-      "Khichdi: 40 g rice + 40 g yellow moong dal + veg, 1 tsp ghee",
+      "Khichdi: 40 g rice + 40 g yellow moong dal + veg, 4–5 sprays olive oil",
       "75 g HP paneer tikka (tawa)", "150 g dahi"] },
     { name: "Palak paneer + rice", kcal: 600, p: 42, items: [
-      "100 g HP paneer in palak gravy (200 g spinach, 1 tsp oil)",
+      "100 g HP paneer in palak gravy (200 g spinach, 4–5 sprays olive oil)",
       "60 g dry rice (≈1 cup cooked)", "100 g cucumber raita"] },
   ]},
   { time: "5:00", label: "Snack", options: [
@@ -234,21 +223,21 @@ const MEALS = [
     { name: "Whey shake + peanuts", kcal: 350, p: 36, items: [
       "1 scoop whey in 250 ml toned milk", "15 g roasted peanuts (a small handful)"] },
     { name: "Paneer tikka bites", kcal: 265, p: 22, items: [
-      "75 g HP paneer tikka, tawa or air-fried with ½ tsp oil", "2 tbsp mint chutney", "1 guava or apple"] },
+      "75 g HP paneer tikka, tawa or air-fried with 2–3 sprays olive oil", "2 tbsp mint chutney", "1 guava or apple"] },
     { name: "Soya chaat + dahi", kcal: 195, p: 21, items: [
-      "30 g dry Nutrela soya chunks, boiled and squeezed",
+      "30 g dry Fortune mini soya chunks, boiled and squeezed",
       "Onion, tomato, cucumber, lemon, chaat masala", "100 g dahi on the side"] },
   ]},
   { time: "8:30", label: "Dinner", options: [
     { name: "Soya pulao + raita", kcal: 490, p: 30, items: [
-      "50 g dry rice + 40 g Nutrela soya chunks + mixed veg, 1 tsp oil", "150 g raita"] },
+      "50 g dry rice + 40 g Fortune mini soya chunks + mixed veg, 4–5 sprays olive oil", "150 g raita"] },
     { name: "Paneer-veg stir-fry", kcal: 545, p: 39, items: [
-      "100 g HP paneer + 200 g capsicum, beans, broccoli, 1 tsp oil", "2 phulka (60 g atta)"] },
+      "100 g HP paneer + 200 g capsicum, beans, broccoli, 4–5 sprays olive oil", "2 phulka (60 g Milld High Protein Atta)"] },
     { name: "Dal + soya-matar", kcal: 540, p: 36, items: [
-      "1 katori dal (40 g dry moong or masoor)", "Soya-matar sabzi (30 g soya + 50 g peas), 1 tsp oil",
-      "2 phulka (60 g atta)", "Salad"] },
+      "1 katori dal (40 g dry moong or masoor)", "Soya-matar sabzi (30 g soya + 50 g peas), 4–5 sprays olive oil",
+      "2 phulka (60 g Milld High Protein Atta)", "Salad"] },
     { name: "Paneer tikka bowl", kcal: 480, p: 35, items: [
-      "100 g HP paneer tikka", "50 g dry rice (≈¾ cup cooked)", "150 g sautéed veg, ½ tsp oil"] },
+      "100 g HP paneer tikka", "50 g dry rice (≈¾ cup cooked)", "150 g sautéed veg, 2–3 sprays olive oil"] },
   ]},
   { time: "10:00", label: "Night", options: [
     { name: "Dahi", kcal: 120, p: 7, items: ["200 g plain dahi (Amul Masti)"] },
@@ -260,31 +249,36 @@ const MEALS = [
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
 
 // Shopping: weekly items (qty per week) and monthly buys. q = search term for Zepto/Blinkit.
-const PANEER_LINK = "https://www.zepto.com/pn/id-fresh-high-protein-paneer-56-g-protein-2000-gram/pvid/32916525-36e3-4858-9c97-9ad25508a131";
+// Products the user already buys (Zepto links). Prices are estimates; edit them in the app.
+const LINKS = {
+  paneer: "https://www.zepto.com/pn/id-fresh-high-protein-paneer-56-g-protein-2000-gram/pvid/32916525-36e3-4858-9c97-9ad25508a131",
+  atta: "https://www.zepto.com/pn/milld-high-protein-atta/pvid/42ed8e85-9f88-477b-878a-7ffba63e6019",
+  spray: "https://www.zepto.com/pn/tata-simply-better-extra-virgin-olive-oil-cooking-spray/pvid/56f7e236-709d-4e49-9983-26930cbc05b7",
+  soya: "https://www.zepto.com/pn/fortune-mini-soya-chunks/pvid/04023f5b-b9e5-42dd-8b28-5789e83046b5",
+};
+// qty = packs per week. Fractions mean "every few weeks" (0.5 = every 2nd week).
 const GROCERY = [
-  { item: "iD Fresh High Protein Paneer 200 g", qty: 4, price: 150, q: "id fresh high protein paneer", link: PANEER_LINK, group: "Protein" },
-  { item: "Nutrela soya chunks 200 g", qty: 1, price: 55, q: "nutrela soya chunks", group: "Protein" },
+  { item: "iD Fresh High Protein Paneer 200 g", qty: 4, price: 150, q: "id fresh high protein paneer", link: LINKS.paneer, group: "Protein" },
+  { item: "Fortune mini soya chunks", qty: 1, price: 55, q: "fortune mini soya chunks", link: LINKS.soya, group: "Protein" },
+  { item: "Pumpkin seeds 200 g (zinc for testosterone)", qty: 0.5, price: 160, q: "pumpkin seeds", group: "Protein" },
   { item: "Amul Masti dahi 400 g", qty: 3, price: 40, q: "amul masti dahi 400g", group: "Dairy" },
-  { item: "Amul Taaza toned milk 500 ml", qty: 7, price: 28, q: "amul taaza toned milk", group: "Dairy" },
+  { item: "Amul Taaza toned milk 500 ml", qty: 6, price: 28, q: "amul taaza toned milk", group: "Dairy" },
   { item: "Amul High Protein Buttermilk", qty: 2, price: 25, q: "amul high protein buttermilk", group: "Dairy" },
+  { item: "Milld High Protein Atta", qty: 1, price: 130, q: "milld high protein atta", link: LINKS.atta, group: "Pantry" },
+  { item: "Tata Simply Better olive oil cooking spray", qty: 0.25, price: 400, q: "olive oil cooking spray", link: LINKS.spray, group: "Pantry" },
   { item: "Tata Sampann yellow moong dal 1 kg", qty: 0.5, price: 160, q: "tata sampann moong dal", group: "Pantry" },
   { item: "Tata Sampann besan 500 g", qty: 0.5, price: 60, q: "tata sampann besan", group: "Pantry" },
   { item: "Quaker rolled oats 1 kg", qty: 0.5, price: 199, q: "quaker oats 1kg", group: "Pantry" },
   { item: "Thick poha 500 g", qty: 0.33, price: 55, q: "thick poha", group: "Pantry" },
-  { item: "Aashirvaad atta 5 kg", qty: 0.25, price: 280, q: "aashirvaad atta 5kg", group: "Pantry" },
   { item: "Daawat or India Gate rice 1 kg", qty: 0.5, price: 120, q: "basmati rice 1kg", group: "Pantry" },
   { item: "Farmley roasted makhana", qty: 0.5, price: 120, q: "farmley makhana", group: "Pantry" },
   { item: "Roasted peanuts 200 g", qty: 0.5, price: 50, q: "roasted peanuts", group: "Pantry" },
-  { item: "Harvest Gold brown bread", qty: 0.5, price: 50, q: "harvest gold brown bread", group: "Pantry" },
-  { item: "Fortune rice bran oil 1 L", qty: 0.25, price: 160, q: "fortune rice bran oil", group: "Pantry" },
-  { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber", qty: 1, price: 270, q: "fresh vegetables", group: "Fresh" },
+  { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
-  { item: "Dates 250 g", qty: 0.25, price: 120, q: "dates 250g", group: "Fresh" },
 ];
 const MONTHLY_EXTRAS = [
   { item: "Whey protein 1 kg (Avvatar, MuscleBlaze Raw or AS-IT-IS)", price: 2400, q: "whey protein 1kg" },
-  { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze) — lasts 2 months", price: 300, q: "creatine monohydrate" },
-  { item: "Pintola All Natural peanut butter 350 g — lasts 2 months", price: 100, q: "pintola all natural peanut butter" },
+  { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },
   { item: "Skin basics refill (sunscreen, face wash)", price: 400, q: "sunscreen spf 50" },
 ];
 // One-time looks kit. Buy after the dermat visit; they may prescribe something else.
@@ -365,4 +359,100 @@ const COACHES = [
   { name: "Rujuta Diwekar", area: "Indian food", note: "Home-cooked Indian food, dahi, dal-chawal; no crash diets." },
   { name: "Ryan Fernando", area: "Nutrition", note: "Indian sports nutrition; high protein from everyday vegetarian food." },
   { name: "Andrew Huberman", area: "Recovery", note: "Morning daylight and consistent sleep — behind the sleep and steps habits." },
+];
+
+// Every gym session: cardio warm-up (first exercise) → dynamic warm-up → workout → cool-down.
+const WARMUP = ["Dynamic warm-up", 1, "5 min",
+  "10 each: arm circles, band pull-aparts, cat-cow, hip circles, glute bridges, bodyweight good mornings"];
+const COOLDOWN = ["Cool-down stretch", 1, "6 min",
+  "30 s each: doorway chest, lat stretch, hip flexor (kneel on a pad), hamstring, gentle quad. Slow breathing."];
+
+// Built-in knee-safe swaps, so the app works without any AI key.
+const SWAPS = {
+  "Leg press (shallow range)": ["Hip thrust 3 × 12", "Cable pull-through 3 × 15", "Step-up onto a low box (15 cm) 3 × 10/side, only if pain-free"],
+  "Hip thrust": ["Glute bridge machine 3 × 12", "Cable pull-through 3 × 15"],
+  "Dumbbell Romanian deadlift": ["Cable pull-through 3 × 15", "45° back extension 3 × 12"],
+  "Lying leg curl": ["Seated leg curl 3 × 12", "Swiss-ball leg curl 3 × 10"],
+  "Seated leg curl": ["Lying leg curl 3 × 12", "Swiss-ball leg curl 3 × 10"],
+  "Standing calf raise": ["Seated calf raise 3 × 15", "Leg-press calf raise 3 × 15"],
+  "Machine chest press": ["Dumbbell bench press 3 × 10", "Push-ups 3 × max"],
+  "Dumbbell bench press": ["Machine chest press 3 × 10", "Push-ups 3 × max"],
+  "Incline dumbbell press": ["Incline machine press 3 × 10", "Low-to-high cable fly 3 × 12"],
+  "Lat pulldown": ["Assisted pull-up 3 × 8", "Single-arm cable pulldown 3 × 12/side"],
+  "Assisted pull-up": ["Lat pulldown 3 × 10", "Negative pull-ups 3 × 3"],
+  "Seated cable row": ["Chest-supported dumbbell row 3 × 10", "Machine row 3 × 12"],
+  "Seated dumbbell shoulder press": ["Machine shoulder press 3 × 10", "Arnold press 3 × 10"],
+  "Cable lateral raise": ["Dumbbell lateral raise 3 × 15", "Machine lateral raise 3 × 15"],
+  "Face pull": ["Rear delt fly machine 3 × 15", "Band pull-aparts 3 × 20"],
+  "Kettlebell swing": ["Cable pull-through 3 × 15", "Bike sprint 6 × 20 s"],
+  "Bike intervals": ["Rowing intervals 6 × 30 s", "Elliptical intervals 8 × 30 s"],
+  "Farmer's carry": ["Dumbbell shrug hold 3 × 30 s", "Suitcase carry 3 × 30 m/side"],
+  "Plank": ["Dead bug 3 × 10/side", "Bird dog 3 × 10/side"],
+  "Dead bug": ["Plank 3 × 30 s", "Bird dog 3 × 10/side"],
+};
+
+// Natural testosterone: what actually moves it (no "booster" pills, no steroids).
+const TESTOSTERONE = [
+  ["Sleep 7.5–8 h", "A week of 5-hour nights can drop testosterone noticeably. The biggest lever."],
+  ["Lose the fat", "Body fat converts testosterone to estrogen. Every kg lost helps, and helps the chest too."],
+  ["Lift heavy compounds", "Presses, rows, pulldowns, hip thrusts and RDLs, mostly in the 6–10 rep range once form is solid."],
+  ["Don't cut fat too low", "Keep 55–65 g fat a day from peanuts, pumpkin seeds, dahi and paneer."],
+  ["Zinc and vitamin D", "15 g pumpkin seeds a day and 15 min of morning sun. Supplement only if a blood test says you're low."],
+  ["Limit alcohol", "Max 2 drinks a week; none in the 8 weeks before the abs reveal."],
+  ["Keep stress down", "Walks, sunlight and sleep keep cortisol in check."],
+];
+const BLOOD_TEST = "Ask a doctor for: total testosterone (morning, 8–10 am), vitamin D, vitamin B12 (a common gap for vegetarians), " +
+  "TSH (thyroid), HbA1c and a lipid profile. Lab packages usually cost ₹1,500–2,500.";
+
+// Built-in Indian food table for logging without AI. Per unit: [kcal, protein g, carbs g, fat g].
+// unit = what one "1" means when no grams are given; per100 is used when grams/ml are given.
+const FOODS = [
+  { k: ["roti", "phulka", "chapati", "chapatti"], unit: "piece", per: [75, 3, 15, 0.5] },
+  { k: ["paratha"], unit: "piece", per: [200, 4, 28, 8] },
+  { k: ["rice", "chawal"], unit: "cup cooked", per: [200, 4, 44, 0.5], per100: [130, 2.7, 28, 0.3] },
+  { k: ["dal", "daal"], unit: "katori", per: [150, 9, 20, 4] },
+  { k: ["hp paneer", "high protein paneer"], unit: "100 g", per100: [230, 28, 6, 10] },
+  { k: ["paneer bhurji"], unit: "katori", per: [280, 18, 6, 20] },
+  { k: ["paneer"], unit: "100 g", per100: [265, 18, 4, 20] },
+  { k: ["soya", "soya chunks"], unit: "katori sabzi", per: [180, 20, 14, 5], per100: [345, 52, 33, 0.5] },
+  { k: ["dahi", "curd", "yogurt"], unit: "katori", per: [90, 5, 7, 4], per100: [60, 3.5, 4.7, 3] },
+  { k: ["raita"], unit: "katori", per: [90, 4, 7, 4] },
+  { k: ["milk"], unit: "glass", per: [145, 8, 12, 7], per100: [58, 3.2, 4.8, 3] },
+  { k: ["whey", "protein shake"], unit: "scoop", per: [120, 24, 3, 1.5] },
+  { k: ["egg"], unit: "piece", per: [75, 6, 0.5, 5] },
+  { k: ["oats"], unit: "50 g", per100: [380, 13, 66, 7] },
+  { k: ["poha"], unit: "plate", per: [250, 5, 45, 6] },
+  { k: ["upma"], unit: "plate", per: [250, 6, 38, 8] },
+  { k: ["idli"], unit: "piece", per: [60, 2, 12, 0.3] },
+  { k: ["dosa"], unit: "piece", per: [170, 4, 28, 5] },
+  { k: ["masala dosa"], unit: "piece", per: [350, 7, 50, 13] },
+  { k: ["sambar"], unit: "katori", per: [120, 5, 17, 3] },
+  { k: ["chilla"], unit: "piece", per: [120, 6, 15, 4] },
+  { k: ["khichdi"], unit: "cup", per: [200, 7, 34, 4] },
+  { k: ["sabzi", "bhaji", "veg"], unit: "katori", per: [120, 3, 12, 7] },
+  { k: ["salad"], unit: "plate", per: [40, 2, 8, 0] },
+  { k: ["banana"], unit: "piece", per: [105, 1, 27, 0] },
+  { k: ["apple"], unit: "piece", per: [80, 0, 21, 0] },
+  { k: ["guava"], unit: "piece", per: [70, 3, 15, 1] },
+  { k: ["makhana"], unit: "25 g", per100: [350, 10, 77, 0.5] },
+  { k: ["peanut butter"], unit: "tbsp", per: [95, 4, 3, 8] },
+  { k: ["peanuts", "peanut"], unit: "handful", per: [90, 4, 3, 7.5], per100: [570, 26, 16, 49] },
+  { k: ["pumpkin seeds"], unit: "15 g", per100: [560, 30, 11, 49] },
+  { k: ["buttermilk", "chaas"], unit: "glass", per: [60, 3, 5, 2] },
+  { k: ["chai", "tea"], unit: "cup", per: [90, 3, 12, 3] },
+  { k: ["coffee"], unit: "cup", per: [90, 3, 10, 3] },
+  { k: ["vada pav"], unit: "piece", per: [300, 6, 40, 13] },
+  { k: ["samosa"], unit: "piece", per: [260, 4, 30, 14] },
+  { k: ["pav bhaji"], unit: "plate", per: [450, 10, 60, 18] },
+  { k: ["pani puri", "golgappa"], unit: "plate", per: [250, 4, 40, 8] },
+  { k: ["sandwich"], unit: "piece", per: [250, 7, 35, 9] },
+  { k: ["biryani", "pulao"], unit: "plate", per: [450, 10, 65, 15] },
+  { k: ["pizza"], unit: "slice", per: [280, 11, 33, 11] },
+  { k: ["burger"], unit: "piece", per: [400, 12, 45, 18] },
+  { k: ["maggi", "noodles"], unit: "packet", per: [350, 7, 50, 13] },
+  { k: ["chole", "rajma"], unit: "katori", per: [200, 9, 28, 6] },
+  { k: ["bread"], unit: "slice", per: [75, 3, 14, 1] },
+  { k: ["biscuit", "cookie"], unit: "piece", per: [45, 0.5, 6, 2] },
+  { k: ["sweet", "mithai", "gulab jamun", "laddoo"], unit: "piece", per: [180, 3, 25, 8] },
+  { k: ["beer"], unit: "pint", per: [210, 2, 17, 0] },
 ];
