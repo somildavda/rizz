@@ -236,12 +236,13 @@ function ring(val, max, color, unit) {
       stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - f)}"/></svg>
     <div class="v"><span>${Math.round(val)}<small>/ ${max}${unit ? " " + unit : ""}</small></span></div></div>`;
 }
+// The 7-day cycle shown on Train: the one containing the plan day (Day 1 before the start).
 function dateOfCyc(i) {
-  const d = new Date(); d.setDate(d.getDate() - cyc() + i);
-  return d.getDate();
+  const pd = new Date(planDay()); pd.setDate(pd.getDate() - cyc(pd) + i);
+  return pd;
 }
 function workoutsThisWeek() {
-  const mon = new Date(); mon.setDate(mon.getDate() - cyc());
+  const mon = dateOfCyc(0);
   return WEEK.map((_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return !!S.days[iso(d)]?.checks.workout; });
 }
 function lastSets(name) {
@@ -338,7 +339,7 @@ function mealTicks(T, d = today()) {
 }
 
 // ---------- train ----------
-let trainSeg = "gym", trainDay = cyc(), showProgs = false;
+let trainSeg = "gym", trainDay = cyc(new Date(planDay())), showProgs = false;
 V.train = () => seg(trainSeg, "trainseg", [["gym", "Gym"], ["run", "Walk / Run"], ["skills", "Skills"]]) +
   (trainSeg === "run" ? trainRun() : trainSeg === "skills" ? trainSkills() : trainGym());
 
@@ -354,9 +355,10 @@ function trainGym() {
       <p class="small">${esc(p.why)}</p><p class="sub">${esc(p.by)}</p>
       ${p.id === pr.id ? `<span class="pill ok">Current</span>` : `<button class="btn sm" data-program="${p.id}">Choose this</button>`}</div>`).join("") : ""}
   </div>
-  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${i === cyc() ? "today" : ""} ${wk[i] ? "done" : ""}"
-    data-trainday="${i}"><span>${x.day.replace("Day ", "D")}</span><small>${dateOfCyc(i)}</small></button>`).join("")}</div>
+  <div class="week">${WEEK.map((x, i) => `<button class="${i === trainDay ? "on" : ""} ${iso(dateOfCyc(i)) === planDay() ? "today" : ""} ${wk[i] ? "done" : ""}"
+    data-trainday="${i}"><span>${dateOfCyc(i).toLocaleDateString("en-IN", { weekday: "short" })}</span><small>${dateOfCyc(i).getDate()} ${dateOfCyc(i).toLocaleDateString("en-IN", { month: "short" })}</small></button>`).join("")}</div>
   <div class="card">
+    <span class="eyebrow">Day ${journeyDay(iso(dateOfCyc(trainDay)))} · ${esc(dayLabel(iso(dateOfCyc(trainDay))))}</span>
     <h2 class="h2">${esc(w.title)}</h2>
     ${isDeload() ? `<p class="note">Deload week: same exercises at ~60% of your usual weight.</p>` : ""}
     ${!rest ? `<p class="warn small">Left knee: pain-free range only. Sharp pain means stop and use “Swap”.</p>` : ""}
