@@ -95,6 +95,58 @@ const ATHLETE_WEEK = [
     ["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""] ]},
   { day: "Day 7", title: "Rest", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
+// Milkha Athlete block B: same muscles, new exercises. Blocks alternate every 4 weeks.
+const ATHLETE_WEEK_B = [
+  { day: "Day 1", title: "Push B · chest, shoulders, triceps", ex: [
+    ["Treadmill incline walk warm-up", 1, "8 min", "Incline 6–8, speed 5"],
+    ["Dumbbell bench press", 3, "8–10", ""],
+    ["Incline machine press", 3, "10–12", "Upper chest"],
+    ["Pec deck fly", 3, "12–15", "Squeeze 1 second"],
+    ["Machine shoulder press", 3, "10–12", ""],
+    ["Dumbbell lateral raise", 3, "12–15", "Side delts = width"],
+    ["Overhead cable triceps extension", 3, "12–15", ""],
+    ["Incline walk finisher", 1, "10 min", ""],
+  ]},
+  { day: "Day 2", title: "Legs B · knee-friendly + core", ex: [
+    ["Stationary bike warm-up", 1, "8 min", ""],
+    ["Cable pull-through", 3, "12–15", "Hips back, no knee bend"],
+    ["45° back extension", 3, "12", "Glutes and lower back"],
+    ["Leg press (shallow range)", 3, "12–15", "Feet high on the plate; stop above 90°"],
+    ["Seated leg curl", 3, "12", ""],
+    ["Hip adduction machine", 3, "15", "Inner thighs, protects the knee"],
+    ["Seated calf raise", 3, "15", ""],
+    ["Hanging knee raise", 3, "10–12", "Abs"],
+  ]},
+  { day: "Day 3", title: "Pull B · back, biceps", ex: [
+    ["Rowing machine warm-up", 1, "6 min", ""],
+    ["Assisted pull-up", 3, "8–10", "V-taper"],
+    ["Single-arm dumbbell row", 3, "10/side", ""],
+    ["Wide-grip seated cable row", 3, "12", "Upper back"],
+    ["Straight-arm cable pulldown", 3, "12–15", "Lats"],
+    ["EZ-bar curl", 3, "10–12", ""],
+    ["Ab wheel from knees", 3, "8", "Abs"],
+  ]},
+  { day: "Day 4", title: "Athlete conditioning B", ex: [
+    ["Rowing machine warm-up", 1, "6 min", ""],
+    ["Rowing intervals", 8, "30 s hard / 90 s easy", "Low impact"],
+    ["Battle ropes", 6, "20 s on / 40 s off", ""],
+    ["Farmer's carry", 3, "40 m", ""],
+    ["Bird dog", 3, "10/side", ""],
+    ["Plank", 3, "40 s", ""],
+    ["Stretch: hip flexors, hamstrings, chest", 1, "8 min", ""],
+  ]},
+  { day: "Day 5", title: "Upper B · V-taper + arms", ex: [
+    ["Treadmill incline walk warm-up", 1, "6 min", ""],
+    ["Lat pulldown (close grip)", 3, "10–12", ""],
+    ["Machine chest press", 3, "10–12", ""],
+    ["Seated dumbbell shoulder press", 3, "10–12", ""],
+    ["Cable lateral raise", 3, "15", ""],
+    ["Face pull", 3, "15", "Posture"],
+    ["Incline dumbbell curl + rope pushdown", 3, "12 each", "Superset"],
+    ["Cable crunch", 3, "15", "Abs"],
+  ]},
+  ATHLETE_WEEK[5], ATHLETE_WEEK[6],
+];
 const UPPER_LOWER = [
   { day: "Day 1", title: "Upper A · strength", ex: [
     ["Bike warm-up", 1, "5 min", ""], ["Dumbbell bench press", 3, "6–10", "Last set close to failure"],
@@ -135,7 +187,7 @@ const FULL_BODY = [
 ];
 
 const PROGRAMS = [
-  { id: "athlete", name: "Milkha Athlete", days: 5, week: ATHLETE_WEEK,
+  { id: "athlete", name: "Milkha Athlete", days: 5, week: ATHLETE_WEEK, blocks: [ATHLETE_WEEK, ATHLETE_WEEK_B],
     by: "Inspired by Samir Jaura, Farhan Akhtar's trainer for Bhaag Milkha Bhaag",
     why: "Lifting plus a hard conditioning day. Closest to the lean, athletic look in the film." },
   { id: "upperlower", name: "Science Upper/Lower", days: 4, week: UPPER_LOWER,
@@ -181,6 +233,20 @@ const START_WEIGHTS = {
   "Cable crunch": "20–25 kg",
   "Single-leg glute bridge": "Bodyweight",
   "Hanging knee raise": "Bodyweight",
+  "Pec deck fly": "20–25 kg",
+  "Machine shoulder press": "15–20 kg",
+  "Dumbbell lateral raise": "4–5 kg each hand",
+  "Overhead cable triceps extension": "10–15 kg",
+  "Cable pull-through": "15–20 kg",
+  "45° back extension": "Bodyweight",
+  "Seated calf raise": "20 kg",
+  "Hip adduction machine": "30–40 kg",
+  "Single-arm dumbbell row": "15–17.5 kg",
+  "Wide-grip seated cable row": "30 kg",
+  "Straight-arm cable pulldown": "15–20 kg",
+  "EZ-bar curl": "15 kg (bar + plates)",
+  "Lat pulldown (close grip)": "30 kg",
+  "Incline dumbbell curl + rope pushdown": "7.5 kg dumbbells / 15 kg stack",
 };
 
 // Meals: every ingredient as a RAW / DRY weight with the exact product, plus short steps
@@ -293,6 +359,118 @@ const MEALS = [
     { name: "Slow protein shake", kcal: 175, p: 19, items: [`15 g ${WHEY} (½ level scoop)`, "200 ml Amul Taaza toned milk"], steps: ["Shake together. Drink 30 min before bed."] },
   ]},
 ];
+// ---- More variety: extra dishes per slot (same calories/protein band as the originals). ----
+// Slot sizes differ (breakfast 9, lunch 10, snack 7, dinner 11, night 5), so a dish returns
+// only after 1–1.5 weeks and no full day repeats within 30 days.
+MEALS[0].options.push(
+  { name: "Daliya upma + whey", kcal: 490, p: 43, fib: 7,
+    items: ["40 g daliya (broken wheat, dry)", "80 g veg: carrot, beans, peas, onion", `50 g ${PANEER}, cubed`, "½ tsp mustard seeds, curry leaves, salt",
+      "4–5 sprays olive oil", "100 g Amul Masti dahi", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
+    steps: ["Dry-roast daliya 2 min.", "Spray a cooker; mustard seeds + curry leaves, then veg 2 min.", "Add daliya, salt and 160 ml water; 2 whistles.",
+      "Stir in paneer for the last minute. Dahi on the side; drink the whey shake."] },
+  { name: "Ragi-oats porridge", kcal: 495, p: 39, fib: 9,
+    items: ["25 g ragi flour", "25 g Quaker rolled oats (dry)", "250 ml Amul Taaza toned milk", `30 g ${WHEY} (1 level scoop)`, "10 g chia seeds (1 tbsp)", "Pinch of cardamom"],
+    steps: ["Whisk ragi into the cold milk so it doesn't lump.", "Add oats, cook on low 5 min, stirring.", "Off the heat, wait 1 min, stir in whey and chia.", "Cardamom on top. No sugar."] },
+  { name: "Sprouts + paneer bowl", kcal: 520, p: 50, fib: 8,
+    items: ["40 g whole green moong, sprouted at home (~120 g sprouts)", `75 g ${PANEER}, tikka-style`, "50 g onion + tomato + cucumber, chopped",
+      "½ lemon, chaat masala", `15 g ${WHEY} (½ level scoop) in 200 ml toned milk`],
+    steps: ["Sprouts: soak 8 h, drain, keep covered 24 h until they sprout.", "Steam sprouts 5 min (easier to digest).", "Mix with chopped veg, lemon and chaat masala.",
+      "Tawa the paneer cubes with 2 sprays, add on top. Drink the shake."] },
+  { name: "Paneer uttapam + guava", kcal: 525, p: 47, fib: 8,
+    items: ["40 g suji (rava) + 40 g Amul Masti dahi → batter", "60 g onion + tomato + capsicum, finely chopped", `50 g ${PANEER}, grated`, "3–4 sprays olive oil",
+      "1 guava", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
+    steps: ["Mix suji, dahi, salt and ~40 ml water; rest 15 min.", "Spray a tawa, spread 2 small uttapams, top with veg and paneer.",
+      "Cover and cook 3 min, flip for 1 min.", "Guava on the side; drink the whey shake."] },
+  { name: "Overnight oats", kcal: 530, p: 37, fib: 12,
+    items: ["50 g Quaker rolled oats (dry)", "150 g Amul Masti dahi", "50 ml toned milk", `30 g ${WHEY} (1 level scoop)`, "10 g chia seeds (1 tbsp)", "1 apple, chopped"],
+    steps: ["At night: mix oats, dahi, milk, whey and chia in a jar.", "Refrigerate overnight.", "Morning: top with apple. Eat cold. No cooking needed."] },
+);
+MEALS[1].options.push(
+  { name: "Masoor dal + bhindi thali", kcal: 615, p: 38, fib: 15,
+    items: ["40 g masoor dal (dry)", "150 g bhindi, sliced", `50 g ${PANEER}, cubed into the dal`, "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g Amul Masti dahi"],
+    steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 2 whistles; add paneer, simmer 2 min.",
+      "Bhindi: wipe dry before cutting; spray kadhai, cook uncovered 8 min with salt, haldi, amchur.", "2 phulkas, no ghee. Dahi on the side."] },
+  { name: "Soya keema + roti", kcal: 530, p: 36, fib: 15,
+    items: ["40 g Fortune mini soya chunks (dry), pulsed into keema", "50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, garam masala",
+      "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g Amul Masti dahi"],
+    steps: ["Boil soya 5 min, squeeze dry, pulse in a mixer (2–3 seconds) into mince.", "Spray kadhai, cook onion → ginger-garlic → tomato + spices.",
+      "Add soya keema and peas, cook 6 min.", "2 phulkas, no ghee. Dahi on the side."] },
+  { name: "Paneer kathi roll", kcal: 595, p: 41, fib: 9,
+    items: ["60 g Milld High Protein Atta → 2 thin rotis", `100 g ${PANEER} for tikka (see tikka steps)`, "100 g onion + capsicum + cabbage, sliced",
+      "2 tbsp mint chutney", "100 g Amul Masti dahi"],
+    steps: ["Make paneer tikka (marinate 15 min, tawa with 3 sprays).", "Toss the sliced veg on the tawa 2 min.",
+      "Spread chutney on each roti, fill with paneer and veg, roll tightly.", "Dahi on the side."] },
+  { name: "Veg daliya khichdi + raita", kcal: 600, p: 41, fib: 12,
+    items: ["40 g daliya + 30 g yellow moong dal (dry)", "150 g veg: carrot, beans, peas, lauki", `75 g ${PANEER}, cubed`, "½ tsp jeera, haldi, salt, 4–5 sprays olive oil",
+      "Raita: 150 g Amul Masti dahi + 50 g grated cucumber + roasted jeera + salt"],
+    steps: ["Wash daliya and dal; pressure-cook with veg, haldi, salt and 450 ml water, 3 whistles.", "Jeera tadka with the sprays; stir in paneer, 2 min.",
+      "Raita: squeeze the cucumber dry, whisk into dahi with jeera and salt."] },
+  { name: "Toor dal + lauki + rice", kcal: 595, p: 36, fib: 10,
+    items: ["40 g toor dal (dry)", "200 g lauki, cubed", "50 g rice (dry)", `75 g ${PANEER} tikka`, "Salad: 100 g cucumber + carrot", "4–5 sprays olive oil"],
+    steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles; jeera tadka.", "Lauki: spray kadhai, jeera, lauki + salt + haldi, cover 8 min.",
+      "Rice: 50 g in 125 ml water.", "Paneer tikka: see tikka steps."] },
+  { name: "Methi paneer + jowar roti", kcal: 605, p: 44, fib: 11,
+    items: ["50 g jowar flour → 2 rotis", `100 g ${PANEER}, crumbled`, "50 g fresh methi leaves, chopped", "50 g onion + 50 g tomato",
+      "30 g yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
+    steps: ["Jowar roti: knead flour with hot water, pat thin between sheets, cook on tawa both sides.", "Spray kadhai, onion 2 min, methi 3 min, tomato 2 min, spices.",
+      "Add paneer, 2 min only.", "Dal: pressure-cook with 200 ml water, haldi, salt, 3 whistles."] },
+);
+MEALS[2].options.push(
+  { name: "Hung curd + apple + chia", kcal: 255, p: 14, fib: 6,
+    items: ["250 g Amul Masti dahi hung for 2 h (~150 g)", "1 apple, chopped", "5 g chia seeds (1 tsp)", "Pinch of cinnamon"],
+    steps: ["Hang the dahi in muslin in the fridge for 2 hours.", "Top with apple, chia and cinnamon."] },
+  { name: "Sprouts chaat + whey", kcal: 290, p: 26, fib: 9,
+    items: ["40 g whole green moong, sprouted (~120 g)", "Onion, tomato, cucumber, lemon, chaat masala", "100 g Amul Masti dahi", `15 g ${WHEY} (½ level scoop) in 200 ml water`],
+    steps: ["Steam sprouts 5 min, cool.", "Mix with chopped veg, lemon and chaat masala.", "Dahi on the side; drink the shake."] },
+  { name: "Makhana + whey + guava", kcal: 260, p: 29, fib: 7,
+    items: ["20 g Farmley roasted makhana", `30 g ${WHEY} (1 level scoop) in 250 ml water`, "1 guava"],
+    steps: ["Makhana as is (or dry-roast 3 min with 1 spray and pepper).", "Shake the whey; guava on the side."] },
+);
+MEALS[3].options.push(
+  { name: "Grilled paneer + veg + roti", kcal: 540, p: 41, fib: 10,
+    items: [`100 g ${PANEER}`, "200 g veg: broccoli, beans, carrot", "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g Amul Masti dahi + mint", "3–4 sprays olive oil, pepper, garlic"],
+    steps: ["Slice paneer thick, sprinkle salt, pepper, chilli; tawa with 2 sprays, 2 min each side.", "Toss veg with garlic and 2 sprays, 5 min (keep crunchy).", "1 phulka; mint raita on the side."] },
+  { name: "Moong cheela + palak raita", kcal: 500, p: 36, fib: 8,
+    items: ["60 g yellow moong dal (dry), soaked 4 h", `50 g ${PANEER}, grated, as stuffing`, "Raita: 150 g Amul Masti dahi + 50 g blanched palak, chopped", "Salad: 100 g cucumber", "4 sprays olive oil"],
+    steps: ["Grind dal with ginger, chilli, salt into a thick batter.", "Spray tawa, make 2 cheelas, stuff with paneer.", "Raita: blanch palak 1 min, chop, mix into dahi with salt and jeera."] },
+  { name: "Paneer-capsicum curry + rice", kcal: 550, p: 35, fib: 7,
+    items: [`100 g ${PANEER}, cubed`, "100 g capsicum", "50 g onion + 50 g tomato gravy, ginger-garlic, spices", "50 g rice (dry)", "Salad: 100 g cucumber", "4–5 sprays olive oil"],
+    steps: ["Spray kadhai, onion → ginger-garlic → tomato + spices into a gravy, add 100 ml water.", "Add capsicum 3 min, paneer 2 min.", "Rice: 50 g in 125 ml water."] },
+  { name: "Masoor soup + paneer tikka", kcal: 535, p: 43, fib: 10,
+    items: ["40 g masoor dal (dry)", "100 g veg: carrot, tomato, onion, garlic", `100 g ${PANEER} tikka`, "30 g Milld High Protein Atta → 1 phulka", "3 sprays olive oil"],
+    steps: ["Pressure-cook dal and veg with 400 ml water, salt, haldi, 3 whistles; blend smooth, add pepper and lemon.", "Paneer tikka: see tikka steps.", "1 phulka."] },
+  { name: "Soya-palak curry + roti", kcal: 490, p: 32, fib: 15,
+    items: ["30 g Fortune mini soya chunks (dry)", "150 g palak", "50 g onion + 50 g tomato, garlic, garam masala", "60 g Milld High Protein Atta → 2 phulka", "100 g Amul Masti dahi", "4 sprays olive oil"],
+    steps: ["Boil soya 5 min, squeeze dry.", "Blanch palak 2 min, blend.", "Spray kadhai, onion-garlic-tomato masala, add palak purée and soya, 5 min.", "2 phulkas; dahi on the side."] },
+  { name: "Lauki moong dal + paneer", kcal: 530, p: 31, fib: 12,
+    items: ["30 g yellow moong dal (dry)", "200 g lauki", `50 g ${PANEER}, cubed`, "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber + carrot", "3 sprays olive oil"],
+    steps: ["Pressure-cook dal + lauki with 300 ml water, haldi, salt, 3 whistles.", "Jeera tadka with sprays; add paneer, 2 min.", "2 phulkas."] },
+  { name: "Stuffed capsicum + raita", kcal: 510, p: 39, fib: 7,
+    items: ["2 capsicums (~200 g)", `100 g ${PANEER}, crumbled, with onion + spices`, "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g Amul Masti dahi + cucumber", "3 sprays olive oil"],
+    steps: ["Cut capsicum tops, remove seeds.", "Fill with paneer mixed with onion, salt, chilli, garam masala.",
+      "Cook covered on a tawa or kadhai with 3 sprays, 10 min, turning.", "1 phulka; raita on the side."] },
+);
+MEALS[4].options.push(
+  { name: "Flax-cinnamon milk", kcal: 155, p: 8, fib: 3,
+    items: ["200 ml Amul Taaza toned milk", "1 tsp ground flaxseed", "Pinch of cinnamon"],
+    steps: ["Warm the milk, stir in flax and cinnamon. No sugar."] },
+);
+// Fiber (g) for the original dishes.
+const FIBER = {
+  "Protein oats": 8, "Paneer besan chilla": 6, "Moong dal chilla + whey": 5, "Paneer poha + whey": 4,
+  "Dal-soya thali": 14, "Paneer bhurji thali": 11, "Moong khichdi + paneer tikka": 7, "Palak paneer + rice": 7,
+  "Makhana + protein buttermilk": 2, "Whey shake + peanuts": 2, "Paneer tikka bites": 5, "Soya chaat + dahi": 6,
+  "Soya pulao + raita": 7, "Paneer-veg stir-fry": 12, "Dal + soya-matar": 15, "Paneer tikka bowl": 5,
+  "Dahi": 0, "Haldi milk": 0, "Hung curd + cinnamon": 0, "Slow protein shake": 0,
+};
+MEALS.forEach((slot) => slot.options.forEach((o) => { o.fib ??= FIBER[o.name] ?? 0; }));
+const FIBER_TARGET = 30; // g a day
+
+// Default dish for a slot on a date (shared by the app and the Kitchen page).
+function defaultMealIdx(i, k) {
+  return Math.floor(new Date(k) / 864e5) % MEALS[i].options.length;
+}
+
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
 
 // Shopping: weekly items (qty per week) and monthly buys. q = search term for Zepto/Blinkit.
@@ -309,8 +487,8 @@ const GROCERY = [
   { item: "Fortune mini soya chunks", qty: 1, price: 55, q: "fortune mini soya chunks", link: LINKS.soya, group: "Protein" },
   { item: "Pumpkin seeds 200 g (zinc for testosterone)", qty: 0.5, price: 160, q: "pumpkin seeds", group: "Protein" },
   { item: "Amul Masti dahi 400 g", qty: 3, price: 40, q: "amul masti dahi 400g", group: "Dairy" },
-  { item: "Amul Taaza toned milk 500 ml", qty: 6, price: 28, q: "amul taaza toned milk", group: "Dairy" },
-  { item: "Amul High Protein Buttermilk", qty: 2, price: 25, q: "amul high protein buttermilk", group: "Dairy" },
+  { item: "Amul Taaza toned milk 500 ml", qty: 5, price: 28, q: "amul taaza toned milk", group: "Dairy" },
+  { item: "Amul High Protein Buttermilk", qty: 1, price: 25, q: "amul high protein buttermilk", group: "Dairy" },
   { item: "Milld High Protein Atta", qty: 1, price: 130, q: "milld high protein atta", link: LINKS.atta, group: "Pantry" },
   { item: "Tata Simply Better olive oil cooking spray", qty: 0.25, price: 400, q: "olive oil cooking spray", link: LINKS.spray, group: "Pantry" },
   { item: "Tata Sampann yellow moong dal 1 kg", qty: 0.5, price: 160, q: "tata sampann moong dal", group: "Pantry" },
@@ -320,13 +498,21 @@ const GROCERY = [
   { item: "Daawat or India Gate rice 1 kg", qty: 0.5, price: 120, q: "basmati rice 1kg", group: "Pantry" },
   { item: "Farmley roasted makhana", qty: 0.5, price: 120, q: "farmley makhana", group: "Pantry" },
   { item: "Roasted peanuts 200 g", qty: 0.5, price: 50, q: "roasted peanuts", group: "Pantry" },
-  { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
+  { item: "Daliya (broken wheat) 500 g", qty: 0.25, price: 60, q: "daliya broken wheat", group: "Pantry" },
+  { item: "Jowar flour 500 g", qty: 0.25, price: 70, q: "jowar atta", group: "Pantry" },
+  { item: "Ragi flour 500 g", qty: 0.25, price: 70, q: "ragi flour", group: "Pantry" },
+  { item: "Suji (rava) 500 g", qty: 0.25, price: 45, q: "suji rava", group: "Pantry" },
+  { item: "Whole green moong (for sprouts) 500 g", qty: 0.25, price: 90, q: "whole green moong", group: "Pantry" },
+  { item: "Masoor + toor dal 500 g each", qty: 0.25, price: 160, q: "masoor dal", group: "Pantry" },
+  { item: "Chia seeds 200 g", qty: 0.25, price: 140, q: "chia seeds", group: "Pantry" },
+  { item: "Flax seeds 200 g", qty: 0.2, price: 80, q: "flax seeds", group: "Pantry" },
+  { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber, lauki, bhindi, methi, broccoli", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
 ];
 const MONTHLY_EXTRAS = [
   { item: "Big Muscles Premium Gold Whey 1.5 kg (₹2,127, lasts ~5 weeks; monthly share shown)", price: 1750, q: "big muscles premium gold whey 1.5 kg" },
   { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },
-  { item: "Skin basics refill (sunscreen, face wash)", price: 400, q: "sunscreen spf 50" },
+  { item: "Skin basics refill (sunscreen, face wash)", price: 380, q: "sunscreen spf 50" },
 ];
 // One-time looks kit. Buy after the dermat visit; they may prescribe something else.
 const LOOKS_KIT = [

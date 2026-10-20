@@ -58,7 +58,9 @@ function expectedKg(d) {
 const latest = () => S.weights.at(-1) || {};
 const latestWeight = () => latest().kg ?? S.profile.startWeight;
 const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
-function applyProgram() { WEEK = program().week; }
+// Programs with blocks change exercises every 4 weeks (block A → B → A …).
+const blockIndex = () => Math.floor(Math.max(0, (new Date(today() < START_DATE ? START_DATE : today()) - new Date(START_DATE)) / 864e5) / 28);
+function applyProgram() { const p = program(); WEEK = p.blocks ? p.blocks[blockIndex() % p.blocks.length] : p.week; }
 applyProgram();
 // Workouts follow journey days (Day 1 = 21 Oct), not weekdays.
 const cyc = (d = new Date()) => ((Math.floor((new Date(iso(d)) - START) / DAY_MS) % 7) + 7) % 7;
@@ -88,7 +90,7 @@ function exList(di) {
 function mealPickIdx(i, d = today()) {
   const own = S.days[d]?.mealPick?.[i];
   if (own != null) return own;
-  return (Math.floor(new Date(d) / DAY_MS) + i * 3) % MEALS[i].options.length;
+  return defaultMealIdx(i, d);
 }
 const meal = (i, d = today()) => MEALS[i].options[mealPickIdx(i, d)];
 
@@ -234,7 +236,7 @@ function fileToB64(file) {
 
 // ---------- UI helpers ----------
 const foodTotals = (d) => d.food.reduce((t, f) => ({ kcal: t.kcal + (+f.kcal || 0), p: t.p + (+f.p || 0),
-  c: t.c + (+f.c || 0), f: t.f + (+f.f || 0) }), { kcal: 0, p: 0, c: 0, f: 0 });
+  c: t.c + (+f.c || 0), f: t.f + (+f.f || 0), fib: t.fib + (+f.fib || 0) }), { kcal: 0, p: 0, c: 0, f: 0, fib: 0 });
 const tick = (id, title, sub = "", meta = "") => {
   const on = !!day().checks[id];
   return `<div class="tick ${on ? "on" : ""}" data-check="${esc(id)}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
@@ -403,7 +405,7 @@ function mealTicks(T, d = today()) {
       <div class="t"><span class="time">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span><b>${esc(m.name)}</b>
         <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
         <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details></div>
-      <span class="meta">${m.kcal} kcal<br>${m.p} g P<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
+      <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
   return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
 }
@@ -419,6 +421,8 @@ function trainGym() {
   <div class="card"><div class="spread"><div><span class="eyebrow">Your program</span><h2 class="h2">${esc(pr.name)}</h2></div>
     <span class="pill">${pr.days} days / week</span></div>
     <p class="sub">${esc(pr.by)}</p>
+    ${pr.blocks ? (() => { const b = blockIndex(), next = new Date(START_DATE); next.setDate(next.getDate() + (b + 1) * 28);
+      return `<p class="small">Block ${"AB"[b % pr.blocks.length]} (weeks ${b * 4 + 1}–${b * 4 + 4}). New exercises from ${fmt(iso(next))}.</p>`; })() : ""}
     <button class="btn ghost sm" data-toggleprog="1">${showProgs ? "Close" : "Change program"}</button>
     ${showProgs ? PROGRAMS.map((p) => `<div class="option ${p.id === pr.id ? "on" : ""}">
       <div class="spread"><b>${esc(p.name)}</b><span class="sub">${p.days} days / week</span></div>
@@ -574,9 +578,9 @@ function foodToday() {
   <div class="card"><div class="rings four">
     <div>${ring(t.kcal, T.kcal, "url(#g1)", "")}<div class="lbl">kcal</div></div>
     <div>${ring(t.p, T.protein, "var(--ok)", "")}<div class="lbl">Protein g</div></div>
-    <div>${ring(t.c, T.carbs, "var(--blue)", "")}<div class="lbl">Carbs g</div></div>
-    <div>${ring(t.f, T.fat, "var(--warn)", "")}<div class="lbl">Fat g</div></div>
-  </div><p class="center sub">${T.reasons.join(" · ")}</p></div>
+    <div>${ring(t.fib, FIBER_TARGET, "var(--blue)", "")}<div class="lbl">Fiber g</div></div>
+    <div>${ring(t.c, T.carbs, "var(--warn)", "")}<div class="lbl">Carbs g</div></div>
+  </div><p class="center sub">Fat ${Math.round(t.f)} / ${T.fat} g · ${T.reasons.join(" · ")}</p></div>
   <div class="section-title"><h3>${esc(dayLabel(fd))}'s meals</h3><span class="sub">Tick when eaten · ⇄ to swap</span></div>
   <div class="card list">${mealTicks(T, fd)}</div>
   <div class="card"><h3 class="h3">Ate something else?</h3>
@@ -596,14 +600,15 @@ function foodToday() {
 function foodPlan() {
   const dates = Array.from({ length: 7 }, (_, k) => addDays(planDay(), k));
   const pd = dates[planOffset], T = dayTargets(pd), gym = isGymDay(new Date(pd));
-  const total = MEALS.reduce((a, slot, i) => slot.gymOnly && !gym ? a : { k: a.k + meal(i, pd).kcal, p: a.p + meal(i, pd).p }, { k: 0, p: 0 });
+  const total = MEALS.reduce((a, slot, i) => slot.gymOnly && !gym ? a : { k: a.k + meal(i, pd).kcal, p: a.p + meal(i, pd).p, f: a.f + meal(i, pd).fib }, { k: 0, p: 0, f: 0 });
   return `
   <div class="week">${dates.map((k, i) => `<button class="${i === planOffset ? "on" : ""} ${k === today() ? "today" : ""}" data-planday="${i}">
     ${new Date(k).toLocaleDateString("en-IN", { weekday: "short" })}</button>`).join("")}</div>
   <div class="card"><div class="spread"><h2 class="h2">${esc(dayLabel(pd))}</h2>
     <span class="pill ${gym ? "" : "grey"}">${gym ? "Gym day" : "Rest day"}</span></div>
     <div class="stats"><div><b>${T.kcal}</b><span>kcal target</span></div><div><b>${total.k}</b><span>kcal planned</span></div>
-      <div><b>${T.protein} g</b><span>protein target</span></div><div><b>${total.p} g</b><span>protein planned</span></div></div>
+      <div><b>${T.protein} g</b><span>protein target</span></div><div><b>${total.p} g</b><span>protein planned</span></div>
+      <div><b>${FIBER_TARGET} g</b><span>fiber target</span></div><div><b>${total.f} g</b><span>fiber planned</span></div></div>
     <p class="note">${esc(phase(new Date(pd)).food)}</p></div>
   <p class="sub">Meals change every day. Tap another option to swap it for this day. No tofu, rajma or chole. Brands are suggestions; any equivalent works.</p>
   ${MEALS.map((slot, i) => slot.gymOnly && !gym ? "" : `<div class="card list"><span class="eyebrow">${esc(slot.time)} · ${esc(slot.label)}</span>
@@ -611,7 +616,7 @@ function foodPlan() {
       return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}:${pd}" role="radio" aria-checked="${on}" tabindex="0"><span class="box round"></span>
         <div class="t"><b>${esc(m.name)}</b>${on ? `<ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
           <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>
-        <span class="meta">${m.kcal} kcal<br>${m.p} g P</span></div>`; }).join("")}</div>`).join("")}
+        <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber</span></div>`; }).join("")}</div>`).join("")}
   <div class="card"><h3 class="h3">Need new ideas?</h3><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian recipes using high-protein paneer or soya for my current phase, with exact grams and macros, under ₹120 each. Nothing that bloats.">✨ 3 new paneer / soya recipes</button></div>`;
 }
 let shopWeek = null;
@@ -872,12 +877,12 @@ document.addEventListener("click", async (e) => {
     const i = +d.cyclemeal, dt = d.date || today(), x = day(dt);
     (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % MEALS[i].options.length;
     const at = x.food.findIndex((f) => f.plan === i);
-    if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
+    if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, fib: m.fib, plan: i }; }
     save(); render(); return toast(`Swapped to ${meal(i, dt).name}`);
   }
   if (d.meal) {
     const i = +d.meal, dt = d.date || today(), f = day(dt).food, at = f.findIndex((x) => x.plan === i);
-    if (at >= 0) f.splice(at, 1); else { const m = meal(i, dt); f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
+    if (at >= 0) f.splice(at, 1); else { const m = meal(i, dt); f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, fib: m.fib, plan: i }); }
     save(); return render();
   }
   if (d.pickmeal) {
