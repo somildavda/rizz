@@ -296,3 +296,9 @@ nav button.on::before { content: ""; position: absolute; top: 0; width: 28px; he
 body.kitchen nav, body.kitchen .top .iconbtn { display: none; }
 body.kitchen { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 body.kitchen ol.bullets { padding-left: 20px; }
+
+/* "New update available" bar */
+.update-bar { position: fixed; z-index: 40; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  top: calc(10px + env(safe-area-inset-top, 0px)); max-width: 560px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 10px 10px 10px 16px; border-radius: 16px; background: #f4f1fa; color: #1d0811; font-weight: 700; font-size: 14px;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .6); }

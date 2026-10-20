@@ -1156,6 +1156,33 @@ Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":nu
 
 render();
 
+// Update check: the website build stamps BUILD (see build-worker.py) and serves /version.json.
+// When they differ, a newer version is live: offer a one-tap reload that clears the offline cache.
+const BUILD = "__BUILD__";
+async function checkForUpdate() {
+  if (BUILD.startsWith("__") || window.claude || !/^https?:$/.test(location.protocol)) return;
+  try {
+    const res = await fetch("/version.json", { cache: "no-store" });
+    if (!res.ok) return;
+    const { build } = await res.json();
+    if (build && build !== BUILD && !$("#updateBar")) {
+      const bar = document.createElement("div");
+      bar.id = "updateBar"; bar.className = "update-bar";
+      bar.innerHTML = `<span>New update available</span><button class="btn sm" id="updateNow">Reload</button>`;
+      document.body.appendChild(bar);
+    }
+  } catch {}
+}
+document.addEventListener("click", async (e) => {
+  if (e.target.id !== "updateNow") return;
+  e.target.textContent = "Updating…";
+  try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.update(); } catch {}
+  location.reload();
+});
+checkForUpdate();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
+
 // Installable phone app: offline cache when served from a real website (not inside Claude).
 if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

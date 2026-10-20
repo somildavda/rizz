@@ -1,5 +1,5 @@
 // Offline support: serve the app shell from cache, refresh it in the background.
-const CACHE = "journey-v2";
+const CACHE = "journey-__BUILD__";
 const SHELL = ["./", "index.html", "kitchen.html", "kitchen.js", "style.css", "plan.js", "app.js", "manifest.json", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(

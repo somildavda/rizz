@@ -3,6 +3,7 @@
 // ({date: {slot: dish}}) are stored; editing needs the EDIT_KEY secret.
 // Built by build-worker.py — edit the source files, not dist/worker.js.
 const FILES = __FILES__;
+const BUILD = "__BUILD_ID__";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -37,6 +38,7 @@ export default {
     const url = new URL(request.url);
     let path = url.pathname;
     if (path.startsWith("/api/menu")) return api(request, env, path);
+    if (path === "/version.json") return json({ build: BUILD });
     if (path === "/" || path === "") path = "/index.html";
     if (path === "/kitchen" || path === "/kitchen/") path = "/kitchen.html";
     const file = FILES[path];
