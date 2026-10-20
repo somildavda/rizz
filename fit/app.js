@@ -1022,3 +1022,8 @@ Return JSON: {"items":[{"name":string,"kcal":number,"p":number,"c":number,"f":nu
 }
 
 render();
+
+// Installable phone app: offline cache when served from a real website (not inside Claude).
+if ("serviceWorker" in navigator && location.protocol === "https:" && !window.claude) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}

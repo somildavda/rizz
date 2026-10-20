@@ -1,6 +1,0 @@
-{
-  // Static-assets Worker: serves the Journey app from this folder.
-  "name": "journey",
-  "compatibility_date": "2026-09-01",
-  "assets": { "directory": "." }
-}
