@@ -9,7 +9,12 @@ const addDays = (k, n) => { const d = new Date(k); d.setDate(d.getDate() + n); r
 const firstDay = () => (today() < START_DATE ? START_DATE : today());
 const journeyDay = (k) => Math.floor((new Date(k) - START) / DAY_MS) + 1;
 // Same rotation as the main app, so both show the same menu for a date.
-const mealIdx = (i, k) => defaultMealIdx(i, k);
+// Swaps made in the app come from /api/menu on the Cloudflare site.
+let SWAPS_BY_DATE = {};
+const mealIdx = (i, k) => SWAPS_BY_DATE[k]?.[i] ?? defaultMealIdx(i, k);
+async function loadSwaps() {
+  try { const res = await fetch("/api/menu", { cache: "no-store" }); if (res.ok) { SWAPS_BY_DATE = await res.json(); render(); } } catch {}
+}
 // Gym days follow the default Beginner Full Body cycle (gym on journey days 1, 3 and 5 of each 7).
 const isGymDay = (k) => new Date(k).getDay() !== 0; // Sundays: gym closed
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
@@ -52,3 +57,5 @@ document.addEventListener("click", async (e) => {
   }
 });
 render();
+loadSwaps();
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSwaps(); });

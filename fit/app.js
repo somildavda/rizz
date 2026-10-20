@@ -98,20 +98,38 @@ function exList(di) {
 
 // Meal swaps shared with the kitchen view through the Claude page's shared store.
 // Only {date: {slot: dish}} is shared; weight, workouts and everything else stay on this device.
-let SHARED = {}, menuDb = null;
+// Two backends: inside Claude, the page's shared store; on the Cloudflare site, /api/menu.
+let SHARED = {}, menuDb = null, menuApi = false;
 (async () => {
   try { menuDb = window.claude?.use ? await window.claude.use("db") : null; } catch { menuDb = null; }
-  if (!menuDb) return;
-  menuDb.collection("menu").onSnapshot((qs) => {
-    SHARED = Object.fromEntries(qs.docs.map((d) => [d.id, d.data()?.picks || {}]));
-    render();
-  }, () => {});
+  if (menuDb) {
+    menuDb.collection("menu").onSnapshot((qs) => {
+      SHARED = Object.fromEntries(qs.docs.map((d) => [d.id, d.data()?.picks || {}]));
+      render();
+    }, () => {});
+    return;
+  }
+  if (!/^https?:$/.test(location.protocol) || window.claude) return;
+  try {
+    const res = await fetch("/api/menu", { cache: "no-store" });
+    if (res.ok) { SHARED = await res.json(); menuApi = true; render(); }
+  } catch {}
 })();
 let pushing = Promise.resolve();
 function sharePicks(d) {
-  if (!menuDb) return;
   const picks = { ...(S.days[d]?.mealPick || {}) };
-  pushing = pushing.then(() => menuDb.doc(`menu/${d}`).set({ picks })).catch(() => toast("Couldn't sync this swap to the kitchen view"));
+  if (menuDb) {
+    pushing = pushing.then(() => menuDb.doc(`menu/${d}`).set({ picks })).catch(() => toast("Couldn't sync this swap to the kitchen view"));
+  } else if (menuApi) {
+    if (!S.settings.syncKey) return toast("Add your kitchen sync key in Settings to share swaps");
+    pushing = pushing.then(async () => {
+      const res = await fetch(`/api/menu/${d}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Edit-Key": S.settings.syncKey },
+        body: JSON.stringify({ picks }) });
+      if (res.status === 401) toast("Wrong kitchen sync key. Check Settings.");
+      else if (!res.ok) throw new Error();
+      else SHARED[d] = picks;
+    }).catch(() => toast("Couldn't sync this swap to the kitchen page"));
+  }
 }
 
 // Meals rotate by date so every day differs; a hand-picked option for that day wins.
@@ -854,6 +872,9 @@ V.settings = () => {
     <input id="sKey" type="password" placeholder="Paste Gemini API key" value="${esc(s.geminiKey)}" aria-label="Gemini API key">
     <label class="field mt">Model<input id="sModel" value="${esc(s.model)}"></label>
     <div class="row mt"><button class="btn ghost" id="sTest">Test key</button><span id="sTestOut" class="sub grow"></span></div></div>
+  <div class="card"><h3 class="h3">Kitchen sync key</h3>
+    <p class="sub">On your own website: the password you set as EDIT_KEY in Cloudflare. It lets your meal swaps reach the kitchen page. Stored only on this phone.</p>
+    <input id="sSync" type="password" placeholder="Kitchen sync key" value="${esc(s.syncKey || "")}" aria-label="Kitchen sync key"></div>
   <div class="card"><h3 class="h3">Profile</h3>
     <div class="grid2">
       <label class="field">Age<input id="pAge" inputmode="numeric" value="${p.age}"></label>
@@ -1028,6 +1049,7 @@ document.addEventListener("click", async (e) => {
       return;
     }
     case "sSave": {
+      S.settings.syncKey = $("#sSync").value.trim();
       S.settings.geminiKey = $("#sKey").value.trim(); S.settings.model = $("#sModel").value.trim() || "gemini-2.5-flash";
       Object.assign(S.profile, { age: +$("#pAge").value, heightCm: +$("#pH").value, startWeight: +$("#pW").value,
         bodyFat: +$("#pBF").value, targetDate: $("#pDate").value, budget: +$("#pBud").value });
