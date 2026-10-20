@@ -19,12 +19,37 @@ function load() {
     weights: s.weights || [],
     prices: s.prices || {},
     program: s.program || "athlete",
-    mealPick: s.mealPick || {},
+    treatments: s.treatments || [],
   };
 }
 const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
-const meal = (i) => MEALS[i].options[S.mealPick[i] ?? 0] || MEALS[i].options[0];
+// Meals rotate by date so every day of every week is different; a hand-picked option wins.
+function mealPickIdx(i, d = today()) {
+  const own = S.days[d]?.mealPick?.[i];
+  if (own != null) return own;
+  const n = Math.floor(new Date(d) / DAY_MS);
+  return (n + i * 3) % MEALS[i].options.length;
+}
+const meal = (i, d = today()) => MEALS[i].options[mealPickIdx(i, d)] || MEALS[i].options[0];
 function applyProgram() { WEEK = program().week; }
+const isGymDay = (d = new Date()) => WEEK[dayIdx(d)].ex.length > 2;
+
+// Today's calorie target: phase base, more on gym days, less on rest days, and lower
+// automatically when the gym or walk is skipped. After 9 pm an unlogged gym day counts as skipped.
+function dayTargets(d = today()) {
+  const ph = phase(), x = S.days[d] || { checks: {} }, c = x.checks || {}, date = new Date(d);
+  const gym = isGymDay(date), reasons = [];
+  let kcal = ph.kcal;
+  const autoSkip = gym && !c.workout && !c.trainedLate && d === today() && new Date().getHours() >= 21;
+  const skippedGym = gym && !c.workout && (c.skipGym || autoSkip);
+  if (!gym) { kcal += ADJUST.restDay; reasons.push(`Rest day ${ADJUST.restDay}`); }
+  else if (skippedGym) { kcal += ADJUST.skippedGym; reasons.push(`Skipped gym ${ADJUST.skippedGym}${autoSkip && !c.skipGym ? " (auto, 9 pm)" : ""}`); }
+  else { kcal += ADJUST.gymDay; reasons.push(`Gym day +${ADJUST.gymDay}`); }
+  if (c.skipWalk) { kcal += ADJUST.skippedWalk; reasons.push(`Missed walk ${ADJUST.skippedWalk}`); }
+  const diff = kcal - ph.kcal; // protein stays fixed; carbs absorb the change
+  return { kcal, protein: ph.protein, fat: ph.fat, carbs: Math.max(100, ph.carbs + Math.round(diff / 4)),
+    reasons, gym, skippedGym, autoSkip: autoSkip && !c.skipGym };
+}
 applyProgram();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} }
 function day(d = today()) {
@@ -70,7 +95,8 @@ async function gemini(prompt, { json = false, image = null } = {}) {
 }
 const coachContext = () => {
   const p = S.profile, ph = phase();
-  return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian (loves tofu), beginner lifter,
+  return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian, never suggest: ${AVOID_FOODS.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gyms at ${GYM_TIME},
+wants to lose chest fat and look sharper on camera (Hrithik-style grooming),
 ${p.knee}. Trains 60 min, ${program().days} days/week ("${program().name}" program) at ${p.gym}. Goal: Farhan Akhtar's Bhaag Milkha Bhaag physique; phase 1 deadline ${p.targetDate}.
 Current phase: ${ph.name} (${ph.kcal} kcal, ${ph.protein} g protein, ${ph.steps} steps). Budget ₹${p.budget}/month, orders on Zepto, cooks at home.
 ${p.derm ? "Dermatologist routine: " + p.derm : ""}`;
@@ -116,8 +142,11 @@ const isTimed = (reps) => /min|s$|s\/|m$|\/ /.test(reps);
 const V = {};
 
 V.today = () => {
-  const ph = phase(), w = WEEK[dayIdx()], d = day(), t = foodTotals(d);
-  const done = d.checks.workout, rest = w.ex.length <= 2;
+  const ph = phase(), w = WEEK[dayIdx()], d = day(), t = foodTotals(d), T = dayTargets();
+  const done = d.checks.workout, rest = !T.gym;
+  const soon = S.treatments.filter((x) => !x.done && x.date >= today() &&
+    (new Date(x.date) - new Date(today())) / DAY_MS <= 3);
+  const feel = d.feel || {};
   const needsWeigh = !S.weights.some((x) => x.date === today());
   const habits = [
     ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", `${(ph.steps / 1000).toFixed(0)}k steps`],
@@ -131,19 +160,41 @@ V.today = () => {
     <div class="spread"><span class="pill">${esc(ph.name)} · Week ${weekNo()}</span>
       ${isDeload() ? `<span class="pill grey">Deload week</span>` : ""}</div>
     <h2 style="margin:12px 0 4px">${rest ? esc(w.title) : esc(w.title)}</h2>
-    <div class="muted">${rest ? "Recovery day — walk, stretch, prep meals." : `${w.ex.length} exercises · ~60 min`}</div>
+    <div class="muted">${rest ? "Recovery day — walk, stretch, prep meals." : `${w.ex.length} exercises · ~60 min · gym at ${GYM_TIME}`}</div>
     <div class="row" style="margin-top:14px">
       ${rest ? "" : done
         ? `<span class="pill ok" style="padding:10px 14px">✓ Workout done</span><button class="btn ghost sm" data-go="train">View</button>`
-        : `<button class="btn grow" data-startworkout="${dayIdx()}">▶ Start workout</button><button class="btn ghost" data-go="train">Plan</button>`}
+        : T.skippedGym
+        ? `<span class="pill grey" style="padding:10px 14px">Gym skipped — calories lowered</span>
+           <button class="btn ghost sm" data-${T.autoSkip ? "check=\"trainedLate\"" : "check=\"skipGym\""}>${T.autoSkip ? "I did train" : "Undo"}</button>`
+        : `<button class="btn grow" data-startworkout="${dayIdx()}">▶ Start workout</button><button class="btn ghost" data-check="skipGym">Skip today</button>`}
     </div>
   </div>
 
+  ${soon.map((x) => `<div class="card" style="border-color:var(--blue)"><b>🩺 ${esc(x.what)}</b>
+    <div class="muted small">${x.date === today() ? "Today" : fmt(x.date)}${x.notes ? " · " + esc(x.notes) : ""}</div></div>`).join("")}
+
   <div class="card"><div class="rings">
-    <div>${ring(t.kcal, ph.kcal, "var(--accent)", "kcal")}<div class="lbl">Calories</div></div>
-    <div>${ring(t.p, ph.protein, "var(--ok)", "g")}<div class="lbl">Protein</div></div>
+    <div>${ring(t.kcal, T.kcal, "var(--accent)", "kcal")}<div class="lbl">Calories</div></div>
+    <div>${ring(t.p, T.protein, "var(--ok)", "g")}<div class="lbl">Protein</div></div>
     <div>${ring(workoutsThisWeek().filter(Boolean).length, program().days, "var(--blue)", "")}<div class="lbl">Workouts</div></div>
-  </div></div>
+  </div>
+  <div class="muted small" style="text-align:center;margin-top:8px">Today's target ${T.kcal} kcal · ${T.reasons.join(" · ")}</div>
+  <div class="row" style="margin-top:10px;justify-content:center">
+    <button class="btn ghost sm ${d.checks.skipWalk ? "on" : ""}" data-check="skipWalk">${d.checks.skipWalk ? "✓ Missed walk (−150)" : "Missed my walk?"}</button></div>
+  </div>
+
+  <div class="card"><h2 style="margin-bottom:6px">How do you feel?</h2>
+    <div class="muted small">Helps find what makes you feel your best.</div>
+    <div class="feel"><span class="muted small">Energy</span>${[1, 2, 3, 4, 5].map((v) =>
+      `<button class="${feel.energy === v ? "on" : ""}" data-feel="energy:${v}">${["😩", "😕", "😐", "🙂", "🔥"][v - 1]}</button>`).join("")}</div>
+    <div class="feel"><span class="muted small">Mood</span>${[1, 2, 3, 4, 5].map((v) =>
+      `<button class="${feel.mood === v ? "on" : ""}" data-feel="mood:${v}">${["😞", "😔", "😐", "😊", "😄"][v - 1]}</button>`).join("")}</div>
+    <div class="feel"><span class="muted small">Bloated?</span>
+      <button class="wide ${feel.bloat === 0 ? "on" : ""}" data-feel="bloat:0">No</button>
+      <button class="wide ${feel.bloat === 1 ? "on" : ""}" data-feel="bloat:1">A bit</button>
+      <button class="wide ${feel.bloat === 2 ? "on" : ""}" data-feel="bloat:2">Very</button></div>
+  </div>
 
   ${needsWeigh ? `<div class="card"><div class="spread"><div><b>Morning weigh-in</b><div class="muted small">After toilet, before food</div></div></div>
     <div class="row" style="margin-top:10px"><input class="grow" id="qWeigh" inputmode="decimal" placeholder="kg">
@@ -155,15 +206,16 @@ V.today = () => {
 
   <div class="section-title"><h2>Meals</h2><a href="#food" class="small">Log other food →</a></div>
   <div class="card" style="padding:4px 16px">
-    ${MEALS.map((_, i) => mealTick(i)).join("")}
+    ${MEALS.map((m, i) => (m.gymOnly && rest) || (m.gymOnly && T.skippedGym) ? "" : mealTick(i)).join("")}
   </div>
+  ${!T.gym || T.skippedGym ? `<p class="muted small" style="text-align:center">Lower-calorie day: skip the pre-gym snack and have 1 roti / ½ cup rice less at dinner.</p>` : ""}
   <p class="muted small" style="text-align:center">${esc(ph.food)}</p>`;
 };
 function mealTick(i) {
   const m = meal(i), on = day().food.some((f) => f.plan === i);
   return `<div class="tick ${on ? "on" : ""}" data-meal="${i}"><span class="box"></span>
     <div class="t"><b>${esc(m.name)}</b><span class="muted small">${esc(m.items)}</span></div>
-    <span class="meta">${esc(MEALS[i].time.split(" ")[0])}<br>${m.p} g P<br>
+    <span class="meta">${esc(MEALS[i].time.split(" ")[0])}<br>${m.kcal} kcal<br>
       <button class="btn ghost sm" data-cyclemeal="${i}" aria-label="Next option" style="margin-top:4px">⇄</button></span></div>`;
 }
 
@@ -257,23 +309,31 @@ function tickRest() {
 }
 
 // ---------- food ----------
-let foodSeg = "log";
+let foodSeg = "log", planOffset = 0;
 V.food = () => {
   const d = day(), t = foodTotals(d), ph = phase();
   const seg = `<div class="seg">${[["log", "Log"], ["plan", "Meal plan"], ["zepto", "Zepto list"]].map(([k, l]) =>
     `<button class="${foodSeg === k ? "on" : ""}" data-foodseg="${k}">${l}</button>`).join("")}</div>`;
-  if (foodSeg === "plan") return seg + `
-    <div class="card"><h2>${esc(ph.name)} targets</h2>
-      <div class="grid2"><div><b>${ph.kcal}</b> <span class="muted">kcal</span></div><div><b>${ph.protein} g</b> <span class="muted">protein</span></div>
-      <div><b>${ph.carbs} g</b> <span class="muted">carbs</span></div><div><b>${ph.fat} g</b> <span class="muted">fat</span></div></div>
-      <p class="note-box" style="margin-bottom:0">${esc(ph.food)}</p></div>
-    <p class="muted small">Pick one option per meal — all options keep you on target. Inspired by Rujuta Diwekar's "eat home food" approach and Ryan Fernando's high-protein vegetarian advice.</p>
-    ${MEALS.map((slot, i) => `<div class="card"><span class="pill grey">${esc(slot.time)}</span>
-      ${slot.options.map((m, j) => { const on = (S.mealPick[i] ?? 0) === j;
-        return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}"><span class="box"></span>
+  if (foodSeg === "plan") {
+    const dates = Array.from({ length: 7 }, (_, k) => { const x = new Date(); x.setDate(x.getDate() + k); return iso(x); });
+    const pd = dates[planOffset], T = dayTargets(pd), gym = isGymDay(new Date(pd));
+    return seg + `
+    <div class="week">${dates.map((k, i) => `<button class="${i === planOffset ? "on" : ""} ${i === 0 ? "today" : ""}" data-planday="${i}">
+      ${new Date(k).toLocaleDateString("en-IN", { weekday: "short" })}</button>`).join("")}</div>
+    <div class="card"><div class="spread"><h2 style="margin:0">${planOffset === 0 ? "Today" : fmt(pd)}</h2>
+      <span class="pill ${gym ? "" : "grey"}">${gym ? "Gym day" : "Rest day"}</span></div>
+      <div class="grid2" style="margin-top:10px"><div><b>${T.kcal}</b> <span class="muted">kcal</span></div><div><b>${T.protein} g</b> <span class="muted">protein</span></div>
+      <div><b>${T.carbs} g</b> <span class="muted">carbs</span></div><div><b>${T.fat} g</b> <span class="muted">fat</span></div></div>
+      <p class="note-box" style="margin-bottom:0">${esc(ph.food)}${gym ? "" : " Rest day: no pre-gym snack, 1 roti / ½ cup rice less at dinner."}</p></div>
+    <p class="muted small">Meals change every day automatically. Tap another option to swap it for this day only.
+      No tofu, rajma or chole. Inspired by Rujuta Diwekar's home-food approach and Ryan Fernando's high-protein vegetarian advice.</p>
+    ${MEALS.map((slot, i) => slot.gymOnly && !gym ? "" : `<div class="card"><span class="pill grey">${esc(slot.time)}</span>
+      ${slot.options.map((m, j) => { const on = mealPickIdx(i, pd) === j;
+        return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}:${pd}"><span class="box"></span>
           <div class="t"><b>${esc(m.name)}</b><span class="muted small">${esc(m.items)}</span></div>
           <span class="meta">${m.kcal} kcal<br>${m.p} g P</span></div>`; }).join("")}</div>`).join("")}
-    <div class="card"><h2>Need ideas?</h2><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian tofu or soya recipes for my current phase with grams and macros, under ₹100 each.">✨ 3 new tofu/soya recipes</button></div>`;
+    <div class="card"><h2>Need ideas?</h2><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian recipes using high-protein paneer or soya for my current phase, with grams and macros, under ₹120 each. Nothing that bloats.">✨ 3 new paneer/soya recipes</button></div>`;
+  }
 
   if (foodSeg === "zepto") {
     const price = (g) => S.prices[g.item] ?? g.price;
@@ -296,13 +356,15 @@ V.food = () => {
         <td class="n"><input class="price" inputmode="numeric" data-price="${esc(g.item)}" value="${price(g)}"></td></tr>`).join("")}</table></div>`;
   }
 
+  const T = dayTargets();
   return seg + `
   <div class="card"><div class="rings" style="grid-template-columns:repeat(4,1fr)">
-    <div>${ring(t.kcal, ph.kcal, "var(--accent)", "")}<div class="lbl">kcal</div></div>
-    <div>${ring(t.p, ph.protein, "var(--ok)", "")}<div class="lbl">Protein g</div></div>
-    <div>${ring(t.c, ph.carbs, "var(--blue)", "")}<div class="lbl">Carbs g</div></div>
-    <div>${ring(t.f, ph.fat, "var(--warn)", "")}<div class="lbl">Fat g</div></div>
-  </div></div>
+    <div>${ring(t.kcal, T.kcal, "var(--accent)", "")}<div class="lbl">kcal</div></div>
+    <div>${ring(t.p, T.protein, "var(--ok)", "")}<div class="lbl">Protein g</div></div>
+    <div>${ring(t.c, T.carbs, "var(--blue)", "")}<div class="lbl">Carbs g</div></div>
+    <div>${ring(t.f, T.fat, "var(--warn)", "")}<div class="lbl">Fat g</div></div>
+  </div>
+  <div class="muted small" style="text-align:center;margin-top:8px">${T.reasons.join(" · ")}</div></div>
   <div class="card"><h2>Log with AI</h2>
     <textarea id="foodText" placeholder="e.g. 2 roti, 1 katori dal, 100 g paneer bhurji"></textarea>
     <div class="row" style="margin-top:10px">
@@ -392,15 +454,37 @@ let looksSeg = "daily";
 V.looks = () => {
   const list = (key, arr) => arr.map((x, i) => tick(`${key}${i}`, esc(x))).join("");
   const derm = S.profile.derm || "";
-  const seg = `<div class="seg">${[["daily", "Daily"], ["weekly", "Weekly"], ["derm", "Dermat"]].map(([k, l]) =>
+  const seg = `<div class="seg">${[["daily", "Daily"], ["sharp", "Sharp look"], ["weekly", "Weekly"], ["derm", "Dermat"]].map(([k, l]) =>
     `<button class="${looksSeg === k ? "on" : ""}" data-looksseg="${k}">${l}</button>`).join("")}</div>`;
-  if (looksSeg === "derm") return seg + `
+  const plain = (arr) => arr.map((x) => `<div class="tick" style="cursor:default"><div class="t"><span>${esc(x)}</span></div></div>`).join("");
+  if (looksSeg === "sharp") return seg + `
+    <div class="card"><h2>Sharp face (Hrithik-style)</h2>${plain(SHARP_LOOK)}</div>
+    <div class="card"><h2>Chest fat plan</h2>${plain(CHEST_PLAN)}
+      <p class="muted small" style="margin-bottom:0">Your program already includes incline press, cable fly, rows and face pulls for this.</p></div>
+    <div class="card"><h2>Look leaner on camera</h2>${plain(CAMERA_TIPS)}</div>
+    <div class="card"><h2>Progress photos</h2><p class="muted small" style="margin:0">Every Sunday morning: same spot, same light, front / side / back,
+      relaxed. Keep them in a hidden phone album — the mirror lies, photos don't.</p>
+      ${tick("photos", "Took this week's photos")}</div>`;
+  if (looksSeg === "derm") {
+    const tr = S.treatments.slice().sort((a, b) => a.date.localeCompare(b.date));
+    return seg + `
+    <div class="card"><h2>Treatments & appointments</h2>
+      <p class="muted small">Add each dermat visit or session (peel, laser, follow-up). It shows on Today 3 days before.</p>
+      <div class="grid2"><input id="trDate" type="date" value="${today()}"><input id="trWhat" placeholder="e.g. Chemical peel #1"></div>
+      <input id="trNotes" placeholder="Notes (e.g. no gym sweat for 24 h, avoid sun)" style="margin-top:8px">
+      <button class="btn block" id="trAdd" style="margin-top:8px">Add</button>
+      ${tr.map((x) => `<div class="tick ${x.done ? "on" : ""}" data-trdone="${esc(x.id)}"><span class="box"></span>
+        <div class="t"><b>${esc(x.what)}</b><span class="muted small">${fmt(x.date)}${x.notes ? " · " + esc(x.notes) : ""}</span></div>
+        <button class="btn ghost sm" data-trdel="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("") || `<div class="empty">No appointments yet.</div>`}
+    </div>
     <div class="card"><h2>Dermatologist's routine</h2>
       <p class="muted small">Type or paste what your dermat prescribed, one step per line. It becomes your daily checklist and replaces the general skin routine.</p>
       <textarea id="derm" placeholder="AM: Face wash&#10;AM: Sunscreen SPF 50&#10;PM: Tretinoin 0.025% pea size">${esc(derm)}</textarea>
       <button class="btn block" id="dermSave" style="margin-top:10px">Save routine</button></div>
     <div class="card"><h2>Ask before using</h2><p class="muted small" style="margin:0">Questions to ask your dermat: oily or dry skin type? Anything for dark circles or acne marks?
-      Which sunscreen? Is a hair-fall check (minoxidil/biotin) needed? Any reaction with whey/creatine?</p></div>`;
+      Which sunscreen? Is a hair-fall check (minoxidil/biotin) needed? Any reaction with whey/creatine?
+      Can I train the day after a peel/laser? Is the chest puffiness fat or gland (gynecomastia)?</p></div>`;
+  }
   if (looksSeg === "weekly") return seg + `
     <div class="card" style="padding:4px 16px">${list("gWk", GROOMING.weekly)}</div>
     <div class="card"><h2>The Milkha look</h2><p class="muted small" style="margin:0">Short, textured hair with a slightly longer top, sharp sideburns,
@@ -473,7 +557,7 @@ document.addEventListener("change", (e) => {
 });
 
 document.addEventListener("click", async (e) => {
-  const el = e.target.closest("button,[data-go],[data-check],[data-meal],[data-pickmeal],[data-copy]");
+  const el = e.target.closest("button,[data-go],[data-check],[data-meal],[data-pickmeal],[data-trdone],[data-copy]");
   if (!el) return;
   const d = el.dataset;
   if (d.go) { location.hash = d.go; return; }
@@ -483,16 +567,26 @@ document.addEventListener("click", async (e) => {
     return;
   }
   if (d.cyclemeal) {
-    e.stopPropagation();
-    const i = +d.cyclemeal; S.mealPick[i] = ((S.mealPick[i] ?? 0) + 1) % MEALS[i].options.length;
-    const f = day().food, at = f.findIndex((x) => x.plan === i);
-    if (at >= 0) { const m = meal(i); f[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
+    const i = +d.cyclemeal, x = day();
+    (x.mealPick ??= {})[i] = (mealPickIdx(i) + 1) % MEALS[i].options.length;
+    const at = x.food.findIndex((f) => f.plan === i);
+    if (at >= 0) { const m = meal(i); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
     save(); render(); return toast(`Switched to ${meal(i).name}`);
   }
   if (d.pickmeal) {
-    const [i, j] = d.pickmeal.split(":").map(Number); S.mealPick[i] = j; save(); render();
-    return toast(`${MEALS[i].time.split(" ")[1]}: ${meal(i).name}`);
+    const [i, j, dt] = d.pickmeal.split(":"), x = day(dt);
+    (x.mealPick ??= {})[+i] = +j; save(); render();
+    return toast(`${MEALS[+i].time.replace(/^\S+\s/, "")}: ${meal(+i, dt).name}`);
   }
+  if (d.planday) { planOffset = +d.planday; return render(); }
+  if (d.feel) {
+    const [k, v] = d.feel.split(":"), x = day(); x.feel = { ...(x.feel || {}), [k]: +v };
+    save(); render(); return;
+  }
+  if (d.trdone) {
+    const t = S.treatments.find((x) => x.id === d.trdone); if (t) t.done = !t.done; save(); return render();
+  }
+  if (d.trdel) { S.treatments = S.treatments.filter((x) => x.id !== d.trdel); save(); return render(); }
   if (d.toggleprog !== undefined) { showProgs = !showProgs; return render(); }
   if (d.program) {
     S.program = d.program; applyProgram(); showProgs = false; save(); render();
@@ -535,7 +629,7 @@ document.addEventListener("click", async (e) => {
     case "restSkip": WM.restEnd = 0; return renderWM();
     case "foodLog": return logFood();
     case "askBtn": return ask($("#askText").value, $("#askOut"));
-    case "reviewBtn": return ask(`Review my last 14 days against my phase plan. Give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
+    case "reviewBtn": return ask(`Review my last 14 days against my phase plan. Look at my energy/mood/bloating scores next to the meals and workouts and tell me which days and foods make me feel best and which make me bloated. Then give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
     case "copyAll": {
       const text = GROCERY.map((g) => `${g.item.replace(/\s*\(.*\)/, "")} × ${g.qty}`).join("\n");
       navigator.clipboard?.writeText(text); return toast("Weekly list copied");
@@ -547,6 +641,12 @@ document.addEventListener("click", async (e) => {
       S.weights.push({ date: today(), kg, waist: parseFloat($("#wWaist")?.value) || null });
       S.weights.sort((a, b) => a.date.localeCompare(b.date));
       save(); render(); return toast(`Saved ${kg} kg`);
+    }
+    case "trAdd": {
+      const what = $("#trWhat").value.trim(), date = $("#trDate").value;
+      if (!what || !date) return toast("Add a date and what it is");
+      S.treatments.push({ id: Date.now().toString(36), date, what, notes: $("#trNotes").value.trim(), done: false });
+      save(); render(); return toast("Appointment added");
     }
     case "dermSave": S.profile.derm = $("#derm").value; save(); looksSeg = "daily"; render(); return toast("Dermat routine saved");
     case "sTest": {
@@ -574,7 +674,8 @@ function recent(n) {
   const out = { phase: phase(), weights: S.weights.slice(-n), days: {} };
   for (let i = 0; i < n; i++) {
     const dt = new Date(); dt.setDate(dt.getDate() - i); const k = iso(dt);
-    if (S.days[k]) out.days[k] = { checks: S.days[k].checks, totals: foodTotals(S.days[k]) };
+    if (S.days[k]) out.days[k] = { checks: S.days[k].checks, totals: foodTotals(S.days[k]), target: dayTargets(k).kcal,
+      feel: S.days[k].feel, meals: (S.days[k].food || []).map((f) => f.name) };
   }
   return out;
 }

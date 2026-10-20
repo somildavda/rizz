@@ -30,13 +30,17 @@ const PHASES = [
 ];
 const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% weight
 const DAILY = { waterL: 3.5, sleepH: 7.5 };
+// Daily calorie changes (kcal) on top of the phase target. Gym days eat a bit more, rest
+// days less, and a skipped session or walk lowers that day's target automatically.
+const ADJUST = { gymDay: 100, restDay: -150, skippedGym: -250, skippedWalk: -150 };
 
 // Mon..Sun. Each exercise: [name, sets, reps, note]
 const ATHLETE_WEEK = [
   { day: "Mon", title: "Push (chest, shoulders, triceps)", ex: [
     ["Treadmill incline walk warm-up", 1, "8 min", "Incline 6–8, speed 5"],
     ["Machine chest press", 3, "10–12", ""],
-    ["Incline dumbbell press", 3, "10–12", ""],
+    ["Incline dumbbell press", 3, "10–12", "Upper chest — key for fixing chest shape"],
+    ["Low-to-high cable fly", 3, "12–15", "Squeeze at the top; lifts the upper chest"],
     ["Seated dumbbell shoulder press", 3, "10–12", ""],
     ["Cable lateral raise", 3, "12–15", "Key for the Milkha shoulder width"],
     ["Cable triceps pushdown", 3, "12–15", ""],
@@ -88,61 +92,101 @@ const ATHLETE_WEEK = [
   { day: "Sun", title: "Rest", ex: [["Rest, meal prep, Zepto order", 1, "—", ""]] },
 ];
 
-// ~2,200 kcal, ~150 g protein, vegetarian, home-cooked.
-// Each slot has 3 options with similar calories/protein — pick any, the totals stay on plan.
+// Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
+// "HP paneer" = iD Fresh High Protein Paneer (~28 g protein per 100 g; check the pack label).
+// Timed around an 8:30 am gym session. Each slot has 4 options with similar calories and
+// protein; the app rotates them through the week and you can still pick any by hand.
 const MEALS = [
-  { time: "7:30 Breakfast", options: [
+  { time: "7:45 Pre-gym", gymOnly: true, options: [
+    { name: "Banana + black coffee", items: "1 banana + black coffee (no sugar)", kcal: 110, p: 1 },
+    { name: "Dates + milk", items: "2 dates + 150 ml toned milk", kcal: 140, p: 5 },
+    { name: "Toast + peanut butter", items: "1 brown bread toast + 1 tsp peanut butter", kcal: 130, p: 5 },
+    { name: "Apple + coffee", items: "1 apple + black coffee", kcal: 100, p: 0 },
+  ]},
+  { time: "10:00 Post-gym breakfast", options: [
     { name: "Protein oats", items: "60 g oats + 250 ml toned milk + 1 scoop whey + 1 banana", kcal: 520, p: 42 },
-    { name: "Besan-paneer chilla", items: "2 besan chilla with 75 g paneer stuffing + green chutney + 200 ml milk", kcal: 500, p: 36 },
+    { name: "Paneer besan chilla", items: "2 besan chilla stuffed with 75 g HP paneer + green chutney + 150 ml milk", kcal: 520, p: 41 },
     { name: "Moong dal chilla + whey", items: "2 moong dal chilla + 100 g curd + 1 scoop whey in water", kcal: 480, p: 45 },
+    { name: "Paneer poha + whey", items: "50 g poha with peas + 75 g HP paneer + 1 scoop whey in water", kcal: 500, p: 48 },
   ]},
   { time: "1:30 Lunch", options: [
-    { name: "Dal-soya thali", items: "2 roti + 1 katori dal + soya chunk sabzi (50 g dry) + salad + 100 g curd", kcal: 620, p: 45 },
-    { name: "Rajma-rice bowl", items: "1 katori rajma + 1 cup rice + 100 g tofu sabzi + salad + 100 g curd", kcal: 630, p: 38 },
-    { name: "Paneer bhurji thali", items: "2 roti + 100 g low-fat paneer bhurji + 1 katori dal + salad", kcal: 610, p: 42 },
+    { name: "Dal-soya thali", items: "2 roti + 1 katori yellow moong dal + soya sabzi (40 g dry) + salad + 100 g curd", kcal: 610, p: 44 },
+    { name: "Paneer bhurji thali", items: "2 roti + 100 g HP paneer bhurji + 1 katori moong dal + salad", kcal: 620, p: 46 },
+    { name: "Moong khichdi + paneer", items: "1.5 cups moong dal khichdi + 75 g HP paneer tikka + 150 g curd", kcal: 600, p: 40 },
+    { name: "Palak paneer + rice", items: "100 g HP paneer in palak + ¾ cup rice + cucumber raita", kcal: 630, p: 42 },
   ]},
   { time: "5:00 Snack", options: [
-    { name: "Tofu bhurji", items: "150 g tofu bhurji + 1 fruit", kcal: 300, p: 24 },
-    { name: "Roasted chana + curd", items: "40 g roasted chana + 200 g dahi + 1 fruit", kcal: 320, p: 22 },
+    { name: "Makhana + curd", items: "30 g roasted makhana + 200 g dahi + 1 fruit", kcal: 300, p: 16 },
     { name: "Whey shake + peanuts", items: "1 scoop whey in milk + 15 g peanuts", kcal: 330, p: 33 },
+    { name: "Paneer tikka bites", items: "75 g HP paneer tikka + mint chutney + 1 fruit", kcal: 260, p: 22 },
+    { name: "Soya chaat", items: "30 g soya chunks (boiled) + onion, tomato, lemon, chaat masala", kcal: 200, p: 16 },
   ]},
   { time: "8:30 Dinner", options: [
-    { name: "Tofu tikka bowl", items: "150 g tofu tikka + 1 cup rice or 2 roti + mixed veg", kcal: 560, p: 32 },
-    { name: "Soya pulao + raita", items: "50 g soya chunks in 1 cup veg pulao + 150 g raita", kcal: 550, p: 34 },
-    { name: "Chana-palak + roti", items: "1.5 katori chana palak + 2 roti + 100 g curd", kcal: 560, p: 28 },
+    { name: "Soya pulao + raita", items: "40 g soya chunks in 1 cup veg pulao + 150 g raita", kcal: 540, p: 32 },
+    { name: "Paneer-veg stir-fry", items: "100 g HP paneer + capsicum, beans, broccoli + 2 roti", kcal: 580, p: 40 },
+    { name: "Dal + soya sabzi", items: "1 katori moong/masoor dal + soya-matar sabzi (30 g dry) + 2 roti + salad", kcal: 550, p: 34 },
+    { name: "Paneer tikka bowl", items: "100 g HP paneer tikka + ¾ cup rice + sautéed veg", kcal: 570, p: 38 },
   ]},
   { time: "10:00 Night", options: [
     { name: "Dahi", items: "200 g dahi (plain)", kcal: 130, p: 8 },
     { name: "Haldi milk", items: "250 ml toned milk + haldi", kcal: 150, p: 8 },
     { name: "Hung curd bowl", items: "150 g hung curd + cinnamon", kcal: 140, p: 14 },
+    { name: "Slow protein shake", items: "½ scoop whey in 200 ml milk", kcal: 160, p: 18 },
   ]},
+];
+const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
+const GYM_TIME = "8:30 am";
+
+// Chest fat can't be burned from one spot: overall fat loss + upper chest + posture fix how it looks.
+const CHEST_PLAN = [
+  "Overall fat loss is what removes chest fat — hitting the daily calorie target matters most.",
+  "Upper-chest work twice a week (incline press, low-to-high cable fly) lifts and squares the chest.",
+  "Rows and face pulls pull the shoulders back so the chest looks flatter and wider.",
+  "A firm, rubbery disc right under the nipple may be gynecomastia (gland, not fat) — ask a doctor; diet alone won't shrink it.",
+];
+const CAMERA_TIPS = [
+  "Stand tall, push the chin slightly forward and down — instantly sharper jaw on camera.",
+  "Camera at eye level or slightly above, never from below.",
+  "Dark, fitted (not tight) plain tees and overshirts; avoid shiny or clingy fabric.",
+  "Shoulders back, one foot forward, body angled to the camera instead of square-on.",
+  "Low salt and no heavy late dinner the night before a shoot = less face puffiness.",
+];
+// Hrithik-style "sharp" face: mostly body fat, grooming and skin.
+const SHARP_LOOK = [
+  "The jawline shows below ~15% body fat — it comes with the plan; there's no shortcut.",
+  "Beard: dense short stubble, crisp cheek line, neckline one finger above the Adam's apple.",
+  "Eyebrows tidied (not thinned) by the barber.",
+  "Skin: dermat plan + daily sunscreen — an even skin tone looks sharper on camera.",
+  "Sleep 7–8 h and 3.5 L water to cut morning puffiness.",
 ];
 
 // Weekly Zepto list, approximate Mumbai prices (editable in the app).
 const GROCERY = [
-  { item: "Tofu 200 g", qty: 4, price: 90 },
-  { item: "Low-fat paneer 200 g", qty: 2, price: 95 },
+  { item: "iD Fresh High Protein Paneer 200 g", qty: 4, price: 150 },
   { item: "Dahi 400 g", qty: 4, price: 50 },
   { item: "Toned milk 500 ml", qty: 7, price: 28 },
-  { item: "Soya chunks 200 g", qty: 1, price: 60 },
-  { item: "Moong / masoor dal 500 g", qty: 1, price: 75 },
-  { item: "Kabuli chana 500 g", qty: 1, price: 75 },
+  { item: "Soya chunks 200 g", qty: 2, price: 60 },
+  { item: "Yellow moong dal 1 kg (lasts 2 wks)", qty: 0.5, price: 150 },
+  { item: "Besan 500 g (lasts 2 wks)", qty: 0.5, price: 60 },
+  { item: "Makhana 100 g", qty: 1, price: 110 },
   { item: "Rolled oats 1 kg (lasts 2 wks)", qty: 0.5, price: 180 },
+  { item: "Poha 500 g (lasts 3 wks)", qty: 0.33, price: 50 },
   { item: "Atta 1 kg + rice 1 kg", qty: 1, price: 110 },
-  { item: "Vegetables (onion, tomato, spinach, capsicum…)", qty: 1, price: 350 },
-  { item: "Fruits (banana, apple, papaya)", qty: 1, price: 200 },
-  { item: "Peanut butter 500 g (lasts 2 wks)", qty: 0.5, price: 180 },
+  { item: "Vegetables (onion, tomato, palak, capsicum, beans…)", qty: 1, price: 300 },
+  { item: "Fruits (banana, apple, papaya) + dates", qty: 1, price: 170 },
 ];
 const MONTHLY_EXTRAS = [
   { item: "Whey protein 1 kg (~1 scoop/day)", price: 2300 },
   { item: "Creatine monohydrate 250 g (lasts ~2 months)", price: 350 },
-  { item: "Grooming (sunscreen, face wash, moisturiser, beard)", price: 600 },
+  { item: "Peanut butter 500 g", price: 180 },
+  { item: "Grooming basics (sunscreen, face wash, moisturiser)", price: 400 },
 ];
 
 const GROOMING = {
   am: ["Gentle face wash", "Moisturiser", "Sunscreen SPF 50 (every day, even indoors)"],
   pm: ["Face wash", "Niacinamide serum (oil + marks)", "Moisturiser"],
-  weekly: ["Beard: short stubble + thick moustache (Milkha style)", "Haircut: short sides, slightly longer top — every 3–4 weeks",
+  weekly: ["Beard: dense short stubble with a sharp cheek line (Hrithik-style) — or stubble + moustache for the Milkha look",
+    "Haircut: short tapered sides, textured longer top swept back — every 3–4 weeks",
     "Exfoliate once a week", "Trim nails, clean eyebrows"],
   posture: ["Wall angels 2×10", "Chin tucks 2×10", "Doorway chest stretch 2×30 s", "Stand tall: ribs down, shoulders back"],
   habits: ["Sleep 7–8 h", "Water 3.5 L", "10k steps", "No phone 30 min before bed"],
