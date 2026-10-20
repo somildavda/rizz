@@ -274,3 +274,7 @@ nav button.on::before { content: ""; position: absolute; top: 0; width: 28px; he
 
 @media (max-width: 360px) { .chips, .badges { grid-template-columns: 1fr; } .rings.four .ring { width: 60px; height: 60px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+.card.pager { display: flex; align-items: center; gap: 10px; padding: 10px; margin-bottom: 8px; }
+.card.pager b { font: 700 17px var(--display); }
+.iconbtn:disabled { opacity: .35; }

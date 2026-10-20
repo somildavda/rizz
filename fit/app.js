@@ -64,6 +64,13 @@ applyProgram();
 const cyc = (d = new Date()) => ((Math.floor((new Date(iso(d)) - START) / DAY_MS) % 7) + 7) % 7;
 const isGymDay = (d = new Date()) => WEEK[cyc(d)].ex.length > 2;
 const runStage = () => RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
+// The day the plan shows by default: today, or Day 1 if the journey hasn't started yet.
+const planDay = () => (today() < START_DATE ? START_DATE : today());
+const addDays = (k, n) => { const d = new Date(k); d.setDate(d.getDate() + n); return iso(d); };
+const dayLabel = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
+  new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
+const slotLabel = (slot, gym) => (!gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label);
+const journeyDay = (k) => Math.floor((new Date(k) - START) / DAY_MS) + 1;
 const skillIndex = () => Math.min(SKILLS.length - 1, Math.floor((dayNo() - 1) / 30));
 
 // Exercises for a weekday, with this month's skill practice added to Mon/Wed/Fri gym days.
@@ -253,7 +260,7 @@ const seg = (cur, key, items) => `<div class="seg" role="tablist">${items.map(([
 const V = {};
 
 V.today = () => {
-  const ph = phase(), w = WEEK[cyc()], d = day(), t = foodTotals(d), T = dayTargets();
+  const pd = planDay(), ph = phase(new Date(pd)), w = WEEK[cyc(new Date(pd))], d = day(), t = foodTotals(d), T = dayTargets(pd);
   const done = d.checks.workout, rest = !T.gym, feel = d.feel || {};
   const soon = S.treatments.filter((x) => !x.done && x.date >= today() && (new Date(x.date) - new Date(today())) / DAY_MS <= 3);
   const notStarted = today() < START_DATE;
@@ -267,16 +274,16 @@ V.today = () => {
   ];
   return `
   <section class="hero">
-    <div class="hero-top"><span class="eyebrow">${notStarted ? `Starts ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
+    <div class="hero-top"><span class="eyebrow">${notStarted ? `Day 1 starts tomorrow · ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc()).length} exercises · ~60 min · gym at ${GYM_TIME}`}</p>
+    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~60 min · gym at ${GYM_TIME}`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`
         : T.skippedGym
         ? `<span class="pill grey big">Skipped · calories lowered</span><button class="btn ghost" data-check="${T.autoSkip ? "trainedLate" : "skipGym"}">${T.autoSkip ? "I did train" : "Undo"}</button>`
-        : `<button class="btn grow" data-startworkout="${cyc()}">Start workout</button><button class="btn ghost" data-check="skipGym">Skip today</button>`}
+        : `<button class="btn grow" data-startworkout="${cyc(new Date(pd))}">Start workout</button><button class="btn ghost" data-check="skipGym">Skip today</button>`}
     </div>
     <div class="journey-bar"><i style="width:${pct}%"></i></div>
     <div class="journey-meta"><span>${fmt(START_DATE)}</span><span>${pct}% to abs reveal</span><span>${fmt(S.profile.targetDate)}</span></div>
@@ -299,7 +306,7 @@ V.today = () => {
       <button class="btn" id="qWeighSave">Save</button></div></div>` : ""}
 
   <div class="section-title"><h3>Meals</h3><a href="#food" class="link">Food →</a></div>
-  <div class="card list">${mealTicks(T)}</div>
+  <div class="card list">${mealTicks(T, pd)}</div>
 
   <div class="section-title"><h3>Habits</h3><span class="sub">${habits.filter(([id]) => d.checks[id]).length}/${habits.length}</span></div>
   <div class="chips">${habits.map(([id, e, label]) =>
@@ -320,11 +327,11 @@ V.today = () => {
 function mealTicks(T, d = today()) {
   const rows = MEALS.map((slot, i) => {
     if (slot.gymOnly && (!T.gym || T.skippedGym)) return "";
-    const m = meal(i, d), on = day(d).food.some((f) => f.plan === i);
-    return `<div class="tick meal ${on ? "on" : ""}" data-meal="${i}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
-      <div class="t"><span class="time">${esc(slot.time)} · ${esc(slot.label)}</span><b>${esc(m.name)}</b>
+    const m = meal(i, d), on = !!S.days[d]?.food?.some((f) => f.plan === i);
+    return `<div class="tick meal ${on ? "on" : ""}" data-meal="${i}" data-date="${d}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
+      <div class="t"><span class="time">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span><b>${esc(m.name)}</b>
         <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
-      <span class="meta">${m.kcal} kcal<br>${m.p} g P<br><button class="btn ghost xs" data-cyclemeal="${i}" aria-label="Swap meal">⇄</button></span></div>`;
+      <span class="meta">${m.kcal} kcal<br>${m.p} g P<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
   return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
 }
@@ -468,17 +475,30 @@ V.food = () => {
   const s = seg(foodSeg, "foodseg", [["today", "Today"], ["plan", "7-day plan"], ["shop", "Shopping"]]);
   return s + (foodSeg === "plan" ? foodPlan() : foodSeg === "shop" ? foodShop() : foodToday());
 };
+let foodDate = null;
+function cookText(k) {
+  const T = dayTargets(k);
+  return `Menu for ${dayLabel(k)}${/day$/.test(dayLabel(k)) ? ` (${fmt(k)})` : ""} · Day ${journeyDay(k)}\n` + MEALS.map((slot, i) => {
+    if (slot.gymOnly && (!T.gym || T.skippedGym)) return "";
+    const m = meal(i, k);
+    return `\n${slot.time} ${slotLabel(slot, T.gym && !T.skippedGym)}: ${m.name}\n` + m.items.map((x) => `- ${x}`).join("\n");
+  }).join("\n") + "\n\nNo tofu, rajma or chole. Use the olive oil spray instead of oil.";
+}
 function foodToday() {
-  const d = day(), t = foodTotals(d), T = dayTargets();
-  return `
+  const fd = foodDate || planDay(), d = day(fd), t = foodTotals(d), T = dayTargets(fd), min = today();
+  const pager = `<div class="card pager"><button class="iconbtn" data-fooddate="${addDays(fd, -1)}" ${fd <= min ? "disabled" : ""} aria-label="Previous day">‹</button>
+    <div class="center grow"><b>${esc(dayLabel(fd))}</b><div class="sub">${fmt(fd)}${journeyDay(fd) >= 1 ? ` · Day ${journeyDay(fd)}` : ""} · ${T.gym ? "Gym day" : "Rest day"} · ${T.kcal} kcal</div></div>
+    <button class="iconbtn" data-fooddate="${addDays(fd, 1)}" aria-label="Next day">›</button></div>
+    <button class="btn ghost block sm" id="copyCook" data-date="${fd}">📋 Copy ${esc(dayLabel(fd).toLowerCase())}'s menu for the cook</button>`;
+  return pager + `
   <div class="card"><div class="rings four">
     <div>${ring(t.kcal, T.kcal, "url(#g1)", "")}<div class="lbl">kcal</div></div>
     <div>${ring(t.p, T.protein, "var(--ok)", "")}<div class="lbl">Protein g</div></div>
     <div>${ring(t.c, T.carbs, "var(--blue)", "")}<div class="lbl">Carbs g</div></div>
     <div>${ring(t.f, T.fat, "var(--warn)", "")}<div class="lbl">Fat g</div></div>
   </div><p class="center sub">${T.reasons.join(" · ")}</p></div>
-  <div class="section-title"><h3>Today's meals</h3><span class="sub">Tick when eaten · ⇄ to swap</span></div>
-  <div class="card list">${mealTicks(T)}</div>
+  <div class="section-title"><h3>${esc(dayLabel(fd))}'s meals</h3><span class="sub">Tick when eaten · ⇄ to swap</span></div>
+  <div class="card list">${mealTicks(T, fd)}</div>
   <div class="card"><h3 class="h3">Ate something else?</h3>
     <textarea id="foodText" placeholder="e.g. 1 vada pav and a cutting chai at the office"></textarea>
     <div class="row mt">
@@ -494,13 +514,13 @@ function foodToday() {
     <button class="btn block mt" id="askBtn">Ask</button><pre class="ai" id="askOut"></pre></div>`;
 }
 function foodPlan() {
-  const dates = Array.from({ length: 7 }, (_, k) => { const x = new Date(); x.setDate(x.getDate() + k); return iso(x); });
+  const dates = Array.from({ length: 7 }, (_, k) => addDays(planDay(), k));
   const pd = dates[planOffset], T = dayTargets(pd), gym = isGymDay(new Date(pd));
   const total = MEALS.reduce((a, slot, i) => slot.gymOnly && !gym ? a : { k: a.k + meal(i, pd).kcal, p: a.p + meal(i, pd).p }, { k: 0, p: 0 });
   return `
-  <div class="week">${dates.map((k, i) => `<button class="${i === planOffset ? "on" : ""} ${i === 0 ? "today" : ""}" data-planday="${i}">
+  <div class="week">${dates.map((k, i) => `<button class="${i === planOffset ? "on" : ""} ${k === today() ? "today" : ""}" data-planday="${i}">
     ${new Date(k).toLocaleDateString("en-IN", { weekday: "short" })}</button>`).join("")}</div>
-  <div class="card"><div class="spread"><h2 class="h2">${planOffset === 0 ? "Today" : fmt(pd)}</h2>
+  <div class="card"><div class="spread"><h2 class="h2">${esc(dayLabel(pd))}</h2>
     <span class="pill ${gym ? "" : "grey"}">${gym ? "Gym day" : "Rest day"}</span></div>
     <div class="stats"><div><b>${T.kcal}</b><span>kcal target</span></div><div><b>${total.k}</b><span>kcal planned</span></div>
       <div><b>${T.protein} g</b><span>protein target</span></div><div><b>${total.p} g</b><span>protein planned</span></div></div>
@@ -768,15 +788,15 @@ document.addEventListener("click", async (e) => {
   }
   if (d.wcheck) { const w = (S.weekly[d.bucket || weekKey()] ??= {}); w[d.wcheck] = !w[d.wcheck]; save(); return render(); }
   if (d.cyclemeal) {
-    const i = +d.cyclemeal, x = day();
-    (x.mealPick ??= {})[i] = (mealPickIdx(i) + 1) % MEALS[i].options.length;
+    const i = +d.cyclemeal, dt = d.date || today(), x = day(dt);
+    (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % MEALS[i].options.length;
     const at = x.food.findIndex((f) => f.plan === i);
-    if (at >= 0) { const m = meal(i); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
-    save(); render(); return toast(`Swapped to ${meal(i).name}`);
+    if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }; }
+    save(); render(); return toast(`Swapped to ${meal(i, dt).name}`);
   }
   if (d.meal) {
-    const i = +d.meal, f = day().food, at = f.findIndex((x) => x.plan === i);
-    if (at >= 0) f.splice(at, 1); else { const m = meal(i); f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
+    const i = +d.meal, dt = d.date || today(), f = day(dt).food, at = f.findIndex((x) => x.plan === i);
+    if (at >= 0) f.splice(at, 1); else { const m = meal(i, dt); f.push({ name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, plan: i }); }
     save(); return render();
   }
   if (d.pickmeal) {
@@ -785,6 +805,7 @@ document.addEventListener("click", async (e) => {
   }
   if (d.shopweek) { shopWeek = Math.max(1, +d.shopweek); return render(); }
   if (d.bought) { const b = (S.weekly[`shop${d.week}`] ??= {}); b[d.bought] = !b[d.bought]; save(); return render(); }
+  if (d.fooddate) { foodDate = d.fooddate < today() ? today() : d.fooddate; return render(); }
   if (d.planday) { planOffset = +d.planday; return render(); }
   if (d.feel) { const [k, v] = d.feel.split(":"), x = day(); x.feel = { ...(x.feel || {}), [k]: +v }; save(); return render(); }
   if (d.trdone) { const t = S.treatments.find((x) => x.id === d.trdone); if (t) t.done = !t.done; save(); return render(); }
@@ -834,6 +855,7 @@ document.addEventListener("click", async (e) => {
       return;
     }
     case "reviewBtnOld": return ask(`Review my last 14 days against my phase plan. Look at energy, mood and bloating next to the meals and workouts, and tell me which foods and days make me feel best and which bloat me. Then give 5 specific, short changes.\n${JSON.stringify(recent(14))}`, $("#reviewOut"));
+    case "copyCook": return copy(cookText(d.date), "Menu copied. Paste it in WhatsApp for the cook.");
     case "copyWeek": return copy(weekOrder(shopWeek ?? weekNo()).map((g) => `${g.buy} × ${g.item}`).join("\n"), "This week's list copied");
     case "copyBarber": return copy(BARBER_NOTE, "Barber note copied");
     case "rSave": {
