@@ -253,6 +253,18 @@ function lastSets(name) {
   }
   return null;
 }
+// Warm-up / cool-down as a tickable checklist, stored on the given date.
+function stepList(name, d) {
+  const steps = name === WARMUP[0] ? WARMUP_STEPS : name === COOLDOWN[0] ? COOLDOWN_STEPS : null;
+  if (!steps) return "";
+  const key = name === WARMUP[0] ? "wu" : "cd", c = S.days[d]?.checks || {};
+  const done = steps.filter((_, i) => c[key + i]).length;
+  return `<div class="steps"><div class="sub">${done}/${steps.length} done</div>${steps.map(([n, r, q], i) => {
+    const on = !!c[key + i];
+    return `<div class="tick ${on ? "on" : ""}" data-check="${key}${i}" data-date="${d}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
+      <div class="t"><b>${esc(n)}</b><span class="sub">${esc(r)}</span></div><span class="meta">${vid(q, "Video")}</span></div>`;
+  }).join("")}</div>`;
+}
 const isTimed = (reps) => /min|s$|s\/|m$|\/ |—|tab/.test(reps);
 const seg = (cur, key, items) => `<div class="seg" role="tablist">${items.map(([k, l]) =>
   `<button role="tab" aria-selected="${cur === k}" class="${cur === k ? "on" : ""}" data-${key}="${k}">${l}</button>`).join("")}</div>`;
@@ -369,7 +381,8 @@ function trainGym() {
         <div class="sub">${sets > 1 ? sets + " × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
         ${last ? `<div class="kg">Last ${esc(fmt(last.date))}: ${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} kg × ${esc(x.reps)}`).join(", ")}</div>`
           : start ? `<div class="kg">Start with ${esc(start)}</div>` : ""}
-        ${!rest ? `<div class="row xs-gap">${vid(skill ? SKILLS[skillIndex()].drills[0] : cleanName(name) + " proper form")}
+        ${stepList(name, iso(dateOfCyc(trainDay)))}
+        ${!rest && !stepList(name, today()) ? `<div class="row xs-gap">${vid(skill ? SKILLS[skillIndex()].drills[0] : cleanName(name) + " proper form")}
           ${skill ? "" : `<button class="btn ghost xs" data-swap="${esc(name)}">Swap</button>`}</div><pre class="ai"></pre>` : ""}
       </div></div>`;
     }).join("")}
@@ -437,13 +450,12 @@ function renderWM() {
     <span class="eyebrow">${esc(WEEK[WM.di].title)}</span>
     <div class="wm-name">${esc(name)}</div>
     <div class="sub">${sets > 1 ? sets + " sets × " : ""}${esc(reps)}${note ? " · " + esc(note) : ""}</div>
-    <div class="row xs-gap mt">${vid(cleanName(name) + " proper form", "Watch the form")}</div>
+    ${stepList(name, today()) ? "" : `<div class="row xs-gap mt">${vid(cleanName(name) + " proper form", "Watch the form")}</div>`}
     ${last ? `<div class="note">Last time: <b>${last.sets.filter((x) => x?.kg).map((x) => `${esc(x.kg)} kg × ${esc(x.reps)}`).join(" · ")}</b>. Beat one number today.</div>`
       : start ? `<div class="note">Suggested start: <b>${esc(start)}</b>. Last 2 reps should feel hard with clean form.</div>` : ""}
     <div class="timer" id="restBox" ${WM.restEnd > Date.now() ? "" : "hidden"}><span class="sub">Rest</span><b id="restT">0:00</b>
       <button class="btn ghost sm" id="restSkip">Skip rest</button></div>
-    ${timed ? "" : `<div class="sethead"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>`}
-    ${Array.from({ length: n }, (_, s) => {
+    ${stepList(name, today()) || (timed ? "" : `<div class="sethead"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>`) + Array.from({ length: n }, (_, s) => {
       const x = logged[s] || {}, prev = last?.sets[s] || {};
       return timed
         ? `<div class="setrow timed"><span>Done: ${esc(reps)}</span><button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Done">✓</button></div>`
@@ -452,7 +464,7 @@ function renderWM() {
           <input inputmode="numeric" placeholder="${esc(prev.reps || String(reps).split("–")[0])}" data-setf="reps" data-s="${s}" value="${esc(x.reps || "")}" aria-label="Set ${s + 1} reps">
           <button class="ok ${x.done ? "on" : ""}" data-setdone="${s}" aria-label="Set ${s + 1} done">✓</button></div>`;
     }).join("")}
-    ${name.startsWith("Skill") ? "" : `<button class="btn ghost sm mt" data-swap="${esc(name)}">Knee hurts? Swap with AI</button><pre class="ai"></pre>`}
+    ${name.startsWith("Skill") || stepList(name, today()) ? "" : `<button class="btn ghost sm mt" data-swap="${esc(name)}">Knee hurts? Swap with AI</button><pre class="ai"></pre>`}
   </div>
   <div class="wm-foot">
     <button class="btn ghost" id="wmPrev" ${WM.i === 0 ? "disabled" : ""}>Back</button>
@@ -788,7 +800,7 @@ document.addEventListener("click", async (e) => {
   if (d.trainseg) { trainSeg = d.trainseg; if (el.tagName === "A") { location.hash = "train"; e.preventDefault(); } return render(); }
   if (d.go) { location.hash = d.go; return; }
   if (d.check) {
-    const c = day().checks; c[d.check] = !c[d.check]; save(); render();
+    const c = day(d.date || today()).checks; c[d.check] = !c[d.check]; save(); render(); if (WM) renderWM();
     if (d.check === "skipGym" && c.skipGym) toast("Gym skipped. Today's calories lowered by 250.");
     return;
   }

@@ -409,10 +409,27 @@ const COACHES = [
 ];
 
 // Every gym session: cardio warm-up (first exercise) → dynamic warm-up → workout → cool-down.
-const WARMUP = ["Dynamic warm-up", 1, "5 min",
-  "10 each: arm circles, band pull-aparts, cat-cow, hip circles, glute bridges, bodyweight good mornings"];
-const COOLDOWN = ["Cool-down stretch", 1, "6 min",
-  "30 s each: doorway chest, lat stretch, hip flexor (kneel on a pad), hamstring, gentle quad. Slow breathing."];
+const WARMUP = ["Dynamic warm-up", 1, "5 min", "Tick each move as you do it"];
+const COOLDOWN = ["Cool-down stretch", 1, "6 min", "Tick each stretch as you do it"];
+// [move, reps, YouTube search]. Knee-safe: no deep squats or lunges.
+const WARMUP_STEPS = [
+  ["Arm circles", "10 forward + 10 back", "arm circles warm up"],
+  ["Band pull-aparts (or arm swings)", "15", "band pull apart warm up"],
+  ["Cat-cow", "10 slow", "cat cow stretch"],
+  ["Hip circles", "10 each way", "standing hip circles warm up"],
+  ["Glute bridges", "15", "glute bridge exercise form"],
+  ["Bodyweight good mornings", "10", "bodyweight good morning exercise"],
+  ["Leg swings, holding a rack", "10 front-back + 10 side, each leg", "leg swings warm up"],
+  ["Warm-up set of your first exercise", "1 × 12 at half the weight", "warm up sets explained"],
+];
+const COOLDOWN_STEPS = [
+  ["Doorway chest stretch", "30 s", "doorway chest stretch"],
+  ["Lat stretch (hold a rack, sit back)", "30 s each side", "lat stretch"],
+  ["Kneeling hip flexor stretch (pad under the knee)", "30 s each side", "kneeling hip flexor stretch"],
+  ["Lying hamstring stretch", "30 s each side", "lying hamstring stretch"],
+  ["Gentle standing quad stretch (stop if the left knee hurts)", "30 s each side", "standing quad stretch"],
+  ["Child's pose with slow breathing", "60 s", "child's pose stretch"],
+];
 
 // Built-in knee-safe swaps, so the app works without any AI key.
 const SWAPS = {
