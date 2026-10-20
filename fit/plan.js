@@ -187,6 +187,9 @@ const START_WEIGHTS = {
 // for the cook. Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
 // Each slot has 4 options; the app rotates them by date so every day is different.
 const PANEER = "iD Fresh High Protein Paneer";
+// Whey: Avvatar (Indian, vegetarian, fresh-milk whey). Cheaper: AS-IT-IS ATOM Whey.
+// If whey bloats, switch to the isolate version of either. 1 level scoop ≈ 30 g ≈ 24 g protein.
+const WHEY = "Avvatar whey";
 const COOK_RULES = [
   "Weigh dal, rice, oats, poha, soya and atta DRY, before soaking or cooking.",
   `Paneer = ${PANEER} (from the fridge pack). Dahi = Amul Masti dahi, plain. Milk = Amul Taaza toned milk.`,
@@ -194,6 +197,7 @@ const COOK_RULES = [
   "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka, no ghee on top.",
   "1 katori = 150 ml. No sugar in anything. Normal salt.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
+  "Whey shake: liquid in the shaker first, then 1 LEVEL scoop (not heaped), shake 20 seconds. Never boil whey; stir it into oats after cooking.",
 ];
 const TIKKA_STEPS = [
   "Cut the paneer into 2 cm cubes.",
@@ -204,21 +208,21 @@ const TIKKA_STEPS = [
 const MEALS = [
   { time: "10:00", label: "Post-gym breakfast", options: [
     { name: "Protein oats", kcal: 560, p: 40,
-      items: ["50 g Quaker rolled oats (dry)", "250 ml Amul Taaza toned milk", "30 g whey (1 scoop)", "1 banana (~100 g peeled)"],
+      items: ["50 g Quaker rolled oats (dry)", "250 ml Amul Taaza toned milk", `30 g ${WHEY} (1 level scoop)`, "1 banana (~100 g peeled)"],
       steps: ["Boil the milk, add the oats, cook 3–4 min stirring.", "Take off the heat, wait 1 min, then stir in the whey so it doesn't lump.", "Top with sliced banana. No sugar."] },
     { name: "Paneer besan chilla", kcal: 525, p: 49,
       items: ["50 g Tata Sampann besan", `75 g ${PANEER}, grated`, "30 g onion + 30 g tomato, finely chopped", "1 green chilli, coriander, pinch of ajwain, haldi, salt",
-        "4–5 sprays olive oil", "2 tbsp green chutney (coriander + mint + lemon, no coconut)", "15 g whey (½ scoop) in 150 ml toned milk"],
+        "4–5 sprays olive oil", "2 tbsp green chutney (coriander + mint + lemon, no coconut)", `15 g ${WHEY} (½ level scoop) in 150 ml toned milk`],
       steps: ["Mix besan with ~90 ml water into a pouring batter; add onion, tomato, chilli, coriander, ajwain, haldi, salt.",
         "Spray a hot tawa, make 2 thin chillas, 2 min each side.", "Fill with grated paneer and chutney, fold.", "Serve with the whey-milk shake."] },
     { name: "Moong dal chilla + whey", kcal: 435, p: 41,
       items: ["60 g Tata Sampann yellow moong dal (dry), soaked 4 h or overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", "4–5 sprays olive oil",
-        "100 g Amul Masti dahi", "30 g whey (1 scoop) in 250 ml water"],
+        "100 g Amul Masti dahi", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
       steps: ["Grind the soaked dal with ginger, chilli and ~60 ml water into a thick batter; add jeera and salt.",
         "Spray a hot tawa, make 2 chillas, 2 min each side.", "Serve with dahi. Drink the whey shake with it."] },
     { name: "Paneer poha + whey", kcal: 550, p: 51,
       items: ["50 g thick poha (dry)", `75 g ${PANEER}, cubed`, "50 g green peas (frozen is fine)", "40 g onion, chopped", "½ tsp mustard seeds, 5 curry leaves, ¼ tsp haldi, salt, ½ lemon",
-        "4–5 sprays olive oil", "30 g whey (1 scoop) in 250 ml water"],
+        "4–5 sprays olive oil", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
       steps: ["Rinse poha in a strainer, leave 5 min to soften.", "Spray a kadhai; mustard seeds + curry leaves, then onion 2 min, peas 2 min, haldi + salt.",
         "Add poha and paneer, mix on low for 2 min.", "Squeeze lemon on top. Drink the whey shake with it."] },
   ]},
@@ -252,8 +256,8 @@ const MEALS = [
       items: ["25 g Farmley roasted makhana (plain or pudina)", "1 pack Amul High Protein Buttermilk"],
       steps: ["If plain makhana: dry-roast 3 min on a tawa with 1 spray, add a pinch of salt and pepper."] },
     { name: "Whey shake + peanuts", kcal: 350, p: 36,
-      items: ["30 g whey (1 scoop)", "250 ml Amul Taaza toned milk, cold", "15 g roasted peanuts (a small handful)"],
-      steps: ["Shake whey in cold milk for 20 seconds. Peanuts on the side."] },
+      items: [`30 g ${WHEY} (1 level scoop)`, "250 ml Amul Taaza toned milk, cold", "15 g roasted peanuts (a small handful)"],
+      steps: ["Milk in the shaker first, then the whey; shake 20 seconds. Peanuts on the side."] },
     { name: "Paneer tikka bites", kcal: 265, p: 22,
       items: [`75 g ${PANEER}`, "Tikka marinade (30 g dahi + spices)", "2 tbsp mint chutney", "1 guava or apple"],
       steps: [...TIKKA_STEPS, "Serve with mint chutney and the fruit."] },
@@ -286,7 +290,7 @@ const MEALS = [
     { name: "Haldi milk", kcal: 145, p: 8, items: ["250 ml Amul Taaza toned milk", "¼ tsp haldi + pinch of black pepper"], steps: ["Boil the milk with haldi and pepper for 2 min. No sugar."] },
     { name: "Hung curd + cinnamon", kcal: 120, p: 10, items: ["200 g Amul Masti dahi", "Pinch of cinnamon"],
       steps: ["Tie the dahi in a muslin cloth, hang it in the fridge for 2 hours (leaves ~120 g thick curd).", "Top with cinnamon."] },
-    { name: "Slow protein shake", kcal: 175, p: 19, items: ["15 g whey (½ scoop)", "200 ml Amul Taaza toned milk"], steps: ["Shake together. Drink 30 min before bed."] },
+    { name: "Slow protein shake", kcal: 175, p: 19, items: [`15 g ${WHEY} (½ level scoop)`, "200 ml Amul Taaza toned milk"], steps: ["Shake together. Drink 30 min before bed."] },
   ]},
 ];
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
@@ -320,7 +324,7 @@ const GROCERY = [
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
 ];
 const MONTHLY_EXTRAS = [
-  { item: "Whey protein 1 kg (Avvatar, MuscleBlaze Raw or AS-IT-IS)", price: 2400, q: "whey protein 1kg" },
+  { item: "Avvatar Whey Protein 1 kg (cheaper: AS-IT-IS ATOM Whey; if it bloats you, the isolate version)", price: 2450, q: "avvatar whey protein" },
   { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },
   { item: "Skin basics refill (sunscreen, face wash)", price: 400, q: "sunscreen spf 50" },
 ];
