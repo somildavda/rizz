@@ -382,7 +382,7 @@ const GROCERY = [
   { item: "Whole green moong (for sprouts) 500 g", qty: 0.25, price: 90, q: "whole green moong", group: "Pantry" },
   { item: "Masoor + toor dal 500 g each", qty: 0.25, price: 160, q: "masoor dal", group: "Pantry" },
   { item: "Chia seeds 200 g", qty: 0.25, price: 140, q: "chia seeds", group: "Pantry" },
-  { item: "Flax seeds 200 g", qty: 0.2, price: 80, q: "flax seeds", group: "Pantry" },
+  { item: "Flax seeds 200 g (grind a week at a time)", qty: 0.25, price: 80, q: "flax seeds", group: "Pantry" },
   { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber, lauki, bhindi, methi, broccoli", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
 ];
@@ -526,13 +526,15 @@ const TESTOSTERONE = [
   ["Keep stress down", "Walks, sunlight and sleep keep cortisol in check."],
 ];
 const BLOOD_TEST = "Retest in mid-January 2027 (fasting 10–12 h): lipid profile (LDL, HDL, triglycerides), vitamin D, " +
-  "vitamin B12, HbA1c and TSH. Take the October 2026 report along to compare.";
+  "vitamin B12, ferritin, fasting insulin, HbA1c, TSH, and kidney markers (BUN, creatinine). Tell the doctor you take " +
+  "creatine 5 g a day: it can raise creatinine without any kidney problem. Take the October 2026 report along to compare.";
 // Blood report, Oct 2026, and what the plan does about each result.
 const BLOOD = { ldl: 162, tg: 191, hdl: 49, vitD: 11.5, b12: 201, date: "Oct 2026" };
 const HEALTH = [
   ["LDL 162 and triglycerides 191 (high), HDL 49", "Skimmed milk, olive-oil spray, daily flax, walnuts and isabgol for soluble fiber, no fried food or sweets, 10k steps. Losing fat lowers triglycerides fastest."],
   ["Vitamin D 11.5 (deficient)", "Take D3 exactly as prescribed, plus 15 min of morning sun on the arms."],
   ["Vitamin B12 201 (low-normal)", "Common for vegetarians: daily dahi and milk; ask the doctor whether to add a B12 supplement."],
+  ["BUN / kidney markers", "Drink 3.5 L water a day, keep protein at the plan's level (not more), and tell the doctor about creatine before the retest."],
   ["Right knee ACL sprain", "Physio's 4 exercises every day, Cartigen as prescribed, knee-safe gym plan. Ortho follow-up 9 Nov 2026."],
 ];
 
