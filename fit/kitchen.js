@@ -19,8 +19,8 @@ async function loadSwaps() {
     if (res.ok) { SWAPS_BY_DATE = await res.json(); lastLoad = new Date(); render(); }
   } catch {}
 }
-// Gym days: Mon, Wed, Fri (Beginner Full Body). Other days the first meal is plain "Breakfast".
-const isGymDay = (k) => [1, 3, 5].includes(new Date(k).getDay());
+// Gym days: Mon–Fri (Milkha Athlete). Sat and Sun the first meal is plain "Breakfast".
+const isGymDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
   new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 

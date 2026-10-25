@@ -11,31 +11,31 @@ const PROFILE_DEFAULT = {
   gym: "Gold's Gym, Kandivali West", knee: "Right knee ACL sprain (ortho 24 Oct 2026, follow-up 9 Nov 2026): no stairs, squats, lunges, kneeling, jumping, running or cross-legged sitting",
 };
 const START_DATE = "2026-10-21";
-const GYM_TIME = "8:30 am";
+const GYM_TIME = "8:30 am"; // back by 9:30, so ~45 min in the gym
 
 // Maintenance is ~2,850 kcal. 2–4 abs usually show at ~12–14% body fat, which for this
 // starting point is ~79 kg — about 28 weeks at a sustainable 0.5–0.8 kg/week.
 const PHASES = [
   { name: "Foundation", start: "2026-10-21", end: "2026-11-17", fromKg: 94.5, toKg: 91.5,
-    kcal: 2200, protein: 145, carbs: 230, fat: 60, steps: 8000,
+    kcal: 2050, protein: 145, carbs: 195, fat: 60, steps: 8000,
     focus: "Learn every exercise with light weights and build the daily habits. The first 1–2 kg is partly water.",
     food: "Follow the meal plan as written." },
   { name: "Fat loss I", start: "2026-11-18", end: "2027-01-12", fromKg: 91.5, toKg: 86.5,
-    kcal: 2100, protein: 150, carbs: 210, fat: 60, steps: 10000,
+    kcal: 2000, protein: 150, carbs: 175, fat: 60, steps: 10000,
     focus: "Add weight whenever you hit the top of the rep range. Harder Thursday intervals. Start walk-run.",
     food: "Night slot: dahi or hung curd only. One planned treat meal a week, Christmas and New Year included." },
   { name: "Fat loss II", start: "2027-01-13", end: "2027-03-09", fromKg: 86.5, toKg: 82.5,
-    kcal: 2000, protein: 155, carbs: 190, fat: 55, steps: 11000,
+    kcal: 1950, protein: 155, carbs: 180, fat: 55, steps: 11000,
     focus: "Chest and V-taper look starts to show. Keep strength up. First week is a diet break at ~2,600 kcal to reset.",
     food: "Dinner: swap rice for extra sabzi. Treat meal every 2 weeks." },
   { name: "Abs reveal", start: "2027-03-10", end: "2027-05-04", fromKg: 82.5, toKg: 79,
-    kcal: 1950, protein: 160, carbs: 175, fat: 55, steps: 12000,
+    kcal: 1900, protein: 160, carbs: 160, fat: 55, steps: 12000,
     focus: "Target ~12–14% body fat: upper 2 abs first, then 4. Ab training 3× a week, low salt before photos.",
     food: "No treat meals. Pre-gym snack only on leg and conditioning days." },
-  { name: "V-taper build", start: "2027-05-05", end: "2027-08-31", fromKg: 79, toKg: 80,
-    kcal: 2500, protein: 150, carbs: 300, fat: 65, steps: 9000,
-    focus: "Slow lean gain: more shoulder, lat and upper-chest volume to widen the V while staying lean.",
-    food: "Add 1 roti at lunch and dinner and a second whey shake." },
+  { name: "Stay lean", start: "2027-05-05", end: "2027-08-31", fromKg: 79, toKg: 79,
+    kcal: 2400, protein: 150, carbs: 260, fat: 65, steps: 10000,
+    focus: "Hold ~12% body fat at the same weight: lean and athletic like Milkha, not bulky. Moderate weights for 10–15 reps, conditioning twice a week.",
+    food: "Add 1 phulka at lunch and dinner. Keep salt and late dinners low so you don't look puffy." },
 ];
 const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% of the weight
 const DAILY = { waterL: 4, sleepH: 7.5 }; // 4 L: BUN/creatinine ratio was high (Oct 2026)
@@ -44,49 +44,124 @@ const DAILY = { waterL: 4, sleepH: 7.5 }; // 4 L: BUN/creatinine ratio was high 
 const ADJUST = { gymDay: 100, restDay: -150, skippedGym: -250, skippedWalk: -150 };
 
 // Exercise: [name, sets, reps, note]. Beginner starting weights live in START_WEIGHTS.
-// One program: Mon/Wed/Fri gym, Tue/Thu steps, Sat walk, Sun rest (gym closed).
-const FULL_BODY = [
-  { day: "Day 1", title: "Full body A", ex: [
-    ["Bike warm-up", 1, "6 min", ""], ["Machine chest press", 3, "8–12", ""], ["Lat pulldown", 3, "8–12", ""],
-    ["Hip thrust", 3, "10–12", ""], ["Seated dumbbell shoulder press", 2, "10–12", ""], ["Plank", 3, "30–45 s", ""],
-    ["Incline walk finisher", 1, "12 min", ""] ]},
-  { day: "Day 2", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
-  { day: "Day 3", title: "Full body B", ex: [
-    ["Rowing machine warm-up", 1, "6 min", ""], ["Dumbbell Romanian deadlift", 3, "8–10", ""], ["Incline dumbbell press", 3, "8–12", ""],
-    ["Seated cable row", 3, "10–12", ""], ["Cable lateral raise", 3, "12–15", ""], ["Dead bug", 3, "10/side", ""],
-    ["Bike intervals", 6, "30 s hard / 90 s easy", ""] ]},
-  { day: "Day 4", title: "Steps day", ex: [["Walk", 1, "10k steps", ""], ["Mobility routine", 1, "10 min", ""]] },
-  { day: "Day 5", title: "Full body C", ex: [
-    ["Bike warm-up", 1, "6 min", ""], ["Leg press (shallow range)", 3, "12–15", ""], ["Assisted pull-up", 3, "8–10", ""],
-    ["Dumbbell bench press", 3, "8–12", ""], ["Face pull", 3, "15", ""], ["Dumbbell curl", 2, "12", ""],
-    ["Farmer's carry", 3, "40 m", ""] ]},
+// Milkha Athlete: 5 gym days (Mon–Fri, ~40–45 min in the gym for an 8:30–9:30 slot incl. travel),
+// Sat flat walk, Sun rest. Built knee-safe for the right-knee ACL sprain: no squats, lunges,
+// kneeling, jumping, running, single-leg standing, or getting down onto the floor.
+// Two 4-week blocks (A → B → A …). Warm-up and cool-down are added by the app.
+const ATHLETE_WEEK = [
+  { day: "Day 1", title: "Push · chest, shoulders, triceps", ex: [
+    ["Treadmill incline walk warm-up", 1, "5 min", ""],
+    ["Machine chest press", 3, "10–12", ""],
+    ["Incline dumbbell press", 3, "10–12", "Upper chest: key for chest shape"],
+    ["Seated dumbbell shoulder press", 3, "10–12", "Back supported"],
+    ["Cable lateral raise", 3, "12–15", "Side delts = width of the V"],
+    ["Cable triceps pushdown", 3, "12–15", ""],
+  ]},
+  { day: "Day 2", title: "Legs (knee-safe) + core", ex: [
+    ["Stationary bike warm-up", 1, "5 min", ""],
+    ["Hip thrust", 3, "10–12", "Feet flat, no knee strain"],
+    ["Dumbbell Romanian deadlift", 3, "10–12", "Hinge at the hips, soft knees"],
+    ["Lying leg curl", 3, "12–15", "Light, slow, pain-free range only"],
+    ["Hip abduction machine", 3, "15", "Strong hips protect the knee"],
+    ["Dead bug (on a flat bench)", 3, "10/side", "No getting down to the floor"],
+  ]},
+  { day: "Day 3", title: "Pull · back, biceps", ex: [
+    ["Rowing machine warm-up", 1, "5 min", ""],
+    ["Lat pulldown", 3, "10–12", "Builds the V-taper"],
+    ["Seated cable row", 3, "10–12", "Feet on the platform, knees soft"],
+    ["Chest-supported dumbbell row", 3, "10–12", "Lie on an incline bench, feet on the floor, no kneeling"],
+    ["Face pull", 3, "15", "Posture + rear delts"],
+    ["Dumbbell curl", 3, "10–12", "Seated"],
+  ]},
+  { day: "Day 4", title: "Athlete conditioning (knee-safe)", ex: [
+    ["Bike or elliptical warm-up", 1, "5 min", ""],
+    ["Bike intervals", 6, "1 min hard / 1 min easy", ""],
+    ["Kettlebell swing", 3, "15", ""],
+    ["Farmer's carry", 3, "30 m", "Light weight, flat floor; stop if the knee hurts"],
+    ["Pallof press", 3, "10/side", "Feet hip-width, no twisting at the knee"],
+    ["Incline side plank (forearm on a bench)", 3, "20–30 s/side", ""],
+  ]},
+  { day: "Day 5", title: "Upper · V-taper + arms", ex: [
+    ["Treadmill incline walk warm-up", 1, "5 min", ""],
+    ["Lat pulldown (close grip)", 3, "8–10", "Replaces assisted pull-ups (their knee pad means kneeling)"],
+    ["Dumbbell bench press", 3, "10–12", ""],
+    ["Arnold press", 3, "10–12", "Seated"],
+    ["Rear delt fly machine", 3, "15", ""],
+    ["Hammer curl + overhead triceps", 3, "12 each", "Seated superset"],
+  ]},
   { day: "Day 6", title: "Walk day", ex: [["This week's walk or run", 1, "see Run tab", ""], ["Mobility routine", 1, "15 min", ""]] },
   { day: "Day 7", title: "Sunday rest · gym closed", ex: [["Rest, meal prep, grocery order", 1, "—", ""]] },
 ];
+const ATHLETE_WEEK_B = [
+  { day: "Day 1", title: "Push B · chest, shoulders, triceps", ex: [
+    ["Treadmill incline walk warm-up", 1, "5 min", ""],
+    ["Dumbbell bench press", 3, "8–10", ""],
+    ["Incline machine press", 3, "10–12", "Upper chest"],
+    ["Machine shoulder press", 3, "10–12", ""],
+    ["Dumbbell lateral raise", 3, "12–15", "Seated"],
+    ["Overhead cable triceps extension", 3, "12–15", "Seated or standing on both feet"],
+  ]},
+  { day: "Day 2", title: "Legs B (knee-safe) + core", ex: [
+    ["Stationary bike warm-up", 1, "5 min", ""],
+    ["Cable pull-through", 3, "12–15", "Hips back, knees soft"],
+    ["45° back extension", 3, "12", "Legs locked under the pad, knees straight"],
+    ["Seated leg curl", 3, "12", "Light, slow, pain-free range only"],
+    ["Hip adduction machine", 3, "15", "Inner thighs, protects the knee"],
+    ["Pallof press", 3, "10/side", "Core"],
+  ]},
+  { day: "Day 3", title: "Pull B · back, biceps", ex: [
+    ["Rowing machine warm-up", 1, "5 min", ""],
+    ["Lat pulldown", 3, "8–10", "Wide grip"],
+    ["Single-arm cable row", 3, "10/side", "Seated; replaces the one-knee-on-bench dumbbell row"],
+    ["Wide-grip seated cable row", 3, "12", "Upper back"],
+    ["Straight-arm cable pulldown", 3, "12–15", "Lats"],
+    ["EZ-bar curl", 3, "10–12", ""],
+  ]},
+  { day: "Day 4", title: "Athlete conditioning B (knee-safe)", ex: [
+    ["Rowing machine warm-up", 1, "5 min", ""],
+    ["Rowing intervals", 6, "1 min hard / 1 min easy", ""],
+    ["Battle ropes, seated on a bench", 6, "20 s on / 40 s off", "Seated keeps the knees out of it"],
+    ["Farmer's carry", 3, "30 m", "Light weight, flat floor; stop if the knee hurts"],
+    ["Incline plank (hands on a bench)", 3, "30–40 s", ""],
+  ]},
+  { day: "Day 5", title: "Upper B · V-taper + arms", ex: [
+    ["Treadmill incline walk warm-up", 1, "5 min", ""],
+    ["Lat pulldown (close grip)", 3, "10–12", ""],
+    ["Machine chest press", 3, "10–12", ""],
+    ["Seated dumbbell shoulder press", 3, "10–12", ""],
+    ["Cable lateral raise", 3, "15", ""],
+    ["Incline dumbbell curl + rope pushdown", 3, "12 each", "Superset"],
+  ]},
+  ATHLETE_WEEK[5], ATHLETE_WEEK[6],
+];
 
 const PROGRAMS = [
-  { id: "fullbody", name: "Beginner Full Body", days: 3, week: FULL_BODY,
-    by: "Classic beginner full-body programming, adapted for the right-knee ACL sprain",
-    why: "3 gym days plus walking days." },
+  { id: "athlete", name: "Milkha Athlete", days: 5, week: ATHLETE_WEEK, blocks: [ATHLETE_WEEK, ATHLETE_WEEK_B],
+    by: "Inspired by Samir Jaura's athlete-style training, made knee-safe for the right-knee ACL sprain",
+    why: "5 gym days (Mon–Fri, ~45 min), Saturday walk, Sunday rest." },
 ];
-let WEEK = FULL_BODY;
+let WEEK = ATHLETE_WEEK;
 
 // Right-knee ACL sprain: while rehab is on, every exercise list goes through kneeSafe().
 const KNEE = {
-  side: "Right", rehab: true, followUp: "2026-11-09",
-  warn: "Right knee ACL sprain: no stairs, squats, lunges, kneeling, jumping or running. Pain or swelling means stop and use “Swap”. Ortho follow-up 9 Nov.",
+  side: "Right", rehab: true, followUp: "2026-11-09", // the app turns rehab off when Settings says the ortho cleared you
+  warn: "Right knee ACL sprain: no stairs, squats, lunges, kneeling, jumping, running or standing on the right leg alone. Pain or swelling means stop and use “Swap”. Ortho follow-up 9 Nov.",
+  redFlags: ["The knee swells up or feels hot", "It gives way, buckles or locks", "Pain above 3/10 the next morning", "Pain or swelling in the calf"],
 };
-const FLAT_WARMUP = ["Flat treadmill walk warm-up", 1, "6 min", "Incline 0–1, easy pace"];
+const FLAT_WARMUP = ["Flat treadmill walk warm-up", 1, "5 min", "Incline 0–1, easy pace"];
 const KNEE_REHAB = {
   "Bike warm-up": FLAT_WARMUP, "Stationary bike warm-up": FLAT_WARMUP, "Rowing machine warm-up": FLAT_WARMUP,
   "Bike or elliptical warm-up": FLAT_WARMUP, "Treadmill incline walk warm-up": FLAT_WARMUP,
   "Incline walk finisher": ["Flat walk finisher", 1, "10 min", "Flat treadmill (incline 0–1), brisk"],
   "Bike intervals": ["Brisk flat walk intervals", 6, "1 min brisk / 1 min easy", "Flat treadmill, no running"],
   "Rowing intervals": ["Brisk flat walk intervals", 6, "1 min brisk / 1 min easy", "Flat treadmill, no running"],
+  "Lying leg curl": ["Lying leg curl", 3, "12–15", "Very light (half your normal weight), slow, pain-free range only"],
+  "Seated leg curl": ["Seated leg curl", 3, "12", "Very light (half your normal weight), slow, pain-free range only"],
   "Leg press (shallow range)": ["Weighted glute bridge", 3, "12–15", "Dumbbell on the hips, feet flat, squeeze glutes"],
   "Kettlebell swing": ["Cable pull-through", 3, "12–15", "Hips back, knees soft"],
   "Ab wheel from knees": ["Dead bug", 3, "10/side", "Lying on your back, no kneeling"],
-  "This week's walk or run": ["Flat walk", 1, "30–40 min", "Flat ground only: no stairs, slopes or running"],
+  "This week's walk or run": ["Flat walk", 1, "30–40 min, as comfortable", "Flat ground only: no stairs, slopes or running"],
+  "Mobility routine": ["Lying mobility routine", 1, "10 min", "On a bed or mat already at floor level: no kneeling to get down"],
 };
 function kneeSafe(list) {
   return KNEE.rehab ? list.map((e) => (KNEE_REHAB[e[0]] ? [...KNEE_REHAB[e[0]]] : e)) : list;
@@ -106,17 +181,38 @@ const START_WEIGHTS = {
   "Incline dumbbell press": "10–12.5 kg each hand",
   "Seated dumbbell shoulder press": "8–10 kg each hand",
   "Cable lateral raise": "2.5–5 kg",
+  "Cable triceps pushdown": "15–20 kg",
   "Hip thrust": "20 kg bar (empty) → add 10 kg/week",
   "Weighted glute bridge": "10–15 kg dumbbell on the hips",
   "Dumbbell Romanian deadlift": "12.5–15 kg each hand",
+  "Lying leg curl": "10 kg (light during rehab)",
+  "Seated leg curl": "10–15 kg (light during rehab)",
+  "Hip abduction machine": "30–40 kg",
+  "Hip adduction machine": "30–40 kg",
   "Lat pulldown": "30–35 kg",
+  "Lat pulldown (close grip)": "30 kg",
   "Seated cable row": "30–35 kg",
+  "Chest-supported dumbbell row": "12.5–15 kg each hand",
+  "Single-arm cable row": "15–20 kg",
+  "Wide-grip seated cable row": "30 kg",
+  "Straight-arm cable pulldown": "15–20 kg",
   "Face pull": "10–15 kg (rope)",
   "Dumbbell curl": "7.5–10 kg each hand",
-  "Farmer's carry": "15–20 kg each hand",
-  "Assisted pull-up": "40–50 kg assistance (more = easier)",
+  "EZ-bar curl": "15 kg (bar + plates)",
+  "Hammer curl + overhead triceps": "7.5–10 kg dumbbells",
+  "Incline dumbbell curl + rope pushdown": "7.5 kg dumbbells / 15 kg stack",
+  "Kettlebell swing": "12–16 kg kettlebell",
+  "Cable pull-through": "15–20 kg",
+  "Farmer's carry": "10–12.5 kg each hand (light during rehab)",
+  "Pallof press": "7.5–10 kg",
   "Dumbbell bench press": "15–17.5 kg each hand",
-}
+  "Incline machine press": "20 kg stack",
+  "Machine shoulder press": "15–20 kg",
+  "Dumbbell lateral raise": "4–5 kg each hand",
+  "Overhead cable triceps extension": "10–15 kg",
+  "Arnold press": "7.5–10 kg each hand",
+  "Rear delt fly machine": "15–20 kg",
+};
 
 // Meals: every ingredient as a RAW / DRY weight with the exact product, plus short steps
 // for the cook. Vegetarian, home-cooked, low-bloat: no tofu, rajma, chole or kabuli chana.
@@ -131,6 +227,8 @@ const COOK_RULES = [
   "Oil = Tata Simply Better olive oil spray. 1 spray ≈ 1 second. No ghee, butter or extra oil.",
   "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka, no ghee on top.",
   "1 katori = 150 ml. No sugar in anything. Normal salt.",
+  "Squeeze lemon on dal, palak and sprouts just before eating: vitamin C helps the body absorb their iron.",
+  "No chai or coffee within 1 hour of a meal (it blocks iron absorption).",
   "For cholesterol: nothing fried, no sweets, maida, cream, cheese, butter, ghee or coconut. Brown rice, not white.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
   "Home-made paneer (optional, instead of the pack): boil 1 L Slim n Trim milk, turn off the heat, wait 1 min, stir in 2 tbsp lemon juice. Strain in muslin, rinse, press under a weight 30 min. Gives ~120 g soft, low-fat paneer with ~25 g protein: best for bhurji, stuffing and chilla, not tikka cubes.",
@@ -153,10 +251,10 @@ const MEALS = [
       steps: ["Mix besan with ~90 ml water into a pouring batter; add onion, tomato, chilli, coriander, ajwain, haldi, salt.",
         "Spray a hot tawa, make 2 thin chillas, 2 min each side.", "Fill with grated paneer and chutney, fold.", "Serve with the whey-milk shake."] },
     { name: "Moong dal chilla + whey", kcal: 410, p: 41,
-      items: ["60 g Tata Sampann yellow moong dal (dry), soaked 4 h or overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", "4–5 sprays olive oil",
+      items: ["½ lemon (squeeze on top)", "60 g Tata Sampann yellow moong dal (dry), soaked 4 h or overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", "4–5 sprays olive oil",
         "100 g low-fat dahi (home-set from Slim n Trim milk)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
       steps: ["Grind the soaked dal with ginger, chilli and ~60 ml water into a thick batter; add jeera and salt.",
-        "Spray a hot tawa, make 2 chillas, 2 min each side.", "Serve with dahi. Drink the whey shake with it."] },
+        "Spray a hot tawa, make 2 chillas, 2 min each side.", "Serve with dahi. Drink the whey shake with it.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Paneer poha + whey", kcal: 550, p: 51,
       items: ["50 g thick poha (dry)", `75 g ${PANEER}, cubed`, "50 g green peas (frozen is fine)", "40 g onion, chopped", "½ tsp mustard seeds, 5 curry leaves, ¼ tsp haldi, salt, ½ lemon",
         "4–5 sprays olive oil", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
@@ -165,28 +263,28 @@ const MEALS = [
   ]},
   { time: "1:30", label: "Lunch", options: [
     { name: "Dal-soya thali", kcal: 570, p: 42,
-      items: ["60 g Milld High Protein Atta → 2 phulka", "40 g Tata Sampann yellow moong dal (dry)", "40 g Fortune mini soya chunks (dry)",
+      items: ["½ lemon (squeeze on top)", "60 g Milld High Protein Atta → 2 phulka", "40 g Tata Sampann yellow moong dal (dry)", "40 g Fortune mini soya chunks (dry)",
         "50 g onion + 50 g tomato, 1 tsp ginger-garlic paste, ½ tsp each chilli / dhania / garam masala", "4–5 sprays olive oil",
         "Salad: 100 g cucumber + 50 g carrot", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
       steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles. Jeera tadka with 2 sprays.",
         "Soya: boil 5 min in salted water, squeeze out all water.", "Spray kadhai, cook onion → ginger-garlic → tomato + spices into masala, add soya, cook 5 min.",
-        "Make 2 phulkas, no ghee."] },
+        "Make 2 phulkas, no ghee.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Paneer bhurji thali", kcal: 505, p: 43,
       items: ["60 g Milld High Protein Atta → 2 phulka", `130 g home-made paneer (from Slim n Trim milk), crumbled`, "50 g onion + 50 g tomato + 50 g capsicum, chopped",
         "¼ tsp haldi, ½ tsp chilli, ½ tsp garam masala, salt", "30 g Tata Sampann yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
       steps: ["Spray kadhai, onion 2 min, tomato + capsicum 3 min, add spices.", "Add crumbled paneer, cook 2 min only.",
         "Dal: pressure-cook with 200 ml water, haldi, salt, 3 whistles.", "Make 2 phulkas, no ghee."] },
     { name: "Moong khichdi + paneer tikka", kcal: 555, p: 39,
-      items: ["40 g brown rice (dry, soaked 30 min) + 40 g Tata Sampann yellow moong dal (dry)", "100 g mixed veg (carrot, beans, peas)", "½ tsp jeera, ¼ tsp haldi, salt",
+      items: ["½ lemon (squeeze on top)", "40 g brown rice (dry, soaked 30 min) + 40 g Tata Sampann yellow moong dal (dry)", "100 g mixed veg (carrot, beans, peas)", "½ tsp jeera, ¼ tsp haldi, salt",
         "4–5 sprays olive oil", `75 g ${PANEER} for tikka (see tikka steps)`, "150 g low-fat dahi (home-set from Slim n Trim milk)"],
       steps: ["Wash brown rice and dal; pressure-cook with veg, haldi, salt and 500 ml water, 3 whistles.", "Jeera tadka with the sprays, pour over.",
-        ...TIKKA_STEPS, "Serve with dahi."] },
+        ...TIKKA_STEPS, "Serve with dahi.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Palak paneer + rice", kcal: 490, p: 42,
-      items: [`130 g home-made paneer (from Slim n Trim milk), cubed`, "200 g palak (1 small bunch)", "40 g onion + 40 g tomato + 2 garlic cloves + 1 green chilli", "½ tsp garam masala, salt",
+      items: ["½ lemon (squeeze on top)", `130 g home-made paneer (from Slim n Trim milk), cubed`, "200 g palak (1 small bunch)", "40 g onion + 40 g tomato + 2 garlic cloves + 1 green chilli", "½ tsp garam masala, salt",
         "60 g brown rice (dry, soaked 30 min)", "4–5 sprays olive oil", "Raita: 100 g low-fat dahi (home-set from Slim n Trim milk) + 50 g cucumber + roasted jeera powder + salt"],
       steps: ["Blanch palak 2 min, dip in cold water, blend smooth.", "Spray kadhai, onion + garlic + chilli 2 min, tomato 2 min, add palak purée, salt, garam masala, cook 3 min.",
         "Add paneer, 2 min only.", "Brown rice: 60 g (soaked) in 180 ml water, 20 min, cook covered.",
-        "Raita: grate cucumber and squeeze out water, whisk into dahi with a pinch of roasted jeera powder and salt."] },
+        "Raita: grate cucumber and squeeze out water, whisk into dahi with a pinch of roasted jeera powder and salt.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   ]},
   { time: "5:00", label: "Snack", options: [
     { name: "Makhana + protein buttermilk", kcal: 190, p: 17,
@@ -214,10 +312,10 @@ const MEALS = [
         "4–5 sprays olive oil", "60 g Milld High Protein Atta → 2 phulka"],
       steps: ["Spray kadhai on high heat, garlic 30 seconds.", "Add veg, toss 4 min (keep crunchy).", "Add paneer, soy sauce and pepper, 2 min.", "Make 2 phulkas, no ghee."] },
     { name: "Dal + soya-matar", kcal: 540, p: 36,
-      items: ["40 g yellow moong or masoor dal (dry)", "30 g Fortune mini soya chunks (dry) + 50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, spices",
+      items: ["½ lemon (squeeze on top)", "40 g yellow moong or masoor dal (dry)", "30 g Fortune mini soya chunks (dry) + 50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, spices",
         "4–5 sprays olive oil", "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber"],
       steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles; jeera tadka with 2 sprays.", "Soya: boil 5 min, squeeze dry.",
-        "Spray kadhai, make onion-tomato masala, add soya + peas, cook 5 min.", "Make 2 phulkas, no ghee."] },
+        "Spray kadhai, make onion-tomato masala, add soya + peas, cook 5 min.", "Make 2 phulkas, no ghee.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Paneer tikka bowl", kcal: 480, p: 35,
       items: [`100 g ${PANEER}`, "Tikka marinade (30 g dahi + spices)", "50 g brown rice (dry, soaked 30 min)", "150 g veg: capsicum, onion, beans", "2–3 sprays olive oil"],
       steps: [...TIKKA_STEPS, "Brown rice: 50 g (soaked) in 150 ml water, 20 min, cook covered.", "Sauté the veg with the sprays 4 min, salt and pepper.", "Serve paneer and veg on the rice."] },
@@ -235,10 +333,10 @@ const MEALS = [
 // only after 1–1.5 weeks and no full day repeats within 30 days.
 MEALS[0].options.push(
   { name: "Daliya upma + whey", kcal: 465, p: 43, fib: 7,
-    items: ["40 g daliya (broken wheat, dry)", "80 g veg: carrot, beans, peas, onion", `50 g ${PANEER}, cubed`, "½ tsp mustard seeds, curry leaves, salt",
+    items: ["½ lemon (squeeze on top)", "40 g daliya (broken wheat, dry)", "80 g veg: carrot, beans, peas, onion", `50 g ${PANEER}, cubed`, "½ tsp mustard seeds, curry leaves, salt",
       "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
     steps: ["Dry-roast daliya 2 min.", "Spray a cooker; mustard seeds + curry leaves, then veg 2 min.", "Add daliya, salt and 160 ml water; 2 whistles.",
-      "Stir in paneer for the last minute. Dahi on the side; drink the whey shake."] },
+      "Stir in paneer for the last minute. Dahi on the side; drink the whey shake.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Ragi-oats porridge", kcal: 435, p: 39, fib: 9,
     items: ["25 g ragi flour", "25 g Quaker rolled oats (dry)", "250 ml Amul Slim n Trim skimmed milk", `30 g ${WHEY} (1 level scoop)`, "10 g chia seeds (1 tbsp)", "Pinch of cardamom"],
     steps: ["Whisk ragi into the cold milk so it doesn't lump.", "Add oats, cook on low 5 min, stirring.", "Off the heat, wait 1 min, stir in whey and chia.", "Cardamom on top. No sugar."] },
@@ -258,9 +356,9 @@ MEALS[0].options.push(
 );
 MEALS[1].options.push(
   { name: "Masoor dal + bhindi thali", kcal: 590, p: 38, fib: 15,
-    items: ["40 g masoor dal (dry)", "150 g bhindi, sliced", `50 g ${PANEER}, cubed into the dal`, "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+    items: ["½ lemon (squeeze on top)", "40 g masoor dal (dry)", "150 g bhindi, sliced", `50 g ${PANEER}, cubed into the dal`, "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
     steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 2 whistles; add paneer, simmer 2 min.",
-      "Bhindi: wipe dry before cutting; spray kadhai, cook uncovered 8 min with salt, haldi, amchur.", "2 phulkas, no ghee. Dahi on the side."] },
+      "Bhindi: wipe dry before cutting; spray kadhai, cook uncovered 8 min with salt, haldi, amchur.", "2 phulkas, no ghee. Dahi on the side.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Soya keema + roti", kcal: 505, p: 36, fib: 15,
     items: ["40 g Fortune mini soya chunks (dry), pulsed into keema", "50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, garam masala",
       "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
@@ -272,14 +370,14 @@ MEALS[1].options.push(
     steps: ["Make paneer tikka (marinate 15 min, tawa with 3 sprays).", "Toss the sliced veg on the tawa 2 min.",
       "Spread chutney on each roti, fill with paneer and veg, roll tightly.", "Dahi on the side."] },
   { name: "Veg daliya khichdi + raita", kcal: 560, p: 41, fib: 12,
-    items: ["40 g daliya + 30 g yellow moong dal (dry)", "150 g veg: carrot, beans, peas, lauki", `75 g ${PANEER}, cubed`, "½ tsp jeera, haldi, salt, 4–5 sprays olive oil",
+    items: ["½ lemon (squeeze on top)", "40 g daliya + 30 g yellow moong dal (dry)", "150 g veg: carrot, beans, peas, lauki", `75 g ${PANEER}, cubed`, "½ tsp jeera, haldi, salt, 4–5 sprays olive oil",
       "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g grated cucumber + roasted jeera + salt"],
     steps: ["Wash daliya and dal; pressure-cook with veg, haldi, salt and 450 ml water, 3 whistles.", "Jeera tadka with the sprays; stir in paneer, 2 min.",
-      "Raita: squeeze the cucumber dry, whisk into dahi with jeera and salt."] },
+      "Raita: squeeze the cucumber dry, whisk into dahi with jeera and salt.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Toor dal + lauki + rice", kcal: 595, p: 36, fib: 11,
-    items: ["40 g toor dal (dry)", "200 g lauki, cubed", "50 g brown rice (dry, soaked 30 min)", `75 g ${PANEER} tikka`, "Salad: 100 g cucumber + carrot", "4–5 sprays olive oil"],
+    items: ["½ lemon (squeeze on top)", "40 g toor dal (dry)", "200 g lauki, cubed", "50 g brown rice (dry, soaked 30 min)", `75 g ${PANEER} tikka`, "Salad: 100 g cucumber + carrot", "4–5 sprays olive oil"],
     steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles; jeera tadka.", "Lauki: spray kadhai, jeera, lauki + salt + haldi, cover 8 min.",
-      "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", "Paneer tikka: see tikka steps."] },
+      "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", "Paneer tikka: see tikka steps.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Methi paneer + jowar roti", kcal: 520, p: 44, fib: 11,
     items: ["50 g jowar flour → 2 rotis", `130 g home-made paneer (from Slim n Trim milk), crumbled`, "50 g fresh methi leaves, chopped", "50 g onion + 50 g tomato",
       "30 g yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
@@ -302,8 +400,8 @@ MEALS[3].options.push(
     items: [`100 g ${PANEER}`, "200 g veg: broccoli, beans, carrot", "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + mint", "3–4 sprays olive oil, pepper, garlic"],
     steps: ["Slice paneer thick, sprinkle salt, pepper, chilli; tawa with 2 sprays, 2 min each side.", "Toss veg with garlic and 2 sprays, 5 min (keep crunchy).", "1 phulka; mint raita on the side."] },
   { name: "Moong cheela + palak raita", kcal: 415, p: 36, fib: 8,
-    items: ["60 g yellow moong dal (dry), soaked 4 h", `65 g home-made paneer (from Slim n Trim milk), grated, as stuffing`, "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g blanched palak, chopped", "Salad: 100 g cucumber", "4 sprays olive oil"],
-    steps: ["Grind dal with ginger, chilli, salt into a thick batter.", "Spray tawa, make 2 cheelas, stuff with paneer.", "Raita: blanch palak 1 min, chop, mix into dahi with salt and jeera."] },
+    items: ["½ lemon (squeeze on top)", "60 g yellow moong dal (dry), soaked 4 h", `65 g home-made paneer (from Slim n Trim milk), grated, as stuffing`, "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g blanched palak, chopped", "Salad: 100 g cucumber", "4 sprays olive oil"],
+    steps: ["Grind dal with ginger, chilli, salt into a thick batter.", "Spray tawa, make 2 cheelas, stuff with paneer.", "Raita: blanch palak 1 min, chop, mix into dahi with salt and jeera.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Paneer-capsicum curry + rice", kcal: 550, p: 35, fib: 8,
     items: [`100 g ${PANEER}, cubed`, "100 g capsicum", "50 g onion + 50 g tomato gravy, ginger-garlic, spices", "50 g brown rice (dry, soaked 30 min)", "Salad: 100 g cucumber", "4–5 sprays olive oil"],
     steps: ["Spray kadhai, onion → ginger-garlic → tomato + spices into a gravy, add 100 ml water.", "Add capsicum 3 min, paneer 2 min.", "Brown rice: 50 g (soaked) in 150 ml water, 20 min."] },
@@ -311,11 +409,11 @@ MEALS[3].options.push(
     items: ["40 g masoor dal (dry)", "100 g veg: carrot, tomato, onion, garlic", `100 g ${PANEER} tikka`, "30 g Milld High Protein Atta → 1 phulka", "3 sprays olive oil"],
     steps: ["Pressure-cook dal and veg with 400 ml water, salt, haldi, 3 whistles; blend smooth, add pepper and lemon.", "Paneer tikka: see tikka steps.", "1 phulka."] },
   { name: "Soya-palak curry + roti", kcal: 465, p: 32, fib: 15,
-    items: ["30 g Fortune mini soya chunks (dry)", "150 g palak", "50 g onion + 50 g tomato, garlic, garam masala", "60 g Milld High Protein Atta → 2 phulka", "100 g low-fat dahi (home-set from Slim n Trim milk)", "4 sprays olive oil"],
-    steps: ["Boil soya 5 min, squeeze dry.", "Blanch palak 2 min, blend.", "Spray kadhai, onion-garlic-tomato masala, add palak purée and soya, 5 min.", "2 phulkas; dahi on the side."] },
+    items: ["½ lemon (squeeze on top)", "30 g Fortune mini soya chunks (dry)", "150 g palak", "50 g onion + 50 g tomato, garlic, garam masala", "60 g Milld High Protein Atta → 2 phulka", "100 g low-fat dahi (home-set from Slim n Trim milk)", "4 sprays olive oil"],
+    steps: ["Boil soya 5 min, squeeze dry.", "Blanch palak 2 min, blend.", "Spray kadhai, onion-garlic-tomato masala, add palak purée and soya, 5 min.", "2 phulkas; dahi on the side.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Lauki moong dal + paneer", kcal: 530, p: 31, fib: 12,
-    items: ["30 g yellow moong dal (dry)", "200 g lauki", `50 g ${PANEER}, cubed`, "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber + carrot", "3 sprays olive oil"],
-    steps: ["Pressure-cook dal + lauki with 300 ml water, haldi, salt, 3 whistles.", "Jeera tadka with sprays; add paneer, 2 min.", "2 phulkas."] },
+    items: ["½ lemon (squeeze on top)", "30 g yellow moong dal (dry)", "200 g lauki", `50 g ${PANEER}, cubed`, "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber + carrot", "3 sprays olive oil"],
+    steps: ["Pressure-cook dal + lauki with 300 ml water, haldi, salt, 3 whistles.", "Jeera tadka with sprays; add paneer, 2 min.", "2 phulkas.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Stuffed capsicum + raita", kcal: 385, p: 39, fib: 7,
     items: ["2 capsicums (~200 g)", `130 g home-made paneer (from Slim n Trim milk), crumbled, with onion + spices`, "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + cucumber", "3 sprays olive oil"],
     steps: ["Cut capsicum tops, remove seeds.", "Fill with paneer mixed with onion, salt, chilli, garam masala.",
@@ -417,10 +515,12 @@ const RUN_PLAN = [
   { weeks: [23, 99], name: "5K runner", session: "5 km easy on Saturday; a 5K time trial on the first Saturday of each month" },
 ];
 
+// Skill practice during knee rehab: no hanging from a bar (getting up/down is a jump-landing risk).
+const REHAB_SKILL = { name: "Push-ups and plank (rehab)", drills: ["Incline push-ups on a bench 3×10", "Wall push-ups 3×15", "Incline plank (hands on a bench) 3×30 s"] };
 // One calisthenics skill per month from day 1. Practise the drills at the end of 2 gym sessions a week.
 const SKILLS = [
   { name: "10 clean push-ups", test: "10 push-ups, chest to fist height, body straight", drills: ["Incline push-ups on a bench 3×10", "Wall push-ups 3×12", "Plank 3×30 s"] },
-  { name: "45 s dead hang + 5 negatives", test: "Hang 45 s, then 5 slow 5-second pull-up negatives", drills: ["Dead hang 3× max", "Scapular pull-ups 3×8", "Assisted-machine negatives (5 s down) 3×3"] },
+  { name: "45 s dead hang + 5 negatives", test: "Hang 45 s, then 5 slow 5-second pull-up negatives", drills: ["Dead hang 3× max", "Scapular pull-ups 3×8", "Lat pulldown slow negatives (5 s up) 3×6"] },
   { name: "First strict pull-up", test: "1 pull-up from dead hang, chin over bar", drills: ["Band or machine-assisted pull-ups 3×6", "Negatives 3×3", "Lat pulldown heavy 3×6"] },
   { name: "20 push-ups + 5 dips", test: "20 push-ups unbroken, then 5 parallel-bar dips", drills: ["Push-ups 4×max", "Bench dips 3×10", "Assisted dip machine 3×8"] },
   { name: "3 pull-ups + 10 hanging knee raises", test: "3 pull-ups, then 10 knee raises without swinging", drills: ["Pull-up singles 5×1", "Hanging knee raises 3×10", "Hollow hold 3×20 s"] },
@@ -485,7 +585,7 @@ const WARMUP_STEPS = [
   ["Arm circles", "10 forward + 10 back", "arm circles warm up"],
   ["Band pull-aparts (or arm swings)", "15", "band pull apart warm up"],
   ["Seated cat-cow (on a bench)", "10 slow", "seated cat cow stretch"],
-  ["Hip circles", "10 each way", "standing hip circles warm up"],
+  ["Side-lying clamshells", "12 each side", "side lying clamshell exercise"],
   ["Glute bridges", "15", "glute bridge exercise form"],
   ["Bodyweight good mornings", "10", "bodyweight good morning exercise"],
   ["Standing calf raises, holding a rack", "15", "standing calf raise bodyweight"],
@@ -493,15 +593,41 @@ const WARMUP_STEPS = [
 ];
 const COOLDOWN_STEPS = [
   ["Doorway chest stretch", "30 s", "doorway chest stretch"],
-  ["Lat stretch (hold a rack, sit back)", "30 s each side", "lat stretch"],
-  ["Standing hip flexor stretch (no kneeling)", "30 s each side", "standing hip flexor stretch"],
+  ["Seated lat stretch (on a bench, reach up and lean)", "30 s each side", "seated lat stretch"],
+  ["Lying hip flexor stretch: lie at the edge of a bench, LEFT leg hangs off", "30 s", "thomas stretch hip flexor"],
   ["Lying hamstring stretch", "30 s each side", "lying hamstring stretch"],
-  ["Standing quad stretch, LEFT leg only (skip the right)", "30 s", "standing quad stretch"],
+  ["Side-lying quad stretch, LEFT leg only (skip the right)", "30 s", "side lying quad stretch"],
   ["Lying slow breathing (instead of child's pose)", "60 s", "diaphragmatic breathing lying down"],
 ];
 
 // Built-in knee-safe swaps, so the app works without any AI key.
 const SWAPS = {
+  "Cable triceps pushdown": ["Overhead cable triceps extension 3 × 12", "Seated dumbbell triceps extension 3 × 12"],
+  "Lying leg curl": ["Seated leg curl (light) 3 × 12", "Skip it today if the knee complains"],
+  "Seated leg curl": ["Lying leg curl (light) 3 × 12", "Skip it today if the knee complains"],
+  "Hip abduction machine": ["Side-lying clamshells 3 × 15", "Cable hip abduction, holding a rack 3 × 12"],
+  "Hip adduction machine": ["Pillow squeeze between the knees 3 × 15", "Skip if it pulls at the knee"],
+  "Dead bug (on a flat bench)": ["Incline plank (hands on a bench) 3 × 30 s", "Pallof press 3 × 10/side"],
+  "Chest-supported dumbbell row": ["Seated cable row 3 × 10", "Machine row 3 × 12"],
+  "Single-arm cable row": ["Seated cable row 3 × 10", "Machine row 3 × 12"],
+  "Wide-grip seated cable row": ["Rear delt fly machine 3 × 15", "Face pull 3 × 15"],
+  "Straight-arm cable pulldown": ["Lat pulldown (close grip) 3 × 10", "Machine pullover 3 × 12"],
+  "Lat pulldown (close grip)": ["Lat pulldown 3 × 10", "Straight-arm cable pulldown 3 × 12"],
+  "EZ-bar curl": ["Cable curl 3 × 12", "Seated dumbbell curl 3 × 12"],
+  "Hammer curl + overhead triceps": ["Cable curl + rope pushdown 3 × 12", "Seated dumbbell curl 3 × 12"],
+  "Incline dumbbell curl + rope pushdown": ["Cable curl + rope pushdown 3 × 12", "Seated dumbbell curl 3 × 12"],
+  "Cable pull-through": ["Dumbbell Romanian deadlift 3 × 10", "45° back extension 3 × 12"],
+  "45° back extension": ["Cable pull-through 3 × 15", "Hip thrust 3 × 12"],
+  "Pallof press": ["Incline plank (hands on a bench) 3 × 30 s", "Dead bug (on a flat bench) 3 × 10/side"],
+  "Incline side plank (forearm on a bench)": ["Pallof press 3 × 10/side", "Incline plank 3 × 30 s"],
+  "Incline plank (hands on a bench)": ["Pallof press 3 × 10/side", "Dead bug (on a flat bench) 3 × 10/side"],
+  "Battle ropes, seated on a bench": ["Brisk flat walk intervals 6 × 1 min", "Seated arm bike, if your gym has one"],
+  "Incline machine press": ["Incline dumbbell press 3 × 10", "Machine chest press 3 × 10"],
+  "Machine shoulder press": ["Seated dumbbell shoulder press 3 × 10", "Arnold press 3 × 10"],
+  "Dumbbell lateral raise": ["Cable lateral raise 3 × 15", "Machine lateral raise 3 × 15"],
+  "Overhead cable triceps extension": ["Cable triceps pushdown 3 × 12", "Seated dumbbell triceps extension 3 × 12"],
+  "Arnold press": ["Seated dumbbell shoulder press 3 × 10", "Machine shoulder press 3 × 10"],
+  "Rear delt fly machine": ["Face pull 3 × 15", "Band pull-aparts 3 × 20"],
   "Hip thrust": ["Glute bridge machine 3 × 12", "Cable pull-through 3 × 15"],
   "Weighted glute bridge": ["Glute bridge machine 3 × 12", "Cable pull-through 3 × 15"],
   "Dumbbell Romanian deadlift": ["Cable pull-through 3 × 15", "Glute bridge machine 3 × 12"],
@@ -509,15 +635,12 @@ const SWAPS = {
   "Dumbbell bench press": ["Machine chest press 3 × 10", "Push-ups 3 × max"],
   "Incline dumbbell press": ["Incline machine press 3 × 10", "Low-to-high cable fly 3 × 12"],
   "Lat pulldown": ["Assisted pull-up 3 × 8", "Single-arm cable pulldown 3 × 12/side"],
-  "Assisted pull-up": ["Lat pulldown 3 × 10", "Straight-arm cable pulldown 3 × 12"],
   "Seated cable row": ["Chest-supported dumbbell row 3 × 10", "Machine row 3 × 12"],
   "Seated dumbbell shoulder press": ["Machine shoulder press 3 × 10", "Arnold press 3 × 10"],
   "Cable lateral raise": ["Dumbbell lateral raise 3 × 15", "Machine lateral raise 3 × 15"],
   "Face pull": ["Rear delt fly machine 3 × 15", "Band pull-aparts 3 × 20"],
   "Dumbbell curl": ["Cable curl 3 × 12", "Hammer curl 3 × 12"],
   "Farmer's carry": ["Dumbbell shrug hold 3 × 30 s", "Suitcase carry 3 × 30 m/side (flat floor)"],
-  "Plank": ["Dead bug 3 × 10/side", "Side plank 3 × 20 s/side"],
-  "Dead bug": ["Plank 3 × 30 s", "Side plank 3 × 20 s/side"],
 }
 
 // Natural testosterone: what actually moves it (no "booster" pills, no steroids).
@@ -537,11 +660,11 @@ const BLOOD_TEST = "Retest in mid-January 2027 (fasting 10–12 h): lipid profil
 const BLOOD = { date: "25 Oct 2026", ldl: 162, tg: 191, hdl: 49, tc: 249, nonHdl: 200, vldl: 38, vitD: 11.5, b12: 201,
   hscrp: 1.69, bun: 19.6, bunCreat: 29.3, glucose: 87, hba1c: 4.7, insulin: 10.4, tsh: 1.35, egfr: 130 };
 const HEALTH = [
-  ["Vitamin D 11.5 (deficient)", "Take D3 exactly as prescribed, plus 15 min of morning sun on the arms. Recheck after 3 months."],
+  ["Vitamin D 11.5 (deficient)", "Take D3 as prescribed, with lunch: it needs some fat in the meal to be absorbed. Plus 15 min of morning sun on the arms. Recheck after 3 months."],
   ["Cholesterol 249, LDL 162, non-HDL 200, triglycerides 191, HDL 49", "Skimmed milk and home-set low-fat dahi, olive-oil spray, brown rice, daily flax, walnuts and isabgol, nothing fried or sweet, 10k steps. Losing fat lowers triglycerides fastest."],
   ["BUN/creatinine ratio 29.3 (BUN 19.6, urea 42)", "Usually low water and/or high protein, not a kidney problem (eGFR 130 is excellent). Drink 3.5–4 L water a day and keep protein at the plan's level, not more."],
   ["Vitamin B12 201 (low-normal)", "Common for vegetarians: daily dahi and milk; ask the doctor whether to add a B12 supplement."],
-  ["RDW 14.6, Mentzer index 14.9", "May point to early low iron. Ferritin is on the retest list; ask the doctor before taking iron."],
+  ["RDW 14.6, Mentzer index 14.9", "May point to early low iron: lemon on dal and palak, no chai or coffee within 1 hour of meals. Ferritin is on the retest list; ask the doctor before taking iron."],
   ["ALT higher than AST, hsCRP 1.69", "Both normal-range, but the pattern goes with extra body fat. Fat loss improves both; the doctor may suggest a liver ultrasound."],
   ["Good: sugar, thyroid, kidneys, liver enzymes, blood count", "Fasting glucose 87, HbA1c 4.7, insulin 10.4, TSH 1.35, eGFR 130, hemoglobin 15.6: all normal."],
   ["Right knee ACL sprain", "Physio's 4 exercises every day, Cartigen as prescribed, knee-safe gym plan. Ortho follow-up 9 Nov 2026."],

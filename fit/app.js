@@ -24,7 +24,7 @@ function load() {
     v2: true, v3: true, profile,
     settings: { geminiKey: "", model: "gemini-2.5-flash", ...s.settings },
     days: s.days || {}, weights: s.weights || [], prices: s.prices || {},
-    program: "fullbody", treatments: s.treatments || [],
+    program: "athlete", treatments: s.treatments || [],
     runs: s.runs || [], skills: s.skills || {}, weekly: s.weekly || {},
   };
 }
@@ -56,10 +56,12 @@ function expectedKg(d) {
 }
 const latest = () => S.weights.at(-1) || {};
 const latestWeight = () => latest().kg ?? S.profile.startWeight;
-const program = () => PROGRAMS[0]; // one program: Beginner Full Body
+const program = () => PROGRAMS[0]; // one program: Milkha Athlete (knee-safe while KNEE.rehab)
 // Programs with blocks change exercises every 4 weeks (block A → B → A …).
 const blockIndex = () => Math.floor(Math.max(0, (new Date(today() < START_DATE ? START_DATE : today()) - new Date(START_DATE)) / 864e5) / 28);
 function applyProgram() { const p = program(); WEEK = p.blocks ? p.blocks[blockIndex() % p.blocks.length] : p.week; }
+// Knee rehab stays on until Settings says the ortho cleared full training.
+KNEE.rehab = !S.settings.kneeCleared;
 applyProgram();
 // Fixed weekly schedule: Mon/Wed/Fri gym, Tue/Thu steps, Sat walk, Sun rest (gym closed).
 const cyc = (d = new Date()) => dayIdx(new Date(iso(new Date(d))));
@@ -79,7 +81,7 @@ const skillIndex = () => Math.min(SKILLS.length - 1, Math.floor((dayNo() - 1) / 
 function exList(di) {
   const w = WEEK[di], ex = kneeSafe(w.ex);
   if (w.ex.length > 2 && [0, 2, 4].includes(di)) {
-    const sk = SKILLS[skillIndex()];
+    const sk = KNEE.rehab ? REHAB_SKILL : SKILLS[skillIndex()];
     ex.splice(ex.length - 1, 0, [`Skill practice: ${sk.name}`, 1, "10 min", sk.drills.join(" · ")]);
   }
   if (w.ex.length > 2) { ex.splice(1, 0, WARMUP); ex.push(COOLDOWN); }
@@ -333,9 +335,10 @@ function stepList(name, d) {
 // Rest by exercise type: big compound lifts 2:00, smaller moves 1:15, core/carries 1:00.
 function restSec(name) {
   const n = name.toLowerCase();
-  if (/plank|dead bug|crunch|knee raise|pallof|side plank|carry/.test(n)) return 60;
-  if (/press|row|pulldown|pull-up|thrust|deadlift|leg press|swing/.test(n) && !/pushdown/.test(n)) return 120;
-  return 75;
+  // Short enough that a session fits ~45 min in the gym (8:30–9:30 including travel).
+  if (/plank|dead bug|crunch|knee raise|pallof|side plank|carry/.test(n)) return 45;
+  if (/press|row|pulldown|pull-up|thrust|deadlift|leg press|swing/.test(n) && !/pushdown/.test(n)) return 90;
+  return 60;
 }
 const fmtRest = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 const repRange = (reps) => { const m = String(reps).match(/(\d+)(?:–(\d+))?/); return m ? [+m[1], +(m[2] || m[1])] : null; };
@@ -394,12 +397,12 @@ V.today = () => {
   const notStarted = today() < START_DATE;
   const pct = Math.min(100, Math.round((dayNo() / totalDays()) * 100));
   const habits = [
-    ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", `${(ph.steps / 1000).toFixed(0)}k steps`],
+    ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", KNEE.rehab ? "Walk as comfortable (flat, up to 8k)" : `${(ph.steps / 1000).toFixed(0)}k steps`],
     ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk"],
     ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds + walnuts"],
-    ["knee", "🦵", "Knee exercises"], ["meds", "💊", "Meds as prescribed (D3, Cartigen)"],
+    ["knee", "🦵", "Knee exercises"], ["meds", "💊", "D3 with lunch, Cartigen as prescribed"],
     ["isabgol", "🌾", "1 tsp isabgol before dinner"],
   ];
   return `
@@ -407,7 +410,7 @@ V.today = () => {
     <div class="hero-top"><span class="eyebrow">${notStarted ? `Day 1 starts tomorrow · ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~60 min · gym at ${GYM_TIME}`}</p>
+    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`
@@ -482,7 +485,8 @@ function trainGym() {
     <p class="sub">${esc(pr.by)}</p>
     ${pr.blocks ? (() => { const b = blockIndex(), next = new Date(START_DATE); next.setDate(next.getDate() + (b + 1) * 28);
       return `<p class="small">Block ${"AB"[b % pr.blocks.length]} (weeks ${b * 4 + 1}–${b * 4 + 4}). New exercises from ${fmt(iso(next))}.</p>`; })() : ""}
-    <p class="small">Mon, Wed, Fri: gym · Tue, Thu: steps · Sat: walk · Sun: rest (gym closed)</p>
+    <p class="small">Mon–Fri: gym (~45 min, 8:30–9:30) · Sat: flat walk · Sun: rest (gym closed)</p>
+    <p class="sub">${KNEE.rehab ? `Knee-safe version while the ${KNEE.side.toLowerCase()} knee heals. The full version switches on in Settings once your ortho clears you.` : "Full version: your ortho cleared you."}</p>
   </div>
   <div class="week">${[0, 1, 2, 3, 4, 5, 6].map((i) => `<button class="${i === trainDay ? "on" : ""} ${iso(dateOfCyc(i)) === planDay() ? "today" : ""} ${wk[i] ? "done" : ""}"
     data-trainday="${i}"><span>${dateOfCyc(i).toLocaleDateString("en-IN", { weekday: "short" })}</span><small>${dateOfCyc(i).getDate()} ${dateOfCyc(i).toLocaleDateString("en-IN", { month: "short" })}</small></button>`).join("")}</div>
@@ -512,6 +516,9 @@ function trainGym() {
     ${new Date(tdate).getDay() === 0 ? `<p class="sub">Sunday: gym closed. Rest, walk, meal prep and grocery order.</p>` : ""}
   </div>
   ${kneeCard(early ? planDay() : tdate)}
+  ${KNEE.rehab ? `<div class="card notice"><h3 class="h3" style="margin:0 0 6px">🚩 Stop and call your ortho if</h3>
+    <ul class="bullets">${KNEE.redFlags.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    <p class="sub">Get down to the floor and back up using a bench, never by kneeling on the right knee.</p></div>` : ""}
   <div class="card"><h3 class="h3">How to progress</h3>
     <p class="sub">Weeks 1–2: use the starting weights and learn the form. After that, when every set reaches the top of the rep range,
     add 5 lb (2.5 kg) on big lifts or 2.5 lb on small cable moves. The app shows your last numbers so you always know what to beat.</p></div>`;
@@ -548,6 +555,11 @@ function trainRun() {
 
 function trainSkills() {
   const cur = skillIndex();
+  if (KNEE.rehab) return `<div class="card hero-lite"><span class="eyebrow">Skills paused during knee rehab</span>
+    <h2 class="h2">${esc(REHAB_SKILL.name)}</h2>
+    <p class="sub">Pull-up bar and dip skills come back once your ortho clears you: getting up to the bar and dropping down is a jump-landing risk for the knee.</p>
+    <ul class="drills">${REHAB_SKILL.drills.map((x) => `<li><span>${esc(x)}</span>${vid(x.replace(/\d.*$/, "") + " tutorial", "Video")}</li>`).join("")}</ul>
+    <p class="sub">Practised at the end of Mon, Wed and Fri sessions.</p></div>`;
   return `
   <div class="card hero-lite"><span class="eyebrow">Month ${cur + 1} skill</span>
     <h2 class="h2">${esc(SKILLS[cur].name)}</h2>
@@ -965,6 +977,10 @@ V.settings = () => {
     <label class="field mt">Model<input id="sModel" value="${esc(s.model)}"></label>
     <div class="row mt"><button class="btn ghost" id="sTest">Test key</button><span id="sTestOut" class="sub grow"></span></div></div>
   ${pushCard()}
+  <div class="card"><h3 class="h3">Knee</h3>
+    <p class="sub">${KNEE.rehab ? `Rehab mode is on: every exercise is knee-safe. Only switch this on after your orthopedic doctor clears you for full training (follow-up ${fmt(KNEE.followUp)}).`
+      : "Full training is on. Switch rehab back on if the knee hurts or swells."}</p>
+    <button class="btn ${KNEE.rehab ? "ghost" : ""} block" id="kneeToggle">${KNEE.rehab ? "My ortho cleared me for full training" : "Turn knee rehab mode back on"}</button></div>
   <div class="card"><h3 class="h3">Kitchen sync key</h3>
     <p class="sub">On your own website: the password you set as EDIT_KEY in Cloudflare. It lets your meal swaps reach the kitchen page. Stored only on this phone.</p>
     <input id="sSync" type="password" placeholder="Kitchen sync key" value="${esc(s.syncKey || "")}" aria-label="Kitchen sync key"></div>
@@ -1019,7 +1035,7 @@ document.addEventListener("change", (e) => {
   if (el.dataset.price) { S.prices[el.dataset.price] = +el.value || 0; save(); render(); }
   if (el.id === "foodPhoto" && el.files[0]) $("#foodMsg").textContent = `Photo added: ${el.files[0].name}`;
   if (el.id === "imp" && el.files[0]) el.files[0].text().then((t) => {
-    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), v2: true, v3: true, settings: keep })); S = load(); applyProgram(); render(); toast("Backup imported"); }
+    try { const keep = S.settings; localStorage.setItem(KEY, JSON.stringify({ ...JSON.parse(t), v2: true, v3: true, settings: keep })); S = load(); KNEE.rehab = !S.settings.kneeCleared; applyProgram(); render(); toast("Backup imported"); }
     catch { toast("That file isn't a valid backup"); }
   });
 });
@@ -1134,6 +1150,11 @@ document.addEventListener("click", async (e) => {
     case "pushTest": {
       const res = await fetch("/api/push/test", { method: "POST", headers: { "X-Edit-Key": S.settings.syncKey || "" } }).catch(() => null);
       return toast(res?.ok ? "Test sent. It should arrive in a few seconds" : "Couldn't send a test");
+    }
+    case "kneeToggle": {
+      if (KNEE.rehab && el.dataset.confirm !== "1") { el.dataset.confirm = "1"; el.textContent = "Tap again to confirm: the ortho said yes"; return; }
+      S.settings.kneeCleared = KNEE.rehab; KNEE.rehab = !S.settings.kneeCleared; save(); render();
+      return toast(KNEE.rehab ? "Knee rehab mode back on" : "Full training on. Go gradually and stop if it hurts");
     }
     case "trAdd": {
       const what = $("#trWhat").value.trim(), date = $("#trDate").value;
