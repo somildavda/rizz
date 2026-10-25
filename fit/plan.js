@@ -133,6 +133,7 @@ const COOK_RULES = [
   "1 katori = 150 ml. No sugar in anything. Normal salt.",
   "For cholesterol: nothing fried, no sweets, maida, cream, cheese, butter, ghee or coconut. Brown rice, not white.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
+  "Home-made paneer (optional, instead of the pack): boil 1 L Slim n Trim milk, turn off the heat, wait 1 min, stir in 2 tbsp lemon juice. Strain in muslin, rinse, press under a weight 30 min. Gives ~120 g soft, low-fat paneer with ~25 g protein: best for bhurji, stuffing and chilla, not tikka cubes.",
   "Whey shake: liquid in the shaker first, then 1 LEVEL scoop (not heaped), shake 20 seconds. Never boil whey; stir it into oats after cooking.",
 ];
 const TIKKA_STEPS = [

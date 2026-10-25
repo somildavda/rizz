@@ -90,6 +90,7 @@ function exList(di) {
 // Only {date: {slot: dish}} is shared; weight, workouts and everything else stay on this device.
 // Two backends: inside Claude, the page's shared store; on the Cloudflare site, /api/menu.
 let SHARED = {}, menuDb = null, menuApi = false;
+const onSite = () => /^https?:$/.test(location.protocol) && !window.claude;
 (async () => {
   try { menuDb = window.claude?.use ? await window.claude.use("db") : null; } catch { menuDb = null; }
   if (menuDb) {
@@ -110,15 +111,17 @@ function sharePicks(d) {
   const picks = { ...(S.days[d]?.mealPick || {}) };
   if (menuDb) {
     pushing = pushing.then(() => menuDb.doc(`menu/${d}`).set({ picks })).catch(() => toast("Couldn't sync this swap to the kitchen view"));
-  } else if (menuApi) {
-    if (!S.settings.syncKey) return toast("Add your kitchen sync key in Settings to share swaps");
+  } else if (onSite()) {
+    // On the website: always try (don't depend on the first load having worked) and say what happened.
+    if (!S.settings.syncKey) return toast("Not sent to the kitchen: add your kitchen sync key in Settings (gear icon)");
     pushing = pushing.then(async () => {
       const res = await fetch(`/api/menu/${d}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Edit-Key": S.settings.syncKey },
         body: JSON.stringify({ picks }) });
-      if (res.status === 401) toast("Wrong kitchen sync key. Check Settings.");
-      else if (!res.ok) throw new Error();
-      else SHARED[d] = picks;
-    }).catch(() => toast("Couldn't sync this swap to the kitchen page"));
+      if (res.status === 401) return toast("Not sent: wrong kitchen sync key. Fix it in Settings");
+      if (!res.ok) throw new Error();
+      SHARED[d] = picks; menuApi = true; S.settings.lastSync = Date.now(); save();
+      toast("Sent to the kitchen ✓ (her page updates within a minute)");
+    }).catch(() => toast("Not sent to the kitchen: no connection. Swap again when online"));
   }
 }
 
@@ -636,6 +639,8 @@ function foodToday() {
     <div class="center grow"><b>${esc(dayLabel(fd))}</b><div class="sub">${fmt(fd)}${journeyDay(fd) >= 1 ? ` · Day ${journeyDay(fd)}` : ""} · ${T.gym ? "Gym day" : "Rest day"} · ${T.kcal} kcal</div></div>
     <button class="iconbtn" data-fooddate="${addDays(fd, 1)}" aria-label="Next day">›</button></div>
     <details class="card rules"><summary>Kitchen rules for the cook</summary><ul class="bullets">${COOK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>
+    ${onSite() ? `<p class="sub center">${S.settings.syncKey ? `Kitchen sync on ✓${S.settings.lastSync ? ` · last sent ${new Date(S.settings.lastSync).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : ""}`
+      : `<b class="warn">Kitchen sync off:</b> add your sync key in Settings so swaps reach the kitchen page`}</p>` : ""}
     <button class="btn ghost block sm" id="copyCook" data-date="${fd}">📋 Copy ${esc(dayLabel(fd).toLowerCase())}'s menu for the cook</button>`;
   return pager + `
   <div class="card"><div class="rings four">
@@ -1044,7 +1049,8 @@ document.addEventListener("click", async (e) => {
     (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % MEALS[i].options.length;
     const at = x.food.findIndex((f) => f.plan === i);
     if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, fib: m.fib, plan: i }; }
-    save(); sharePicks(dt); render(); return toast(`Swapped to ${meal(i, dt).name}`);
+    save(); render(); toast(`Swapped to ${meal(i, dt).name}`);
+    return sharePicks(dt); // its "sent" / "not sent" message replaces the one above
   }
   if (d.meal) {
     const i = +d.meal, dt = d.date || today(), f = day(dt).food, at = f.findIndex((x) => x.plan === i);

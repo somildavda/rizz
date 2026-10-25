@@ -11,7 +11,8 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 async function api(request, env, path) {
   if (!env.MENU) return json({ error: "Add a KV namespace binding named MENU to this Worker." }, 503);
   if (request.method === "GET") {
-    return new Response((await env.MENU.get("menu")) || "{}", { headers: JSON_HEADERS });
+    // cacheTtl 30 s (the minimum) so other phones see a new swap sooner.
+    return new Response((await env.MENU.get("menu", { cacheTtl: 30 })) || "{}", { headers: JSON_HEADERS });
   }
   if (request.method === "PUT") {
     if (!env.EDIT_KEY || request.headers.get("x-edit-key") !== env.EDIT_KEY) return json({ error: "Wrong sync key." }, 401);

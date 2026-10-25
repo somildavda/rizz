@@ -12,8 +12,12 @@ const journeyDay = (k) => Math.floor((new Date(k) - START) / DAY_MS) + 1;
 // Swaps made in the app come from /api/menu on the Cloudflare site.
 let SWAPS_BY_DATE = {};
 const mealIdx = (i, k) => SWAPS_BY_DATE[k]?.[i] ?? defaultMealIdx(i, k);
+let lastLoad = null;
 async function loadSwaps() {
-  try { const res = await fetch("/api/menu", { cache: "no-store" }); if (res.ok) { SWAPS_BY_DATE = await res.json(); render(); } } catch {}
+  try {
+    const res = await fetch("/api/menu?t=" + Date.now(), { cache: "no-store" });
+    if (res.ok) { SWAPS_BY_DATE = await res.json(); lastLoad = new Date(); render(); }
+  } catch {}
 }
 // Gym days: Mon, Wed, Fri (Beginner Full Body). Other days the first meal is plain "Breakfast".
 const isGymDay = (k) => [1, 3, 5].includes(new Date(k).getDay());
@@ -27,6 +31,7 @@ function render() {
   <div class="card pager"><button class="iconbtn" id="prev" ${cur <= firstDay() ? "disabled" : ""} aria-label="Previous day">‹</button>
     <div class="center grow"><b>${esc(label(cur))}</b><div class="sub">${new Date(cur).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} · Day ${journeyDay(cur)}</div></div>
     <button class="iconbtn" id="next" aria-label="Next day">›</button></div>
+  <p class="sub center">${lastLoad ? `Menu updated ${lastLoad.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} · ` : ""}<button class="btn ghost xs" id="refresh">↻ Refresh</button></p>
   <button class="btn ghost block sm" id="copy">📋 Copy this day's menu</button>
   ${MEALS.map((slot, i) => {
     const m = slot.options[mealIdx(i, cur)], name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
@@ -49,6 +54,7 @@ document.addEventListener("click", async (e) => {
   const id = e.target.closest("button")?.id;
   if (id === "prev") { cur = addDays(cur, -1); render(); }
   if (id === "next") { cur = addDays(cur, 1); render(); }
+  if (id === "refresh") { loadSwaps(); }
   if (id === "copy") {
     const t = $("#toast");
     try { await navigator.clipboard.writeText(menuText(cur)); t.textContent = "Menu copied"; }
@@ -59,3 +65,5 @@ document.addEventListener("click", async (e) => {
 render();
 loadSwaps();
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadSwaps(); });
+// Pick up swaps while the page stays open.
+setInterval(() => { if (!document.hidden) loadSwaps(); }, 30000);
