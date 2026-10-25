@@ -256,7 +256,7 @@ function localReview() {
 const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian,
-never suggest: ${AVOID_FOODS.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
+never suggest: ${AVOID_FOODS.join(", ")}; for cholesterol also avoid ${HEALTH_AVOID.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
 Blood (${BLOOD.date}): LDL ${BLOOD.ldl}, triglycerides ${BLOOD.tg}, HDL ${BLOOD.hdl}, vitamin D ${BLOOD.vitD}, B12 ${BLOOD.b12}; on D3 and Cartigen.
 ${KNEE.side} knee ACL sprain in rehab (follow-up ${KNEE.followUp}): never suggest stairs, squats, lunges, kneeling, jumping or running.
 Program: ${program().name}, ${program().days} days/week. Goals: V-taper, 2–4 visible abs, better chest shape (has chest fat),
@@ -1138,8 +1138,10 @@ async function logFood() {
   if (!text && !file) return (msg.textContent = "Type what you ate or add a photo.");
   if (text && !file) {
     const { found, missed } = parseFood(text);
+    const warn = text.match(WARN_FOODS);
     if (found.length && !missed.length) {
-      found.forEach((it) => day().food.push(it)); save(); render(); return toast(`Logged ${found.length} item(s)`);
+      found.forEach((it) => day().food.push(it)); save(); render();
+      return toast(warn ? `Logged. Heads-up: ${warn[0]} isn't in your plan (cholesterol/bloating). Balance it with the next meal.` : `Logged ${found.length} item(s)`);
     }
     if (found.length) { found.forEach((it) => day().food.push(it)); save(); }
     if (missed.length) msg.textContent = `Not in the built-in list: ${missed.join(", ")}. Asking AI…`;
