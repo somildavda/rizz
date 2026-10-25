@@ -18,14 +18,13 @@ let S = load();
 function load() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(KEY)) || JSON.parse(localStorage.getItem(OLD_KEY)) || {}; } catch {}
-  const profile = { ...PROFILE_DEFAULT, ...s.profile };
+  const profile = { ...PROFILE_DEFAULT, ...s.profile, knee: PROFILE_DEFAULT.knee };
   if (!s.v2) profile.targetDate = PROFILE_DEFAULT.targetDate; // plan restarted on 21 Oct with a new target
-  if (!s.v3) s.program = "fullbody"; // start with the basic program; switch after the Foundation phase
   return {
     v2: true, v3: true, profile,
     settings: { geminiKey: "", model: "gemini-2.5-flash", ...s.settings },
     days: s.days || {}, weights: s.weights || [], prices: s.prices || {},
-    program: s.program || "fullbody", treatments: s.treatments || [],
+    program: "fullbody", treatments: s.treatments || [],
     runs: s.runs || [], skills: s.skills || {}, weekly: s.weekly || {},
   };
 }
@@ -57,25 +56,16 @@ function expectedKg(d) {
 }
 const latest = () => S.weights.at(-1) || {};
 const latestWeight = () => latest().kg ?? S.profile.startWeight;
-const program = () => PROGRAMS.find((p) => p.id === S.program) || PROGRAMS[0];
+const program = () => PROGRAMS[0]; // one program: Beginner Full Body
 // Programs with blocks change exercises every 4 weeks (block A → B → A …).
 const blockIndex = () => Math.floor(Math.max(0, (new Date(today() < START_DATE ? START_DATE : today()) - new Date(START_DATE)) / 864e5) / 28);
 function applyProgram() { const p = program(); WEEK = p.blocks ? p.blocks[blockIndex() % p.blocks.length] : p.week; }
 applyProgram();
-// Session order: the gym is closed on Sundays, so Sunday is always the rest slot (index 6).
-// Mon–Sat run the program's sessions in order from Day 1; a skipped day pushes the
-// rest of the sequence to the next day instead of losing the session.
-function cyc(d = new Date()) {
-  const k = iso(new Date(d));
-  if (new Date(k).getDay() === 0) return 6;
-  let n = 0;
-  for (let x = START_DATE; x < k; x = iso(new Date(new Date(x).getTime() + DAY_MS))) {
-    if (new Date(x).getDay() !== 0 && !S.days[x]?.checks?.skipGym) n++;
-  }
-  return n % 6;
-}
+// Fixed weekly schedule: Mon/Wed/Fri gym, Tue/Thu steps, Sat walk, Sun rest (gym closed).
+const cyc = (d = new Date()) => dayIdx(new Date(iso(new Date(d))));
 const isGymDay = (d = new Date()) => WEEK[cyc(d)].ex.length > 2;
-const runStage = () => RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
+// Running waits for the ortho: while the knee is in rehab, stay on flat walking.
+const runStage = () => KNEE.rehab ? RUN_PLAN[0] : RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
 // The day the plan shows by default: today, or Day 1 if the journey hasn't started yet.
 const planDay = () => (today() < START_DATE ? START_DATE : today());
 const addDays = (k, n) => { const d = new Date(k); d.setDate(d.getDate() + n); return iso(d); };
@@ -87,7 +77,7 @@ const skillIndex = () => Math.min(SKILLS.length - 1, Math.floor((dayNo() - 1) / 
 
 // Exercises for a weekday, with this month's skill practice added to Mon/Wed/Fri gym days.
 function exList(di) {
-  const w = WEEK[di], ex = w.ex.slice();
+  const w = WEEK[di], ex = kneeSafe(w.ex);
   if (w.ex.length > 2 && [0, 2, 4].includes(di)) {
     const sk = SKILLS[skillIndex()];
     ex.splice(ex.length - 1, 0, [`Skill practice: ${sk.name}`, 1, "10 min", sk.drills.join(" · ")]);
@@ -267,6 +257,8 @@ const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian,
 never suggest: ${AVOID_FOODS.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
+Blood (${BLOOD.date}): LDL ${BLOOD.ldl}, triglycerides ${BLOOD.tg}, HDL ${BLOOD.hdl}, vitamin D ${BLOOD.vitD}, B12 ${BLOOD.b12}; on D3 and Cartigen.
+${KNEE.side} knee ACL sprain in rehab (follow-up ${KNEE.followUp}): never suggest stairs, squats, lunges, kneeling, jumping or running.
 Program: ${program().name}, ${program().days} days/week. Goals: V-taper, 2–4 visible abs, better chest shape (has chest fat),
 sharp jawline, Hrithik-style grooming, walk-to-run, monthly calisthenics skills (this month: ${SKILLS[skillIndex()].name}).
 Day ${dayNo()} of the journey; phase ${ph.name} (${ph.kcal} kcal, ${ph.protein} g protein); target ${p.targetDate}.
@@ -402,7 +394,9 @@ V.today = () => {
     ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk"],
-    ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds"],
+    ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds + walnuts"],
+    ["knee", "🦵", "Knee exercises"], ["meds", "💊", "Meds as prescribed (D3, Cartigen)"],
+    ["isabgol", "🌾", "1 tsp isabgol before dinner"],
   ];
   return `
   <section class="hero">
@@ -470,7 +464,7 @@ function mealTicks(T, d = today()) {
 }
 
 // ---------- train ----------
-let trainSeg = "gym", trainDay = dayIdx(new Date(planDay())), showProgs = false;
+let trainSeg = "gym", trainDay = dayIdx(new Date(planDay()));
 V.train = () => seg(trainSeg, "trainseg", [["gym", "Gym"], ["run", "Walk / Run"], ["skills", "Skills"]]) +
   (trainSeg === "run" ? trainRun() : trainSeg === "skills" ? trainSkills() : trainGym());
 
@@ -484,11 +478,7 @@ function trainGym() {
     <p class="sub">${esc(pr.by)}</p>
     ${pr.blocks ? (() => { const b = blockIndex(), next = new Date(START_DATE); next.setDate(next.getDate() + (b + 1) * 28);
       return `<p class="small">Block ${"AB"[b % pr.blocks.length]} (weeks ${b * 4 + 1}–${b * 4 + 4}). New exercises from ${fmt(iso(next))}.</p>`; })() : ""}
-    <button class="btn ghost sm" data-toggleprog="1">${showProgs ? "Close" : "Change program"}</button>
-    ${showProgs ? PROGRAMS.map((p) => `<div class="option ${p.id === pr.id ? "on" : ""}">
-      <div class="spread"><b>${esc(p.name)}</b><span class="sub">${p.days} days / week</span></div>
-      <p class="small">${esc(p.why)}</p><p class="sub">${esc(p.by)}</p>
-      ${p.id === pr.id ? `<span class="pill ok">Current</span>` : `<button class="btn sm" data-program="${p.id}">Choose this</button>`}</div>`).join("") : ""}
+    <p class="small">Mon, Wed, Fri: gym · Tue, Thu: steps · Sat: walk · Sun: rest (gym closed)</p>
   </div>
   <div class="week">${[0, 1, 2, 3, 4, 5, 6].map((i) => `<button class="${i === trainDay ? "on" : ""} ${iso(dateOfCyc(i)) === planDay() ? "today" : ""} ${wk[i] ? "done" : ""}"
     data-trainday="${i}"><span>${dateOfCyc(i).toLocaleDateString("en-IN", { weekday: "short" })}</span><small>${dateOfCyc(i).getDate()} ${dateOfCyc(i).toLocaleDateString("en-IN", { month: "short" })}</small></button>`).join("")}</div>
@@ -496,7 +486,7 @@ function trainGym() {
     <span class="eyebrow">Day ${journeyDay(iso(dateOfCyc(trainDay)))} · ${esc(dayLabel(iso(dateOfCyc(trainDay))))}</span>
     <h2 class="h2">${esc(w.title)}</h2>
     ${isDeload() ? `<p class="note">Deload week: same exercises at ~60% of your usual weight.</p>` : ""}
-    ${!rest ? `<p class="warn small">Left knee: pain-free range only. Sharp pain means stop and use “Swap”.</p>` : ""}
+    ${!rest ? `<p class="warn small">${esc(KNEE.warn)}</p>` : ""}
     ${ex.map(([name, sets, reps, note], i) => {
       const last = lastSets(name), start = START_WEIGHTS[name], skill = name.startsWith("Skill");
       return `<div class="ex"><span class="num">${i + 1}</span><div class="grow">
@@ -517,9 +507,19 @@ function trainGym() {
     ${!rest ? `<button class="btn block mt" data-startworkout="${si}">Start guided workout</button>` : ""}
     ${new Date(tdate).getDay() === 0 ? `<p class="sub">Sunday: gym closed. Rest, walk, meal prep and grocery order.</p>` : ""}
   </div>
+  ${kneeCard(early ? planDay() : tdate)}
   <div class="card"><h3 class="h3">How to progress</h3>
     <p class="sub">Weeks 1–2: use the starting weights and learn the form. After that, when every set reaches the top of the rep range,
     add 5 lb (2.5 kg) on big lifts or 2.5 lb on small cable moves. The app shows your last numbers so you always know what to beat.</p></div>`;
+}
+
+// Physio's daily knee exercises: a checklist for the given date, shown every day.
+function kneeCard(d) {
+  const c = S.days[d]?.checks || {}, done = KNEE_EXERCISES.filter((_, i) => c["kx" + i]).length;
+  return `<div class="card"><div class="spread"><h3 class="h3" style="margin:0">🦵 Knee exercises · every day</h3><span class="sub">${done}/${KNEE_EXERCISES.length}</span></div>
+    <p class="sub">From your physio for the ${KNEE.side.toLowerCase()} knee. Slow and controlled; stop if it hurts.</p>
+    ${KNEE_EXERCISES.map(([n, r, q], i) => `<div class="tick ${c["kx" + i] ? "on" : ""}" data-check="kx${i}" data-date="${d}" role="checkbox" aria-checked="${!!c["kx" + i]}" tabindex="0">
+      <span class="box"></span><div class="t"><b>${esc(n)}</b><span class="sub">${esc(r)}</span></div><span class="meta">${vid(q, "Video")}</span></div>`).join("")}</div>`;
 }
 
 function trainRun() {
@@ -527,8 +527,8 @@ function trainRun() {
   return `
   <div class="card hero-lite"><span class="eyebrow">Week ${weekNo()} · ${esc(st.name)}</span>
     <h2 class="h2">${esc(st.session)}</h2>
-    <p class="sub">Move to the next stage only if the left knee feels fine the day after. Pain above 3/10 means go back a stage.
-    Run on a treadmill or track, not the road.</p></div>
+    <p class="sub">${KNEE.rehab ? `Running is paused for the ${KNEE.side.toLowerCase()}-knee ACL sprain. Walk on flat ground only (no stairs or slopes) until the ortho clears you (follow-up ${fmt(KNEE.followUp)}).`
+      : `Move to the next stage only if the ${KNEE.side.toLowerCase()} knee feels fine the day after. Pain above 3/10 means go back a stage. Run on a treadmill or track, not the road.`}</p></div>
   <div class="card"><h3 class="h3">Log a walk or run</h3>
     <div class="grid3"><label class="field">km<input id="rKm" inputmode="decimal" placeholder="3.0"></label>
       <label class="field">minutes<input id="rMin" inputmode="numeric" placeholder="30"></label>
@@ -799,7 +799,12 @@ V.journey = () => {
   <div class="card"><h3 class="h3">Testosterone, naturally</h3>
     <p class="sub">No booster pills or steroids. These are what actually raise it, and most are already in your plan.</p>
     <ul class="bullets">${TESTOSTERONE.map(([h, t]) => `<li><b>${esc(h)}.</b> ${esc(t)}</li>`).join("")}</ul>
-    <div class="list mt">${wtick("bloodtest", "Get a blood test this month", BLOOD_TEST, "once")}</div></div>
+  </div>
+
+  <div class="card"><h3 class="h3">Your health plan</h3>
+    <p class="sub">From your ${esc(BLOOD.date)} blood report and the ortho visit. Follow your doctors first.</p>
+    <ul class="bullets">${HEALTH.map(([h, t]) => `<li><b>${esc(h)}.</b> ${esc(t)}</li>`).join("")}</ul>
+    <div class="list mt">${wtick("retest", "Retest blood in mid-January 2027", BLOOD_TEST, "once")}</div></div>
 
   <div class="card"><h3 class="h3">Weekly review</h3>
     <p class="sub">Reads your last 14 days of weight, food, workouts and how you felt. Works without a key; adds AI tips when available.</p>
@@ -1026,8 +1031,6 @@ document.addEventListener("click", async (e) => {
   if (d.trainday) { trainDay = +d.trainday; return render(); }
   if (d.foodseg) { foodSeg = d.foodseg; return render(); }
   if (d.looksseg) { looksSeg = d.looksseg; return render(); }
-  if (d.toggleprog) { showProgs = !showProgs; return render(); }
-  if (d.program) { S.program = d.program; applyProgram(); showProgs = false; save(); render(); return toast(`Switched to ${program().name}`); }
   if (d.startworkout) return openWorkout(+d.startworkout);
   if (d.delfood) { day().food.splice(+d.delfood, 1); save(); return render(); }
   if (d.ask) { foodSeg = "today"; render(); $("#askText").value = d.ask; return ask(d.ask, $("#askOut")); }
@@ -1046,7 +1049,7 @@ document.addEventListener("click", async (e) => {
     const out = el.closest(".grow, .inner").querySelector(".ai"), local = SWAPS[d.swap];
     if (local && !el.dataset.more) { out.textContent = "Knee-safe options:\n• " + local.join("\n• "); el.dataset.more = "1"; el.textContent = "More ideas (AI)"; return; }
     out.textContent = "Thinking…";
-    try { out.textContent = await ai(`${coachContext()}\nSuggest 2 alternatives to "${d.swap}" available in a commercial gym, safe for the left knee. One line each, with sets × reps and a beginner starting weight.`); }
+    try { out.textContent = await ai(`${coachContext()}\nSuggest 2 alternatives to "${d.swap}" available in a commercial gym, safe for a ${KNEE.side.toLowerCase()}-knee ACL sprain (no squats, lunges, kneeling, jumping or running). One line each, with sets × reps and a beginner starting weight.`); }
     catch (err) { out.textContent = err.message; }
     return;
   }

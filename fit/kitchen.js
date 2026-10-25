@@ -15,8 +15,8 @@ const mealIdx = (i, k) => SWAPS_BY_DATE[k]?.[i] ?? defaultMealIdx(i, k);
 async function loadSwaps() {
   try { const res = await fetch("/api/menu", { cache: "no-store" }); if (res.ok) { SWAPS_BY_DATE = await res.json(); render(); } } catch {}
 }
-// Gym days follow the default Beginner Full Body cycle (gym on journey days 1, 3 and 5 of each 7).
-const isGymDay = (k) => new Date(k).getDay() !== 0; // Sundays: gym closed
+// Gym days: Mon, Wed, Fri (Beginner Full Body). Other days the first meal is plain "Breakfast".
+const isGymDay = (k) => [1, 3, 5].includes(new Date(k).getDay());
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
   new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 
