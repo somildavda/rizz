@@ -4,7 +4,7 @@ import base64, hashlib, json, pathlib
 here = pathlib.Path(__file__).parent
 TEXT = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".json": "application/manifest+json"}
-NAMES = ["index.html", "kitchen.html", "app.js", "plan.js", "kitchen.js", "style.css", "manifest.json", "sw.js"]
+NAMES = ["index.html", "kitchen.html", "app.js", "plan.js", "kitchen.js", "style.css", "manifest.json", "kitchen-manifest.json", "sw.js"]
 # Build id = hash of the app's files; the app and service worker are stamped with it so
 # phones can tell when a newer version is live.
 build = hashlib.sha1("".join((here / n).read_text() for n in NAMES).encode()).hexdigest()[:10]
