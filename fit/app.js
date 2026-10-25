@@ -917,6 +917,39 @@ V.kitchen = () => {
     <li>Never use tofu, rajma, chole or kabuli chana.</li></ul></div>`;
 };
 
+// ---------- daily reminders (iPhone: iOS 16.4+, opened from the Home Screen icon) ----------
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && !window.claude && /^https:$/.test(location.protocol);
+function pushCard() {
+  if (window.claude || !/^https:$/.test(location.protocol)) return "";
+  const on = S.settings.reminders === true;
+  const why = !pushSupported() ? (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()
+    ? "Open Journey from its Home Screen icon (Safari → Share → Add to Home Screen) to turn on reminders."
+    : "This browser can't show reminders. On iPhone you need iOS 16.4 or newer.") : "";
+  return `<div class="card"><h3 class="h3">Daily reminders</h3>
+    <p class="sub">7:45 am: weigh-in and D3 · 7:45 pm: isabgol · 9:45 pm: knee exercises and meds.</p>
+    ${why ? `<p class="small">${esc(why)}</p>` : `<div class="row"><button class="btn ${on ? "ghost" : ""}" id="pushOn">${on ? "Reminders on ✓ · Re-enable" : "Turn on reminders"}</button>
+      ${on ? `<button class="btn ghost sm" id="pushTest">Send a test</button>` : ""}</div>`}</div>`;
+}
+const b64uToBytes = (s) => { const b = atob(s.replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, (c) => c.charCodeAt(0)); };
+async function enablePush() {
+  if (!S.settings.syncKey) return toast("Add your kitchen sync key below first, then tap Save");
+  if ((await Notification.requestPermission()) !== "granted") return toast("Notifications are off. Allow them in iPhone Settings → Notifications → Journey");
+  const { key } = await (await fetch("/api/push/key")).json();
+  if (!key) return toast("Reminders aren't set up on the server yet. Run deploy.sh on your Mac");
+  const reg = await navigator.serviceWorker.ready;
+  const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(key) });
+  const res = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json", "X-Edit-Key": S.settings.syncKey }, body: JSON.stringify(sub) });
+  if (!res.ok) return toast(res.status === 401 ? "Wrong kitchen sync key" : "Couldn't turn on reminders");
+  S.settings.reminders = true; save(); render(); toast("Reminders on: 7:45 am, 7:45 pm and 9:45 pm");
+}
+// Red number on the Home Screen icon: today's must-dos still open.
+function updateBadge() {
+  if (!navigator.setAppBadge) return;
+  const c = S.days[today()]?.checks || {}, open = ["knee", "meds", "isabgol", "water"].filter((k) => !c[k]).length;
+  (open ? navigator.setAppBadge(open) : navigator.clearAppBadge()).catch(() => {});
+}
+
 // ---------- settings ----------
 V.settings = () => {
   const p = S.profile, s = S.settings;
@@ -926,6 +959,7 @@ V.settings = () => {
     <input id="sKey" type="password" placeholder="Paste Gemini API key" value="${esc(s.geminiKey)}" aria-label="Gemini API key">
     <label class="field mt">Model<input id="sModel" value="${esc(s.model)}"></label>
     <div class="row mt"><button class="btn ghost" id="sTest">Test key</button><span id="sTestOut" class="sub grow"></span></div></div>
+  ${pushCard()}
   <div class="card"><h3 class="h3">Kitchen sync key</h3>
     <p class="sub">On your own website: the password you set as EDIT_KEY in Cloudflare. It lets your meal swaps reach the kitchen page. Stored only on this phone.</p>
     <input id="sSync" type="password" placeholder="Kitchen sync key" value="${esc(s.syncKey || "")}" aria-label="Kitchen sync key"></div>
@@ -953,6 +987,7 @@ if (tab === "plan") tab = "journey";
 function render() {
   if (!V[tab]) tab = "today";
   document.body.classList.toggle("kitchen", tab === "kitchen");
+  updateBadge();
   $("#view").innerHTML = V[tab]();
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.dataset.go === tab));
   const name = S.profile.name ? `, ${S.profile.name}` : "";
@@ -1088,6 +1123,11 @@ document.addEventListener("click", async (e) => {
       S.weights.push({ date: today(), kg, waist: parseFloat($("#wWaist")?.value) || null, shoulder: parseFloat($("#wSh")?.value) || null });
       S.weights.sort((a, b) => a.date.localeCompare(b.date));
       save(); render(); return toast(`Saved ${kg} kg`);
+    }
+    case "pushOn": return enablePush().catch(() => toast("Couldn't turn on reminders on this device"));
+    case "pushTest": {
+      const res = await fetch("/api/push/test", { method: "POST", headers: { "X-Edit-Key": S.settings.syncKey || "" } }).catch(() => null);
+      return toast(res?.ok ? "Test sent. It should arrive in a few seconds" : "Couldn't send a test");
     }
     case "trAdd": {
       const what = $("#trWhat").value.trim(), date = $("#trDate").value;

@@ -1,9 +1,9 @@
 {
-  // Deploy with: python3 build-worker.py && npx wrangler deploy
-  // First time: npx wrangler kv namespace create MENU, paste its id below,
-  // then npx wrangler secret put EDIT_KEY (your kitchen sync password).
+  // Deploy with: bash deploy.sh (builds dist/worker.js, sets secrets once, deploys)
   "name": "journey",
   "main": "dist/worker.js",
   "compatibility_date": "2026-09-01",
-  "kv_namespaces": [{ "binding": "MENU", "id": "PASTE_KV_NAMESPACE_ID" }]
+  "kv_namespaces": [{ "binding": "MENU", "id": "4cb8fa54a3be4ade9d4816ae855df01c" }],
+  // Daily reminders, UTC: 02:15 = 7:45 am IST, 14:15 = 7:45 pm IST, 16:15 = 9:45 pm IST
+  "triggers": { "crons": ["15 2 * * *", "15 14 * * *", "15 16 * * *"] }
 }

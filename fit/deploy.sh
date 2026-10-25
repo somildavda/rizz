@@ -7,17 +7,21 @@ cd "$(dirname "$0")"
 echo "1/4 Building the app bundle…"
 python3 build-worker.py
 
-if grep -q PASTE_KV_NAMESPACE_ID wrangler.jsonc; then
-  echo "2/4 Creating storage for meal swaps (KV)…"
-  ID=$(npx -y wrangler kv namespace create MENU 2>&1 | grep -oE '[a-f0-9]{32}' | head -1)
-  if [ -z "$ID" ]; then echo "Couldn't create the KV namespace. Run: npx wrangler login"; exit 1; fi
-  sed -i.bak "s/PASTE_KV_NAMESPACE_ID/$ID/" wrangler.jsonc && rm -f wrangler.jsonc.bak
+if [ ! -f .vapid.json ]; then
+  echo "2/4 Creating keys for daily reminders (once)…"
+  node -e '
+    const c = require("crypto"); const { privateKey } = c.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const jwk = privateKey.export({ format: "jwk" });
+    const pub = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")]).toString("base64url");
+    require("fs").writeFileSync(".vapid.json", JSON.stringify({ publicKey: pub, privateJwk: jwk }));'
+  node -e 'process.stdout.write(JSON.stringify(require("./.vapid.json").privateJwk))' | npx -y wrangler secret put VAPID_PRIVATE_JWK
 else
-  echo "2/4 Storage already set up."
+  echo "2/4 Reminder keys already set."
 fi
+PUB=$(node -e 'process.stdout.write(require("./.vapid.json").publicKey)')
 
 echo "3/4 Deploying…"
-npx -y wrangler deploy
+npx -y wrangler deploy --var "VAPID_PUBLIC:$PUB"
 
 if [ ! -f .sync-key-set ]; then
   echo "4/4 Choose a kitchen sync password (you'll type the same one in the app's Settings):"
@@ -27,6 +31,4 @@ else
 fi
 
 echo
-echo "Done. Your app is at the workers.dev address printed above."
-echo "  Journey (you):  https://journey.<your-subdomain>.workers.dev/"
-echo "  Kitchen (mom):  https://journey.<your-subdomain>.workers.dev/kitchen"
+echo "Done: https://journey.somildavda.workers.dev  ·  Kitchen: https://journey.somildavda.workers.dev/kitchen"
