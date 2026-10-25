@@ -38,7 +38,7 @@ const PHASES = [
     food: "Add 1 roti at lunch and dinner and a second whey shake." },
 ];
 const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% of the weight
-const DAILY = { waterL: 3.5, sleepH: 7.5 };
+const DAILY = { waterL: 4, sleepH: 7.5 }; // 4 L: BUN/creatinine ratio was high (Oct 2026)
 // Daily calorie changes (kcal) on top of the phase target. Gym days eat a bit more, rest
 // days less, and a skipped session or walk lowers that day's target automatically.
 const ADJUST = { gymDay: 100, restDay: -150, skippedGym: -250, skippedWalk: -150 };
@@ -530,15 +530,19 @@ const TESTOSTERONE = [
   ["Keep stress down", "Walks, sunlight and sleep keep cortisol in check."],
 ];
 const BLOOD_TEST = "Retest in mid-January 2027 (fasting 10–12 h): lipid profile (LDL, HDL, triglycerides), vitamin D, " +
-  "vitamin B12, ferritin, fasting insulin, HbA1c, TSH, and kidney markers (BUN, creatinine). Tell the doctor you take " +
+  "vitamin B12, ferritin, hsCRP, fasting insulin, HbA1c, TSH, and kidney markers (BUN, creatinine). Tell the doctor you take " +
   "creatine 5 g a day: it can raise creatinine without any kidney problem. Take the October 2026 report along to compare.";
-// Blood report, Oct 2026, and what the plan does about each result.
-const BLOOD = { ldl: 162, tg: 191, hdl: 49, vitD: 11.5, b12: 201, date: "Oct 2026" };
+// Blood report: Orange Health Labs, 25 Oct 2026 (fasting).
+const BLOOD = { date: "25 Oct 2026", ldl: 162, tg: 191, hdl: 49, tc: 249, nonHdl: 200, vldl: 38, vitD: 11.5, b12: 201,
+  hscrp: 1.69, bun: 19.6, bunCreat: 29.3, glucose: 87, hba1c: 4.7, insulin: 10.4, tsh: 1.35, egfr: 130 };
 const HEALTH = [
-  ["LDL 162 and triglycerides 191 (high), HDL 49", "Skimmed milk, olive-oil spray, daily flax, walnuts and isabgol for soluble fiber, no fried food or sweets, 10k steps. Losing fat lowers triglycerides fastest."],
-  ["Vitamin D 11.5 (deficient)", "Take D3 exactly as prescribed, plus 15 min of morning sun on the arms."],
+  ["Vitamin D 11.5 (deficient)", "Take D3 exactly as prescribed, plus 15 min of morning sun on the arms. Recheck after 3 months."],
+  ["Cholesterol 249, LDL 162, non-HDL 200, triglycerides 191, HDL 49", "Skimmed milk and home-set low-fat dahi, olive-oil spray, brown rice, daily flax, walnuts and isabgol, nothing fried or sweet, 10k steps. Losing fat lowers triglycerides fastest."],
+  ["BUN/creatinine ratio 29.3 (BUN 19.6, urea 42)", "Usually low water and/or high protein, not a kidney problem (eGFR 130 is excellent). Drink 3.5–4 L water a day and keep protein at the plan's level, not more."],
   ["Vitamin B12 201 (low-normal)", "Common for vegetarians: daily dahi and milk; ask the doctor whether to add a B12 supplement."],
-  ["BUN / kidney markers", "Drink 3.5 L water a day, keep protein at the plan's level (not more), and tell the doctor about creatine before the retest."],
+  ["RDW 14.6, Mentzer index 14.9", "May point to early low iron. Ferritin is on the retest list; ask the doctor before taking iron."],
+  ["ALT higher than AST, hsCRP 1.69", "Both normal-range, but the pattern goes with extra body fat. Fat loss improves both; the doctor may suggest a liver ultrasound."],
+  ["Good: sugar, thyroid, kidneys, liver enzymes, blood count", "Fasting glucose 87, HbA1c 4.7, insulin 10.4, TSH 1.35, eGFR 130, hemoglobin 15.6: all normal."],
   ["Right knee ACL sprain", "Physio's 4 exercises every day, Cartigen as prescribed, knee-safe gym plan. Ortho follow-up 9 Nov 2026."],
 ];
 

@@ -257,7 +257,8 @@ const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian,
 never suggest: ${AVOID_FOODS.join(", ")}; for cholesterol also avoid ${HEALTH_AVOID.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
-Blood (${BLOOD.date}): LDL ${BLOOD.ldl}, triglycerides ${BLOOD.tg}, HDL ${BLOOD.hdl}, vitamin D ${BLOOD.vitD}, B12 ${BLOOD.b12}; on D3 and Cartigen.
+Blood (${BLOOD.date}): total cholesterol ${BLOOD.tc}, LDL ${BLOOD.ldl}, non-HDL ${BLOOD.nonHdl}, triglycerides ${BLOOD.tg}, HDL ${BLOOD.hdl}, vitamin D ${BLOOD.vitD} (deficient), B12 ${BLOOD.b12},
+hsCRP ${BLOOD.hscrp}, BUN/creatinine ratio ${BLOOD.bunCreat} (hydrate), glucose ${BLOOD.glucose}, HbA1c ${BLOOD.hba1c}, TSH ${BLOOD.tsh}, eGFR ${BLOOD.egfr}; on D3 and Cartigen.
 ${KNEE.side} knee ACL sprain in rehab (follow-up ${KNEE.followUp}): never suggest stairs, squats, lunges, kneeling, jumping or running.
 Program: ${program().name}, ${program().days} days/week. Goals: V-taper, 2–4 visible abs, better chest shape (has chest fat),
 sharp jawline, Hrithik-style grooming, walk-to-run, monthly calisthenics skills (this month: ${SKILLS[skillIndex()].name}).
