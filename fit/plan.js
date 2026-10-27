@@ -37,6 +37,19 @@ const PHASES = [
     focus: "Hold ~12% body fat at the same weight: lean and athletic like Milkha, not bulky. Moderate weights for 10–15 reps, conditioning twice a week.",
     food: "Add 1 phulka at lunch and dinner. Keep salt and late dinners low so you don't look puffy." },
 ];
+// Gym closures: every day in the range is a walk-only day with a stricter calorie target.
+// Protein stays the same so you keep muscle while you can't lift.
+const GYM_BREAKS = [{ from: "2026-10-27", to: "2026-11-05", kcal: -300, steps: 8000 }];
+const gymBreak = (k) => GYM_BREAKS.find((b) => k >= b.from && k <= b.to);
+const BREAK_RULES = [
+  "Dinner: 1 phulka only and no rice at dinner. Fill the plate with extra sabzi or salad instead.",
+  "Night: plain dahi only (or nothing). No milk drinks, no shake.",
+  "No treat meal, no outside food, no extra nuts, makhana or fruit beyond the plan.",
+  "Cook with the sprays in the recipe only. Weigh dal, rice, oats and atta dry.",
+  "Dinner done by 8:30 pm; normal salt, no papad or pickle.",
+  "Walk 8,000 flat steps in 2–3 parts: 10–15 min after lunch and after dinner helps fat loss and triglycerides.",
+  "Keep 4 L water and the physio knee exercises every day.",
+];
 const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% of the weight
 const DAILY = { waterL: 4, sleepH: 7.5 }; // 4 L: BUN/creatinine ratio was high (Oct 2026)
 // Daily calorie changes (kcal) on top of the phase target. Gym days eat a bit more, rest

@@ -65,7 +65,7 @@ KNEE.rehab = !S.settings.kneeCleared;
 applyProgram();
 // Fixed weekly schedule: Mon/Wed/Fri gym, Tue/Thu steps, Sat walk, Sun rest (gym closed).
 const cyc = (d = new Date()) => dayIdx(new Date(iso(new Date(d))));
-const isGymDay = (d = new Date()) => WEEK[cyc(d)].ex.length > 2;
+const isGymDay = (d = new Date()) => !gymBreak(iso(new Date(d))) && WEEK[cyc(d)].ex.length > 2;
 // Running waits for the ortho: while the knee is in rehab, stay on flat walking.
 const runStage = () => KNEE.rehab ? RUN_PLAN[0] : RUN_PLAN.find((r) => weekNo() >= r.weeks[0] && weekNo() <= r.weeks[1]) || RUN_PLAN.at(-1);
 // The day the plan shows by default: today, or Day 1 if the journey hasn't started yet.
@@ -87,6 +87,12 @@ function exList(di) {
   if (w.ex.length > 2) { ex.splice(1, 0, WARMUP); ex.push(COOLDOWN); }
   return ex;
 }
+
+// Gym closed (GYM_BREAKS in plan.js): walk-only days and the strict food rules.
+const BREAK_DAY = { title: "Gym closed: walk day", ex: [["Flat walk", 1, "8,000 steps", "Split into 2–3 walks, flat ground only"], ["Physio knee exercises", 1, "2 × 10 each", "See the knee card"]] };
+const breakCard = () => `<div class="card notice"><b>🔒 Gym closed till ${fmt(GYM_BREAKS.find((b) => b.to >= today())?.to || today())}: strict days</b>
+  <p class="sub">~${phase(new Date(planDay())).kcal + (gymBreak(planDay())?.kcal || 0)} kcal, same protein, so you lose fat and keep muscle without lifting.</p>
+  <ul class="bullets">${BREAK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
 
 // Meal swaps shared with the kitchen view through the Claude page's shared store.
 // Only {date: {slot: dish}} is shared; weight, workouts and everything else stay on this device.
@@ -141,6 +147,13 @@ function dayTargets(d = today()) {
   const date = new Date(d), ph = phase(date), c = S.days[d]?.checks || {};
   const gym = isGymDay(date), reasons = [];
   let kcal = ph.kcal;
+  const brk = gymBreak(iso(date));
+  if (brk) {
+    kcal += brk.kcal; reasons.push(`Gym closed: strict day ${brk.kcal}`);
+    if (c.skipWalk) { kcal += ADJUST.skippedWalk; reasons.push(`Missed walk ${ADJUST.skippedWalk}`); }
+    return { kcal, protein: ph.protein, fat: ph.fat, carbs: Math.max(100, ph.carbs + Math.round((kcal - ph.kcal) / 4)),
+      reasons, gym: false, skippedGym: false, autoSkip: false, brk };
+  }
   const autoSkip = gym && !c.workout && !c.trainedLate && d === today() && new Date().getHours() >= 21;
   const skippedGym = gym && !c.workout && (c.skipGym || autoSkip);
   if (!gym) { kcal += ADJUST.restDay; reasons.push(`Rest day ${ADJUST.restDay}`); }
@@ -391,13 +404,13 @@ const seg = (cur, key, items) => `<div class="seg" role="tablist">${items.map(([
 const V = {};
 
 V.today = () => {
-  const pd = planDay(), ph = phase(new Date(pd)), w = WEEK[cyc(new Date(pd))], d = day(), t = foodTotals(d), T = dayTargets(pd);
+  const pd = planDay(), ph = phase(new Date(pd)), w = gymBreak(pd) ? BREAK_DAY : WEEK[cyc(new Date(pd))], d = day(), t = foodTotals(d), T = dayTargets(pd);
   const done = d.checks.workout, rest = !T.gym, feel = d.feel || {};
   const soon = S.treatments.filter((x) => !x.done && x.date >= today() && (new Date(x.date) - new Date(today())) / DAY_MS <= 3);
   const notStarted = today() < START_DATE;
   const pct = Math.min(100, Math.round((dayNo() / totalDays()) * 100));
   const habits = [
-    ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", KNEE.rehab ? "Walk as comfortable (flat, up to 8k)" : `${(ph.steps / 1000).toFixed(0)}k steps`],
+    ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", gymBreak(pd) ? `${(gymBreak(pd).steps / 1000).toFixed(0)}k flat steps (2–3 walks)` : KNEE.rehab ? "Walk as comfortable (flat, up to 8k)" : `${(ph.steps / 1000).toFixed(0)}k steps`],
     ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk"],
@@ -410,7 +423,7 @@ V.today = () => {
     <div class="hero-top"><span class="eyebrow">${notStarted ? `Day 1 starts tomorrow · ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
+    <p class="hero-sub">${gymBreak(pd) ? `Gym closed till ${fmt(gymBreak(pd).to)}: 8,000 flat steps + knee exercises, strict food.` : rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`
@@ -431,6 +444,7 @@ V.today = () => {
     <div>${ring(workoutsThisWeek().filter(Boolean).length, program().days, "var(--blue)", "")}<div class="lbl">Workouts</div></div>
   </div>
   <p class="center sub">Target ${T.kcal} kcal today · ${T.reasons.join(" · ")}</p>
+  ${T.brk ? breakCard() : ""}
   <div class="center"><button class="btn ghost sm ${d.checks.skipWalk ? "on" : ""}" data-check="skipWalk">${d.checks.skipWalk ? "✓ Missed walk (−150 kcal)" : "Missed my walk?"}</button></div>
   </div>
 
@@ -467,7 +481,7 @@ function mealTicks(T, d = today()) {
         <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details></div>
       <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
-  return rows + (!T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
+  return rows + (T.brk ? `<p class="sub center">Strict day: 1 phulka, no rice at dinner; plain dahi at night.</p>` : !T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");
 }
 
 // ---------- train ----------
@@ -477,8 +491,8 @@ V.train = () => seg(trainSeg, "trainseg", [["gym", "Gym"], ["run", "Walk / Run"]
 
 function trainGym() {
   const tdate = iso(dateOfCyc(trainDay)), early = tdate < START_DATE, si = cyc(tdate);
-  const w = early ? { title: "Before Day 1", ex: [["Your plan starts on " + fmt(START_DATE), 1, "—", ""]] } : WEEK[si];
-  const ex = early ? w.ex : exList(si), wk = workoutsThisWeek(), rest = w.ex.length <= 2, pr = program();
+  const w = early ? { title: "Before Day 1", ex: [["Your plan starts on " + fmt(START_DATE), 1, "—", ""]] } : gymBreak(tdate) ? BREAK_DAY : WEEK[si];
+  const ex = early || gymBreak(tdate) ? w.ex : exList(si), wk = workoutsThisWeek(), rest = w.ex.length <= 2, pr = program();
   return `
   <div class="card"><div class="spread"><div><span class="eyebrow">Your program</span><h2 class="h2">${esc(pr.name)}</h2></div>
     <span class="pill">${pr.days} days / week</span></div>
@@ -690,6 +704,7 @@ function foodPlan() {
       <div><b>${T.protein} g</b><span>protein target</span></div><div><b>${total.p} g</b><span>protein planned</span></div>
       <div><b>${FIBER_TARGET} g</b><span>fiber target</span></div><div><b>${total.f} g</b><span>fiber planned</span></div></div>
     <p class="note">${esc(phase(new Date(pd)).food)}</p></div>
+  ${T.brk ? breakCard() : ""}
   <p class="sub"><b>Menu week ${menuWeek(pd)} of 4: ${esc(MENU_THEMES[menuWeek(pd)])}.</b> New dishes every week, same calories and protein. Tap another option to swap it for this day. No tofu, rajma or chole. Brands are suggestions; any equivalent works.</p>
   ${MEALS.map((slot, i) => slot.gymOnly && !gym ? "" : `<div class="card list"><span class="eyebrow">${esc(slot.time)} · ${esc(slot.label)}</span>
     ${mealOptions(i, pd).map((m, j) => { const on = mealPickIdx(i, pd) === j;

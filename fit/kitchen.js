@@ -20,7 +20,7 @@ async function loadSwaps() {
   } catch {}
 }
 // Gym days: Mon–Fri (Milkha Athlete). Sat and Sun the first meal is plain "Breakfast".
-const isGymDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
+const isGymDay = (k) => !gymBreak(k) && [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
   new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 
@@ -33,6 +33,8 @@ function render() {
       <div class="sub">Menu week ${menuWeek(cur)} of 4 · ${esc(MENU_THEMES[menuWeek(cur)])}</div></div>
     <button class="iconbtn" id="next" aria-label="Next day">›</button></div>
   <p class="sub center">${lastLoad ? `Menu updated ${lastLoad.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} · ` : ""}<button class="btn ghost xs" id="refresh">↻ Refresh</button></p>
+  ${gymBreak(cur) ? `<div class="card notice"><b>🔒 Gym closed: strict days (till ${new Date(gymBreak(cur).to).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})</b>
+    <ul class="bullets">${BREAK_RULES.slice(0, 5).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
   <button class="btn ghost block sm" id="copy">📋 Copy this day's menu</button>
   ${MEALS.map((slot, i) => {
     const m = dishAt(i, cur), name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
