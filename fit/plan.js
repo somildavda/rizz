@@ -442,9 +442,275 @@ MEALS[0].options.forEach((o) => {
 });
 const FIBER_TARGET = 30; // g a day
 
+// ---- Weekly menus: week 1 = the dishes above; weeks 2–4 bring a new set of dishes each week,
+// then the 4-week cycle repeats. Each week has 7 dishes per meal (one per day) in the same
+// calorie / protein band as week 1. Same rules: low oil, no tofu, rajma, chole, roasted chana or peanuts.
+const HM = "home-made paneer (from Slim n Trim milk)", DH = "low-fat dahi (home-set from Slim n Trim milk)",
+  MK = "Amul Slim n Trim skimmed milk", AT = "Milld High Protein Atta", SY = "Fortune mini soya chunks (dry)";
+const LEMON_ITEM = "½ lemon (squeeze on top)", LEMON_STEP = "Squeeze the lemon on top just before eating (helps absorb iron).";
+const dish = (name, kcal, p, fib, items, steps, lemon) =>
+  ({ name, kcal, p, fib, items: lemon ? [LEMON_ITEM, ...items] : items, steps: lemon ? [...steps, LEMON_STEP] : steps });
+const SOYA_BOIL = "Boil soya 5 min in salted water, squeeze out all the water.";
+const PHULKA = (n) => `${n * 30} g ${AT} → ${n} phulka${n > 1 ? "s" : ""}`;
+const TAWA_PANEER = "Tawa with 2 sprays, paneer 2 min per side (no longer, or it turns rubbery).";
+const WHEY_W = (g) => `${g} g ${WHEY} (${g === 30 ? "1 level scoop" : "½ level scoop"}) in ${g === 30 ? 250 : 200} ml cold water`;
+
+const MENU_THEMES = { 1: "Classic home menu", 2: "South Indian + Gujarati", 3: "Maharashtrian + Punjabi", 4: "Indo-Chinese, wraps, bowls + millets" };
+const MENU_WEEKS = {
+  2: [
+    [ // Breakfast
+      dish("Pesarattu + paneer", 410, 49, 8, ["50 g whole green moong (dry), soaked overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", `65 g ${HM}, crumbled`, "30 g onion, chopped", "2 tbsp tomato chutney (tomato + garlic + chilli, no coconut)", "3–4 sprays olive oil", WHEY_W(30)],
+        ["Grind the soaked moong with ginger, chilli and ~60 ml water into a smooth batter; add jeera and salt.", "Spray a hot tawa, spread 2 thin dosas, sprinkle onion, cook 2 min, flip 1 min.", "Fill with paneer, fold. Tomato chutney on the side; drink the whey shake."], true),
+      dish("Ragi dosa + paneer bhurji", 475, 50, 7, ["40 g ragi flour + 20 g urad dal flour (or ground soaked urad)", "100 g " + DH + " (half in the batter, half on the side)", `50 g ${PANEER}, crumbled`, "30 g onion + 30 g tomato, curry leaves", "3–4 sprays olive oil", WHEY_W(30)],
+        ["Mix ragi, urad, 50 g dahi, salt and ~100 ml water into a thin batter; rest 10 min.", "Bhurji: spray kadhai, onion + curry leaves 2 min, tomato 2 min, paneer 2 min.", "Spray a hot tawa, pour 2 thin dosas, 2 min, flip 30 s.", "Fill with bhurji. Rest of the dahi on the side; drink the whey shake."]),
+      dish("Oats-moong idli + chutney", 475, 48, 7, ["30 g Quaker oats, ground + 40 g yellow moong dal (dry), soaked 3 h", "50 g " + DH, "30 g grated carrot, ½ tsp mustard seeds, curry leaves, salt", "2 tbsp coriander-mint chutney (no coconut)", `30 g ${WHEY} (1 level scoop) in 250 ml ${MK}`],
+        ["Grind the dal with very little water; mix in ground oats, dahi, carrot, salt. Rest 15 min.", "Spray idli plates, fill, steam 12 min (makes ~6 small idlis).", "Mustard + curry leaf tadka with 1 spray on top.", "Chutney on the side; drink the whey-milk."], true),
+      dish("Adai (mixed dal dosa)", 435, 41, 8, ["20 g brown rice + 20 g toor dal + 20 g yellow moong dal + 10 g urad dal (dry), soaked 4 h", "1 dry red chilli, ginger, curry leaves, pinch hing, salt", "30 g onion, chopped", "4 sprays olive oil", "100 g " + DH, WHEY_W(30)],
+        ["Grind everything coarse with ~70 ml water; add onion and salt.", "Spray a hot tawa, spread 2 thick adais, 3 min, flip 2 min.", "Dahi on the side; drink the whey shake."], true),
+      dish("Lauki-oats handvo", 470, 41, 8, ["40 g Quaker oats, ground + 30 g Tata Sampann besan", "100 g " + DH, "100 g lauki, grated and squeezed", "½ tsp sesame seeds, ½ tsp mustard seeds, ginger-chilli paste, haldi, salt, pinch of eno", "4 sprays olive oil", WHEY_W(30)],
+        ["Mix oats, besan, dahi, lauki, ginger-chilli, haldi, salt; rest 10 min, then stir in eno.", "Spray a small non-stick pan, mustard + sesame, pour the batter 1.5 cm thick.", "Cover, low heat 10 min, flip, 6 min more. Cut in wedges.", "Drink the whey shake with it."]),
+      dish("Methi thepla + hung curd", 415, 43, 8, [`50 g ${AT} + 20 g fresh methi leaves, chopped`, "Haldi, ajwain, chilli, salt", "250 g " + DH + ", hung 2 h (~150 g)", "3 sprays olive oil", WHEY_W(30)],
+        ["Knead atta with methi, spices, salt and water (no oil).", "Roll 2 thin theplas, cook on tawa with sprays, 1 min per side.", "Hung curd on the side; drink the whey shake."]),
+      dish("Masala oats + paneer", 435, 42, 7, ["50 g Quaker rolled oats (dry)", `75 g ${HM}, cubed`, "80 g veg: onion, carrot, peas, capsicum", "½ tsp mustard seeds, curry leaves, haldi, salt", "3 sprays olive oil", `15 g ${WHEY} (½ level scoop) in 150 ml ${MK}`],
+        ["Spray a pan, mustard + curry leaves, veg 3 min.", "Add oats, haldi, salt and 200 ml water; cook 3 min.", "Stir in paneer for 1 min.", "Drink the whey-milk with it."]),
+    ],
+    [ // Lunch
+      dish("Sambar + brown rice + paneer tikka", 560, 37, 11, ["40 g toor dal (dry)", "150 g veg: drumstick, lauki, tomato, onion", "1 tsp sambar powder, tamarind (pea size), curry leaves, mustard seeds", "50 g brown rice (dry, soaked 30 min)", `75 g ${PANEER} for tikka (see tikka steps)`, "4 sprays olive oil"],
+        ["Pressure-cook dal with haldi and 300 ml water, 3 whistles; mash.", "Cook veg in 200 ml water with tamarind and sambar powder 8 min; add dal, simmer 3 min.", "Tadka: mustard + curry leaves with 2 sprays.", "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", ...TIKKA_STEPS], true),
+      dish("Gujarati thali", 545, 47, 12, ["30 g toor dal (dry), for Gujarati dal (no sugar or jaggery)", PHULKA(2), "150 g cabbage + 50 g peas shaak", `100 g ${HM}, cubed into the shaak`, "100 g " + DH, "4 sprays olive oil"],
+        ["Dal: pressure-cook with haldi, 3 whistles; add tomato, ginger, kokum or lemon, simmer 5 min.", "Shaak: spray kadhai, mustard + hing, cabbage + peas + haldi + salt, cover 6 min, add paneer 2 min.", "2 phulkas, no ghee. Dahi on the side."], true),
+      dish("Curd rice + soya + paneer", 520, 42, 7, ["50 g brown rice (dry, soaked 30 min)", "200 g " + DH, `30 g ${SY}`, `50 g ${PANEER}, cubed`, "50 g cucumber + carrot, grated", "Mustard seeds, curry leaves, ginger, 1 green chilli", "3 sprays olive oil"],
+        ["Cook brown rice soft (50 g in 180 ml water, 25 min), cool.", "Mix rice with dahi, cucumber, carrot, salt.", "Tadka with 2 sprays: mustard, curry leaves, ginger, chilli; pour over.", SOYA_BOIL + " Toss soya and paneer on the tawa with 1 spray, salt and chilli, 3 min. Serve on the side."]),
+      dish("Millet bisi bele bath + tikka", 545, 40, 12, ["40 g foxtail millet (dry, soaked 30 min) + 40 g toor dal (dry)", "150 g veg: carrot, beans, peas, capsicum", "1 tsp bisi bele bath (or sambar) powder, tamarind (pea size)", `75 g ${PANEER} for tikka (see tikka steps)`, "Raita: 100 g " + DH + " + cucumber", "4 sprays olive oil"],
+        ["Pressure-cook millet, dal and veg with tamarind, powder, haldi, salt and 600 ml water, 3 whistles.", "Tadka with 2 sprays: mustard + curry leaves; pour over.", ...TIKKA_STEPS, "Raita on the side."], true),
+      dish("Methi muthiya + kadhi + tikka", 550, 43, 11, [`30 g ${AT} + 20 g jowar flour + 20 g besan`, "50 g fresh methi, chopped; ginger-chilli, haldi, salt", "Kadhi: 150 g " + DH + " + 10 g besan, curry leaves, ginger", `75 g ${PANEER} for tikka (see tikka steps)`, "3 sprays olive oil"],
+        ["Mix flours, methi, spices, salt and a little water into a soft dough; shape 2 logs.", "Steam 15 min, cool, slice; tawa with 2 sprays and sesame 2 min.", "Kadhi: whisk dahi, besan and 200 ml water; simmer 8 min, stirring, with ginger and curry leaves (no sugar).", ...TIKKA_STEPS]),
+      dish("Palak dal + jowar roti + paneer", 535, 40, 13, ["40 g yellow moong dal (dry)", "150 g palak, chopped", "50 g jowar flour → 2 rotis", `75 g ${PANEER}, cubed`, "Garlic, jeera, haldi, salt", "4 sprays olive oil"],
+        ["Pressure-cook dal with palak, haldi, salt, 300 ml water, 3 whistles.", "Garlic-jeera tadka with 2 sprays; add paneer, 2 min.", "Jowar roti: knead with hot water, pat thin between sheets, cook both sides on the tawa."], true),
+      dish("Light undhiyu + phulka", 560, 41, 12, ["200 g veg: surti papdi (or beans), brinjal, 50 g sweet potato", "Green masala: coriander, ginger, chilli, garlic, ajwain (no coconut)", `75 g ${PANEER}, cubed`, PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
+        ["Toss veg with green masala, haldi, salt.", "Spray a cooker, add veg + 80 ml water, 2 whistles.", "Stir in paneer, 2 min.", "2 phulkas. Dahi on the side."]),
+    ],
+    [ // Snack
+      dish("Khaman dhokla + protein chaas", 250, 24, 4, ["40 g besan, 30 g " + DH + ", ginger-chilli paste, pinch eno (no sugar)", "Tadka: mustard seeds, curry leaves, 1 spray", "1 pack Amul High Protein Buttermilk"],
+        ["Mix besan, dahi, ginger-chilli, salt and ~50 ml water; rest 10 min, add eno.", "Steam in a greased plate 12 min. Cut in squares.", "Tadka with lemon on top. Drink the buttermilk."]),
+      dish("Moong sundal + whey", 205, 22, 7, ["40 g whole green moong (dry), soaked overnight", "Mustard seeds, curry leaves, 1 green chilli, grated carrot", "1 spray olive oil", WHEY_W(15)],
+        ["Pressure-cook moong 1 whistle (soft but whole), drain.", "Spray pan, mustard + curry leaves + chilli, add moong and carrot, salt.", "Drink the shake."], true),
+      dish("Grilled paneer + guava + chaas", 230, 29, 6, [`70 g ${HM}, cubed`, "Chaat masala, chilli, 1 spray", "1 guava", "1 pack Amul High Protein Buttermilk"],
+        [TAWA_PANEER, "Sprinkle chaat masala. Guava on the side; drink the buttermilk."]),
+      dish("Ragi malt (no sugar)", 210, 22, 3, ["20 g ragi flour", `250 ml ${MK}`, `15 g ${WHEY} (½ level scoop)`, "Pinch of cardamom"],
+        ["Whisk ragi into 50 ml water, then into the milk; cook on low 5 min, stirring.", "Off the heat, wait 1 min, stir in the whey. Cardamom on top."]),
+      dish("Hung curd dip + veg sticks", 265, 25, 5, ["250 g " + DH + ", hung 2 h (~150 g)", "Garlic, mint, pepper, salt", "200 g carrot + cucumber sticks", "15 g Farmley makhana", WHEY_W(15)],
+        ["Mix hung curd with grated garlic, chopped mint, pepper and salt.", "Dip the veg sticks; makhana on the side. Drink the shake."]),
+      dish("Soya-makhana bhel", 240, 22, 5, [`25 g ${SY}`, "15 g Farmley makhana", "10 g pumpkin seeds", "Onion, tomato, cucumber, coriander, lemon, chaat masala, mint chutney"],
+        [SOYA_BOIL + " Chop small.", "Mix everything just before eating so the makhana stays crunchy."], true),
+      dish("Apple + walnuts + whey", 265, 26, 4, ["1 apple", "10 g walnuts (about 3 halves)", WHEY_W(30)],
+        ["Slice the apple, walnuts on the side. Drink the shake."]),
+    ],
+    [ // Dinner
+      dish("Rasam + paneer-veg + phulka", 465, 40, 8, ["20 g toor dal (dry) for rasam", "Tomato, tamarind (pea size), rasam powder, garlic, curry leaves", `100 g ${PANEER}, cubed`, "150 g veg: beans, carrot, capsicum", PHULKA(1), "4 sprays olive oil"],
+        ["Rasam: pressure-cook dal; boil with tomato, tamarind, rasam powder and 300 ml water 8 min; tadka with 1 spray.", "Spray kadhai, veg 4 min, paneer 2 min, salt and pepper.", "1 phulka. Drink the rasam hot."], true),
+      dish("Soya-veg kurma + phulka", 452, 37, 13, [`35 g ${SY}`, "150 g veg: carrot, beans, cauliflower + 50 g peas", "Gravy: onion, tomato, 50 g " + DH + ", poppy seeds (1 tsp), whole spices (no coconut)", PHULKA(2), "4 sprays olive oil"],
+        [SOYA_BOIL, "Blend onion, tomato and poppy seeds; spray kadhai, whole spices, cook the paste 5 min.", "Add veg, soya and 150 ml water, cover 8 min. Off the heat, stir in whisked dahi.", "2 phulkas, no ghee."]),
+      dish("Lauki handvo + raita", 447, 33, 8, ["30 g yellow moong dal + 20 g brown rice (dry), soaked 4 h + 20 g besan", "150 g lauki, grated and squeezed", `65 g ${HM}, crumbled into the batter`, "½ tsp sesame + mustard seeds, ginger-chilli, haldi, pinch of eno", "Raita: 150 g " + DH + " + cucumber", "4 sprays olive oil"],
+        ["Grind dal and rice coarse; mix besan, lauki, paneer, spices, salt; add eno.", "Spray a small non-stick pan, mustard + sesame, pour batter, cover, low heat 12 min, flip 8 min.", "Raita on the side."], true),
+      dish("Methi thepla + paneer bhurji", 470, 38, 10, [`60 g ${AT} + 20 g fresh methi → 2 theplas`, `75 g ${PANEER}, crumbled`, "50 g onion + 50 g tomato, haldi, chilli", "100 g " + DH, "4 sprays olive oil"],
+        ["Theplas: knead atta + methi + spices, roll thin, tawa with sprays.", "Bhurji: spray kadhai, onion 2 min, tomato 2 min, paneer 2 min.", "Dahi on the side."]),
+      dish("Foxtail millet khichdi + tikka", 505, 39, 10, ["40 g foxtail millet + 30 g yellow moong dal (dry), soaked 30 min", "100 g veg: carrot, beans, peas", `75 g ${PANEER} for tikka (see tikka steps)`, "100 g " + DH, "4 sprays olive oil, jeera, haldi"],
+        ["Pressure-cook millet, dal, veg, haldi, salt and 450 ml water, 3 whistles.", "Jeera tadka with 2 sprays.", ...TIKKA_STEPS, "Dahi on the side."], true),
+      dish("Kadhi + soya khichdi", 489, 35, 8, ["40 g brown rice + 20 g yellow moong dal (dry), soaked 30 min", `35 g ${SY}`, "Kadhi: 150 g " + DH + " + 10 g besan, ginger, curry leaves", "3 sprays olive oil, jeera, haldi"],
+        [SOYA_BOIL, "Pressure-cook rice, dal and soya with haldi, salt and 400 ml water, 4 whistles; jeera tadka.", "Kadhi: whisk dahi, besan and 200 ml water; simmer 8 min, stirring (no sugar)."], true),
+      dish("Gujarati tomato dal + paneer + phulka", 500, 40, 10, ["30 g toor dal (dry)", "1 tomato, ginger, kokum or lemon, mustard, hing", `75 g ${PANEER} for tikka (see tikka steps)`, PHULKA(2), "Salad: 100 g cucumber", "3 sprays olive oil"],
+        ["Pressure-cook dal; simmer with tomato, ginger, kokum, 5 min (no sugar). Mustard-hing tadka.", ...TIKKA_STEPS, "2 phulkas, no ghee."], true),
+    ],
+    [ // Night
+      dish("Jeera chaas", 80, 8, 0, ["200 g " + DH, "Roasted jeera powder, salt, mint"], ["Whisk dahi with 150 ml water, jeera, salt, mint."]),
+      dish("Kesar-elaichi milk", 85, 9, 0, [`250 ml ${MK}`, "2 strands saffron, pinch cardamom"], ["Warm the milk with saffron and cardamom 3 min. No sugar."]),
+      dish("Mint-cucumber raita", 85, 8, 1, ["200 g " + DH, "50 g cucumber, grated", "Mint, roasted jeera, salt"], ["Squeeze the cucumber, whisk into the dahi with mint, jeera and salt."]),
+      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Ajwain chaas", 80, 8, 0, ["200 g " + DH, "¼ tsp ajwain, pinch black salt"], ["Whisk dahi with 150 ml water, crushed ajwain and black salt."]),
+      dish("Nutmeg warm milk", 85, 9, 0, [`250 ml ${MK}`, "Pinch of nutmeg"], ["Warm the milk with nutmeg. No sugar."]),
+      dish("Dahi + flax", 85, 7, 2, ["150 g " + DH, "1 tsp ground flaxseed"], ["Stir the flax into the dahi."]),
+    ],
+  ],
+  3: [
+    [ // Breakfast
+      dish("Thalipeeth + dahi", 435, 48, 8, ["20 g jowar + 15 g bajra flour + 15 g besan", `65 g ${HM}, grated into the dough`, "30 g onion, coriander, ajwain, chilli, haldi, salt", "3 sprays olive oil", "100 g " + DH, WHEY_W(30)],
+        ["Mix flours, paneer, onion and spices with water into a soft dough.", "Pat 2 thalipeeths on a wet cloth or foil, make 3 holes in each.", "Tawa with sprays, cover, 3 min per side.", "Dahi on the side; drink the whey shake."]),
+      dish("Kanda poha + matki sprouts", 445, 40, 7, ["40 g thick poha (dry)", "40 g matki (moth beans), sprouted at home", "40 g onion, mustard, curry leaves, haldi, chilli", "3 sprays olive oil", "100 g " + DH, WHEY_W(30)],
+        ["Steam the sprouts 5 min.", "Rinse poha, leave 5 min.", "Spray kadhai, mustard + curry leaves, onion 2 min, sprouts + haldi + salt, then poha, 2 min.", "Dahi on the side; drink the whey shake."], true),
+      dish("Paneer paratha + dahi", 445, 49, 7, [`60 g ${AT} → 2 parathas`, `100 g ${HM}, crumbled, with chilli, coriander, ajwain, salt`, "3 sprays olive oil (no ghee)", "100 g " + DH, WHEY_W(15)],
+        ["Knead atta. Roll 2 small rounds, fill with paneer, seal, roll gently.", "Tawa with sprays, 1–2 min per side.", "Dahi on the side; drink the shake."]),
+      dish("Besan-palak chilla + hung curd", 442, 46, 7, ["50 g Tata Sampann besan", "50 g palak, finely chopped", "Ajwain, chilli, haldi, salt", "250 g " + DH + ", hung 2 h (~150 g)", "4 sprays olive oil", WHEY_W(30)],
+        ["Mix besan, palak, spices and ~90 ml water.", "Spray a hot tawa, make 2 chillas, 2 min per side.", "Hung curd on the side; drink the whey shake."], true),
+      dish("Moong misal (no farsan)", 475, 46, 11, ["50 g whole green moong, sprouted", "Rassa: onion, tomato, garlic, 1 tsp misal / kanda-lasun masala (no coconut)", "Onion, coriander, lemon on top", PHULKA(1), "100 g " + DH, "3 sprays olive oil", WHEY_W(30)],
+        ["Spray a cooker, onion-garlic 2 min, tomato + masala 2 min, sprouts + 300 ml water, 1 whistle.", "Top with raw onion and coriander. Eat with 1 phulka instead of pav, dahi on the side.", "Drink the whey shake."], true),
+      dish("Daliya kheer-style (no sugar)", 435, 39, 6, ["40 g daliya (dry)", `250 ml ${MK}`, `30 g ${WHEY} (1 level scoop)`, "1 small banana, mashed", "Cardamom"],
+        ["Dry-roast daliya 2 min; pressure-cook with 150 ml water, 2 whistles.", "Add milk and simmer 5 min.", "Off the heat, wait 1 min, stir in whey and mashed banana (the sweetness). Cardamom on top."]),
+      dish("Amritsari paneer bhurji + phulka", 445, 46, 5, [`75 g ${PANEER}, crumbled`, "40 g onion + 40 g tomato + 30 g capsicum", "Ginger, chilli, haldi, kasuri methi, garam masala", PHULKA(1), "3 sprays olive oil", `15 g ${WHEY} (½ level scoop) in 150 ml ${MK}`],
+        ["Spray kadhai, onion + ginger 2 min, tomato + capsicum 3 min, spices.", "Add paneer and kasuri methi, 2 min.", "1 phulka; drink the whey-milk."]),
+    ],
+    [ // Lunch
+      dish("Matki usal + jowar bhakri", 567, 40, 13, ["40 g matki (moth beans), sprouted", "Onion, tomato, garlic, goda masala (no coconut)", `75 g ${PANEER}, cubed`, "50 g jowar flour → 2 bhakris", "100 g " + DH, "4 sprays olive oil"],
+        ["Spray cooker, onion-garlic 2 min, tomato + goda masala 2 min, sprouts + 250 ml water, 1 whistle.", "Add paneer, 2 min.", "Bhakri: knead jowar with hot water, pat thin, cook both sides.", "Dahi on the side."], true),
+      dish("Varan bhaat + tikka + koshimbir", 540, 36, 8, ["40 g toor dal (dry), plain varan (haldi, hing, salt)", "50 g brown rice (dry, soaked 30 min)", `75 g ${PANEER} for tikka (see tikka steps)`, "Koshimbir: 100 g cucumber + 50 g " + DH + ", lemon, jeera", "3 sprays olive oil"],
+        ["Varan: pressure-cook dal with haldi, hing, salt, 3 whistles; mash smooth.", "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", ...TIKKA_STEPS, "Koshimbir: chopped cucumber, dahi, jeera, salt."], true),
+      dish("Dal tadka + achari paneer + phulka", 500, 43, 12, ["20 g yellow moong + 20 g masoor dal (dry)", `100 g ${HM}, cubed, with ½ tsp achari masala (no pickle oil)`, PHULKA(2), "Salad: 100 g onion + cucumber", "Garlic, jeera, red chilli, 4 sprays olive oil"],
+        ["Pressure-cook dals with haldi, salt, 300 ml water, 3 whistles.", "Tadka with 2 sprays: jeera, garlic, red chilli.", "Toss paneer with achari masala on the tawa with 1 spray, 2 min.", "2 phulkas, no ghee."], true),
+      dish("Sarson-palak saag + bajra roti", 510, 43, 14, ["150 g palak + 100 g sarson (mustard greens)", "30 g yellow moong dal (dry), cooked into the saag", `100 g ${HM}, cubed`, "50 g bajra flour → 2 rotis", "100 g " + DH, "Garlic, ginger, chilli, 4 sprays olive oil"],
+        ["Pressure-cook greens + dal with ginger, chilli, salt, 2 whistles; mash coarse.", "Garlic tadka with 2 sprays; add paneer, 2 min.", "Bajra roti: knead with hot water, pat thin, cook both sides.", "Dahi on the side."], true),
+      dish("Bharli vangi (soya stuffing) + dal + phulka", 562, 43, 15, ["200 g small brinjals, slit", `30 g ${SY}, pulsed + 10 g besan + goda masala (no coconut)`, "30 g toor dal (dry)", PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
+        [SOYA_BOIL + " Pulse to mince; mix with roasted besan, masala and salt.", "Stuff the brinjals; spray kadhai, cook covered on low 12 min, turning.", "Dal: pressure-cook with haldi, salt, 3 whistles.", "2 phulkas. Dahi on the side."], true),
+      dish("Punjabi kadhi + rice + tikka", 563, 41, 6, ["Kadhi (no pakoda): 150 g " + DH + " + 15 g besan, methi seeds, ginger", "50 g brown rice (dry, soaked 30 min)", `100 g ${PANEER} for tikka (see tikka steps)`, "Salad: 100 g cucumber + onion", "3 sprays olive oil"],
+        ["Kadhi: whisk dahi, besan and 250 ml water; simmer 10 min, stirring; methi-seed tadka with 1 spray.", "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", ...TIKKA_STEPS]),
+      dish("Pithla bhakri + sprouts koshimbir", 575, 38, 13, ["40 g besan for pithla, onion, garlic, chilli", `65 g ${HM}, crumbled into the pithla`, "50 g jowar flour → 2 bhakris", "Koshimbir: 30 g whole moong, sprouted + cucumber + lemon", "100 g " + DH, "3 sprays olive oil"],
+        ["Pithla: spray kadhai, onion-garlic-chilli 2 min; whisk besan in 250 ml water, pour in, stir 6 min till thick; add paneer.", "Bhakri: knead jowar with hot water, pat thin, cook both sides.", "Koshimbir: steamed sprouts with cucumber and salt. Dahi on the side."], true),
+    ],
+    [ // Snack
+      dish("Matki usal cup + whey", 205, 21, 6, ["40 g matki (moth beans), sprouted", "Onion, tomato, chilli, coriander", WHEY_W(15)],
+        ["Steam sprouts 5 min; mix with onion, tomato, coriander, salt.", "Drink the shake."], true),
+      dish("Salted lassi + pumpkin seeds", 260, 23, 2, ["200 g " + DH, `15 g ${WHEY} (½ level scoop)`, "Roasted jeera, salt", "10 g pumpkin seeds"],
+        ["Blend dahi, whey, 100 ml cold water, jeera and salt.", "Pumpkin seeds on the side."]),
+      dish("Achari paneer + guava", 245, 22, 6, [`75 g ${PANEER}, cubed`, "½ tsp achari masala, 1 spray", "1 guava"],
+        [TAWA_PANEER, "Sprinkle achari masala. Guava on the side."]),
+      dish("Makhana chivda + protein chaas", 260, 22, 3, ["25 g Farmley makhana", "10 g pumpkin seeds, curry leaves, haldi, pinch salt", "2 sprays olive oil", "1 pack Amul High Protein Buttermilk"],
+        ["Spray a kadhai, curry leaves + haldi, makhana + seeds, roast on low 4 min till crisp. No peanuts.", "Drink the buttermilk."]),
+      dish("Moong-palak dhokla + whey", 225, 25, 4, ["40 g yellow moong dal (dry), soaked 3 h", "30 g palak, 50 g " + DH + ", ginger-chilli, pinch eno", "Green chutney", WHEY_W(15)],
+        ["Grind dal with palak and ginger-chilli; mix in dahi and salt; add eno.", "Steam 12 min. Cut in squares; chutney on the side.", "Drink the shake."], true),
+      dish("Banana-whey milkshake", 210, 25, 1, [`250 ml ${MK}, cold`, `20 g ${WHEY} (⅔ level scoop)`, "½ banana", "Cinnamon"],
+        ["Blend everything 20 seconds. No sugar."]),
+      dish("Soya tikki + dahi", 220, 18, 4, [`25 g ${SY}`, "20 g Quaker oats, ground", "Onion, coriander, ginger, chaat masala", "3 sprays olive oil", "50 g " + DH + " + mint chutney"],
+        [SOYA_BOIL + " Pulse with oats, onion and spices.", "Shape 3 tikkis; tawa with sprays, 3 min per side (not fried).", "Mint-dahi dip on the side."]),
+    ],
+    [ // Dinner
+      dish("Kolhapuri soya + phulka", 470, 39, 13, [`40 g ${SY}`, "Onion, tomato, garlic, 1 tsp Kolhapuri masala (no coconut)", "150 g capsicum + onion", PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
+        [SOYA_BOIL, "Spray kadhai, onion-garlic 2 min, tomato + masala 3 min, soya + capsicum 5 min (dry).", "2 phulkas. Dahi on the side (cools the spice)."]),
+      dish("Dal palak + rice + raita", 475, 36, 10, ["40 g yellow moong dal (dry)", "150 g palak", `65 g ${HM}, cubed into the dal`, "40 g brown rice (dry, soaked 30 min)", "Raita: 150 g " + DH + " + cucumber", "3 sprays olive oil, garlic, jeera"],
+        ["Pressure-cook dal with palak, haldi, salt, 3 whistles.", "Garlic-jeera tadka with 2 sprays; add paneer, 2 min.", "Brown rice: 40 g (soaked) in 120 ml water, 20 min. Raita on the side."], true),
+      dish("Paneer tikka masala (light) + phulka", 475, 40, 8, [`100 g ${PANEER} for tikka (see tikka steps)`, "Gravy: onion, tomato, 50 g " + DH + ", kasuri methi, garam masala", "50 g green peas", PHULKA(1), "Salad: 100 g cucumber", "4 sprays olive oil"],
+        [...TIKKA_STEPS, "Gravy: spray kadhai, onion 3 min, tomato + spices 3 min, blend; add peas and 100 ml water, 4 min.", "Off the heat stir in whisked dahi; add the paneer.", "1 phulka."]),
+      dish("Zunka-paneer + jowar bhakri", 535, 41, 10, ["35 g besan", "100 g onion, garlic, chilli, mustard, haldi", `100 g ${HM}, crumbled`, "50 g jowar flour → 2 bhakris", "150 g " + DH, "3 sprays olive oil"],
+        ["Spray kadhai, mustard + garlic + onion 4 min, haldi + chilli.", "Sprinkle besan, stir on low 5 min (dry and crumbly); add paneer, 2 min.", "Bhakris; dahi on the side."]),
+      dish("Punjabi mix veg + soya + phulka", 435, 35, 13, ["200 g veg: cauliflower, carrot, beans, peas, capsicum", `30 g ${SY}`, "Onion, tomato, ginger-garlic, kasuri methi", PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
+        [SOYA_BOIL, "Spray kadhai, onion → ginger-garlic → tomato + spices; add veg + soya + 100 ml water, cover 8 min.", "2 phulkas. Dahi on the side."]),
+      dish("Masoor dal + methi-paneer thepla", 480, 36, 13, ["40 g masoor dal (dry)", `30 g ${AT} + 30 g jowar flour + 20 g methi → 2 theplas`, `65 g ${HM}, grated into the dough`, "100 g " + DH, "4 sprays olive oil"],
+        ["Pressure-cook dal with haldi, salt, tomato, 3 whistles; jeera tadka.", "Knead flours, methi, paneer and spices; roll 2 theplas; tawa with sprays.", "Dahi on the side."], true),
+      dish("Tandoori paneer-veg + raita", 455, 42, 7, [`100 g ${PANEER} + 150 g capsicum, onion, tomato chunks`, "Tandoori marinade: 30 g dahi, chilli, garam masala, ginger-garlic, lemon", "Raita: 150 g " + DH + " + mint", PHULKA(1), "3 sprays olive oil"],
+        ["Marinate paneer and veg 15 min.", "Air fryer 180 °C 8 min (or tawa with sprays), turn once.", "1 phulka; mint raita on the side."]),
+    ],
+    [ // Night
+      dish("Elaichi milk", 85, 9, 0, [`250 ml ${MK}`, "Pinch cardamom"], ["Warm the milk with cardamom. No sugar."]),
+      dish("Pudina chaas", 60, 6, 0, ["150 g " + DH, "Mint, roasted jeera, black salt"], ["Blend dahi with 150 ml water, mint, jeera and salt."]),
+      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Cinnamon dahi + flax", 80, 7, 2, ["150 g " + DH, "1 tsp ground flaxseed, pinch cinnamon"], ["Stir flax and cinnamon into the dahi."]),
+      dish("Ginger-tulsi milk", 85, 9, 0, [`250 ml ${MK}`, "Small piece ginger, 3 tulsi leaves"], ["Simmer the milk with ginger and tulsi 3 min, strain. No sugar."]),
+      dish("Hung curd + chia", 105, 8, 3, ["200 g " + DH + ", hung 2 h", "5 g chia seeds (1 tsp)"], ["Hang the dahi 2 h in the fridge; stir in chia."]),
+      dish("Cocoa slow shake", 135, 19, 1, [`15 g ${WHEY} (½ level scoop)`, `200 ml ${MK}`, "1 tsp unsweetened cocoa"], ["Shake together. Drink 30 min before bed."]),
+    ],
+  ],
+  4: [
+    [ // Breakfast
+      dish("Besan-soya chilla + apple", 500, 47, 8, ["40 g Tata Sampann besan", `20 g ${SY}, boiled and minced`, "Onion, capsicum, coriander, ajwain, chilli", "4 sprays olive oil", "100 g " + DH, "1 apple", WHEY_W(30)],
+        ["Mix besan, minced soya, veg, spices and ~80 ml water.", "Spray a hot tawa, make 2 chillas, 2 min per side.", "Dahi and apple on the side; drink the whey shake."]),
+      dish("Paneer breakfast wrap", 410, 42, 6, [`40 g ${AT} → 1 large thin roti`, `75 g ${PANEER}, scrambled with 50 g capsicum + onion`, "Mint chutney, chaat masala", "2 sprays olive oil", WHEY_W(15)],
+        ["Spray pan, onion + capsicum 2 min, crumbled paneer + haldi + salt 2 min.", "Spread chutney on the roti, fill, roll tight (wrap in foil to carry).", "Drink the shake."]),
+      dish("Foxtail millet upma + paneer", 420, 47, 8, ["40 g foxtail millet (dry), rinsed", "80 g veg: carrot, beans, peas, onion", `65 g ${HM}, cubed`, "Mustard, curry leaves, ginger, 3 sprays olive oil", "100 g " + DH, WHEY_W(30)],
+        ["Dry-roast millet 2 min.", "Spray a cooker, mustard + curry leaves + ginger, veg 2 min, millet + salt + 120 ml water, 2 whistles.", "Stir in paneer. Dahi on the side; drink the shake."], true),
+      dish("Protein smoothie bowl", 445, 40, 8, ["150 g " + DH, `30 g ${WHEY} (1 level scoop)`, `100 ml ${MK}`, "1 banana (half blended, half sliced)", "30 g Quaker oats", "5 g chia seeds"],
+        ["Blend dahi, whey, milk and half the banana thick.", "Pour in a bowl; top with oats, chia and sliced banana."]),
+      dish("Bajra-methi dhebra + dahi", 415, 39, 9, ["40 g bajra flour + 20 g " + AT, "20 g fresh methi, ginger-chilli, haldi, sesame", "150 g " + DH + " (30 g in the dough)", "3 sprays olive oil", WHEY_W(30)],
+        ["Knead flours, methi, spices, 30 g dahi and salt (no oil).", "Pat 3 small dhebras; tawa with sprays, 2 min per side.", "Rest of the dahi on the side; drink the shake."]),
+      dish("Savoury oats-moong khichdi + paneer", 435, 37, 8, ["40 g Quaker oats + 20 g yellow moong dal (dry)", "80 g veg: carrot, peas, tomato", `50 g ${PANEER}, cubed`, "Jeera, haldi, 3 sprays olive oil", WHEY_W(15)],
+        ["Pressure-cook dal and veg with haldi, salt, 250 ml water, 2 whistles.", "Add oats, cook 3 min; jeera tadka with sprays; stir in paneer.", "Drink the shake."], true),
+      dish("Moong-paneer appe", 410, 42, 6, ["50 g yellow moong dal (dry), soaked 3 h", `65 g ${HM}, grated`, "Onion, carrot, coriander, ginger-chilli, pinch eno", "4 sprays olive oil", "2 tbsp tomato chutney", `15 g ${WHEY} (½ level scoop) in 150 ml ${MK}`],
+        ["Grind dal thick; mix in paneer, veg, spices, salt; add eno.", "Spray the appe pan, fill, cover 4 min, turn, 3 min (~12 appe).", "Tomato chutney on the side; drink the whey-milk."], true),
+    ],
+    [ // Lunch
+      dish("Soya brown fried rice + paneer soup", 570, 46, 9, ["50 g brown rice (dry), cooked the night before and cooled", `50 g ${SY}`, "150 g cabbage, carrot, beans, spring onion", "Garlic, 1 tsp low-sodium soy sauce, ½ tsp vinegar, pepper", `Clear soup: 50 g ${PANEER} cubes + veg stock + ginger`, "4 sprays olive oil"],
+        [SOYA_BOIL + " Chop small.", "High heat, sprays, garlic 30 s, veg 3 min, soya 2 min, rice + soy sauce + vinegar + pepper, 2 min.", "Soup: simmer ginger, veg and 300 ml water 5 min, add paneer 2 min, salt, pepper."]),
+      dish("Moong burrito bowl", 550, 39, 12, ["40 g brown rice (dry, soaked 30 min)", "40 g whole green moong (dry), soaked overnight and cooked whole", `75 g ${PANEER}, grilled`, "Salsa: tomato, onion, capsicum, coriander, chilli, lemon", "150 g " + DH + ", hung 1 h, with garlic (instead of sour cream)", "2 sprays olive oil"],
+        ["Pressure-cook moong 1 whistle with jeera, chilli, salt (keep whole).", "Brown rice: 40 g in 120 ml water, 20 min.", TAWA_PANEER, "Bowl: rice, moong, paneer, salsa, garlic curd on top."], true),
+      dish("Chilli paneer + phulka", 515, 42, 8, [`100 g ${PANEER}, cubed`, "150 g capsicum + onion, cut in squares", "Garlic, green chilli, 1 tsp low-sodium soy sauce, ½ tsp vinegar, 1 tsp cornflour in 50 ml water", PHULKA(2), "4 sprays olive oil"],
+        ["Tawa paneer with 2 sprays till golden (no deep frying).", "High heat, sprays, garlic + chilli 30 s, capsicum + onion 2 min.", "Add soy, vinegar, cornflour water; toss paneer in 1 min.", "2 phulkas."]),
+      dish("Millet khichdi bowl + raita", 538, 38, 12, ["40 g foxtail millet + 30 g yellow moong dal (dry)", `25 g ${SY}`, "150 g veg: carrot, beans, peas, spinach", "15 g pumpkin seeds on top", "Raita: 150 g " + DH + " + cucumber", "3 sprays olive oil, jeera, haldi"],
+        [SOYA_BOIL, "Pressure-cook millet, dal, veg, soya with haldi, salt and 500 ml water, 3 whistles.", "Jeera tadka; pumpkin seeds on top. Raita on the side."], true),
+      dish("Soya-paneer manchurian + rice", 528, 43, 10, [`45 g ${SY}, minced + 20 g oats, ground`, `65 g ${HM}, grated`, "100 g cabbage + carrot, grated; ginger, garlic", "Sauce: garlic, chilli, 1 tsp low-sodium soy sauce, vinegar, 1 tsp cornflour", "50 g brown rice (dry, soaked 30 min)", "4 sprays olive oil"],
+        [SOYA_BOIL + " Mince; mix with oats, paneer, veg, ginger, salt; make 10 balls.", "Steam the balls 10 min (not fried).", "Sauce: sprays, garlic + chilli, soy, vinegar, 150 ml water, cornflour; add balls, 2 min.", "Brown rice: 50 g in 150 ml water, 20 min."]),
+      dish("Moong hummus bowl + paneer", 535, 42, 10, ["40 g yellow moong dal (dry), cooked thick", "5 g sesame (1 tsp, for tahini), garlic, lemon, jeera", `75 g ${PANEER}, grilled`, `40 g ${AT} → 2 small rotis`, "150 g salad: cucumber, tomato, onion, lettuce", "2 sprays olive oil"],
+        ["Blend cooked dal with toasted sesame, garlic, lemon, jeera and salt (smooth hummus).", TAWA_PANEER, "Bowl: hummus, salad, paneer; rotis on the side."], true),
+      dish("Masoor tadka + soya chilli + rice", 540, 38, 12, ["30 g masoor dal (dry)", `30 g ${SY}`, "100 g capsicum + onion, garlic, 1 tsp low-sodium soy sauce", "40 g brown rice (dry, soaked 30 min)", PHULKA(1), "100 g " + DH, "4 sprays olive oil"],
+        ["Pressure-cook dal with haldi, 3 whistles; jeera-garlic tadka.", SOYA_BOIL + " Toss with capsicum, onion, garlic and soy, high heat 4 min.", "Brown rice: 40 g in 120 ml water, 20 min. 1 phulka. Dahi on the side."], true),
+    ],
+    [ // Snack
+      dish("Soya chilli bites + apple", 225, 19, 6, [`25 g ${SY}`, "Garlic, capsicum, ½ tsp low-sodium soy sauce, chilli flakes, 2 sprays", "100 g " + DH, "1 apple"],
+        [SOYA_BOIL, "High heat, sprays, garlic, soya, capsicum, soy and chilli, 3 min.", "Dahi and apple on the side."]),
+      dish("Greek-style curd bowl", 200, 21, 2, ["250 g " + DH + ", hung 2 h", `15 g ${WHEY} (½ level scoop)`, "½ apple, chopped, cinnamon"],
+        ["Whisk whey into the hung curd; top with apple and cinnamon."]),
+      dish("Paneer-veg skewers + guava", 240, 19, 6, [`60 g ${PANEER}`, "Capsicum, onion, tomato chunks", "Tikka spice, 2 sprays", "1 guava"],
+        ["Thread on skewers, sprinkle spices, air fryer 180 °C 6 min (or tawa).", "Guava on the side."]),
+      dish("Sprouts-paneer chaat + guava", 260, 22, 7, ["30 g whole green moong, sprouted", `65 g ${HM}, cubed`, "Onion, tomato, cucumber, chaat masala", "1 guava"],
+        ["Steam sprouts 5 min, cool. Mix with paneer, veg, chaat masala.", "Guava on the side."], true),
+      dish("Trail mix + protein chaas", 260, 21, 2, ["20 g Farmley makhana", "10 g pumpkin seeds + 5 g walnuts", "1 pack Amul High Protein Buttermilk"],
+        ["Dry-roast makhana and seeds 3 min with a pinch of salt and pepper. No peanuts.", "Drink the buttermilk."]),
+      dish("Cocoa whey milk + walnuts", 240, 27, 2, [`250 ml ${MK}, cold`, `20 g ${WHEY} (⅔ level scoop)`, "1 tsp unsweetened cocoa", "10 g walnuts"],
+        ["Shake milk, whey and cocoa 20 seconds. No sugar.", "Walnuts on the side."]),
+      dish("Mini moong chilla rolls", 215, 24, 3, ["30 g yellow moong dal (dry), soaked 3 h", "Ginger, chilli, salt, 2 sprays", "100 g " + DH + " + mint", WHEY_W(15)],
+        ["Grind dal into batter; make 3 small chillas, roll.", "Mint dahi dip; drink the shake."], true),
+    ],
+    [ // Dinner
+      dish("Hakka soya stir-fry + paneer soup", 482, 46, 10, [`35 g ${SY}`, "200 g veg: cabbage, carrot, capsicum, spring onion", "Garlic, ginger, 1 tsp low-sodium soy sauce, vinegar, pepper", `Soup: 65 g ${HM} cubes + ginger + veg stock`, PHULKA(2), "4 sprays olive oil"],
+        [SOYA_BOIL, "High heat, sprays, garlic-ginger 30 s, veg 3 min, soya + soy + vinegar 2 min.", "Soup: simmer 300 ml water with ginger 5 min, add paneer 1 min, salt, pepper.", "2 phulkas."]),
+      dish("Thai-style paneer curry + rice", 525, 39, 8, [`100 g ${PANEER}, cubed`, "150 g veg: beans, capsicum, carrot, baby corn", "Green paste: coriander, ginger, garlic, chilli, lemongrass or lemon zest (no coconut)", `100 ml ${MK} for the curry base`, "50 g brown rice (dry, soaked 30 min)", "3 sprays olive oil"],
+        ["Blend the green paste; spray kadhai, cook paste 2 min.", "Add veg + 100 ml water, 5 min; add milk on low (don't boil), paneer 2 min.", "Brown rice: 50 g in 150 ml water, 20 min."]),
+      dish("Millet-moong khichdi + kadhi", 512, 43, 10, ["40 g foxtail millet + 30 g yellow moong dal (dry)", `100 g ${HM}, cubed`, "100 g veg: carrot, peas, beans", "Kadhi: 150 g " + DH + " + 10 g besan", "3 sprays olive oil, jeera, haldi"],
+        ["Pressure-cook millet, dal, veg, haldi, salt, 450 ml water, 3 whistles; stir in paneer.", "Kadhi: whisk dahi, besan, 200 ml water; simmer 8 min, stirring (no sugar)."], true),
+      dish("Paneer-palak wrap", 460, 40, 10, [PHULKA(2).replace("phulkas", "thin rotis"), `75 g ${PANEER}, sliced`, "100 g palak, onion, garlic", "Mint chutney", "100 g " + DH, "3 sprays olive oil"],
+        ["Spray pan, garlic + onion 2 min, palak 2 min, salt.", TAWA_PANEER, "Chutney on each roti, fill with palak and paneer, roll. Dahi on the side."], true),
+      dish("Dal-veg soup + paneer tikka salad", 450, 38, 9, ["30 g yellow moong dal (dry)", "150 g veg: carrot, tomato, onion, garlic", `75 g ${PANEER} for tikka (see tikka steps)`, "100 g lettuce + cucumber", PHULKA(1), "2 sprays olive oil"],
+        ["Pressure-cook dal and veg with 400 ml water, salt, haldi, 3 whistles; blend smooth, pepper.", ...TIKKA_STEPS, "Toss tikka on the salad. 1 phulka."], true),
+      dish("Soya keema + bajra roti", 460, 35, 14, [`40 g ${SY}, minced`, "50 g peas, onion, tomato, ginger-garlic, garam masala", "50 g bajra flour → 2 rotis", "100 g " + DH, "4 sprays olive oil"],
+        [SOYA_BOIL + " Pulse 2–3 seconds into mince.", "Spray kadhai, onion → ginger-garlic → tomato + spices, soya + peas 6 min.", "Bajra rotis. Dahi on the side."]),
+      dish("Paneer-mushroom pepper fry + jowar roti", 450, 35, 9, [`75 g ${PANEER}, cubed`, "150 g mushrooms + 50 g capsicum", "Garlic, black pepper, 1 tsp low-sodium soy sauce", "50 g jowar flour → 2 rotis", "100 g " + DH, "3 sprays olive oil"],
+        ["High heat, sprays, garlic 30 s, mushrooms 4 min till dry, capsicum 1 min.", "Add paneer, soy, lots of pepper, 2 min.", "Jowar rotis. Dahi on the side."]),
+    ],
+    [ // Night
+      dish("Cocoa milk", 95, 9, 1, [`250 ml ${MK}`, "1 tsp unsweetened cocoa"], ["Warm the milk, whisk in cocoa. No sugar."]),
+      dish("Cardamom-cinnamon dahi", 80, 8, 0, ["200 g " + DH, "Pinch cardamom + cinnamon"], ["Stir the spices into the dahi."]),
+      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Jeera-pudina chaas", 80, 8, 0, ["200 g " + DH, "Mint, roasted jeera, black salt"], ["Blend dahi with 150 ml water, mint, jeera and salt."]),
+      dish("Ginger milk", 85, 9, 0, [`250 ml ${MK}`, "Small piece ginger"], ["Simmer the milk with ginger 3 min, strain. No sugar."]),
+      dish("Hung curd + flax", 105, 8, 2, ["200 g " + DH + ", hung 2 h", "1 tsp ground flaxseed"], ["Hang the dahi 2 h; stir in flax."]),
+      dish("Cinnamon slow shake", 130, 19, 0, [`15 g ${WHEY} (½ level scoop)`, `200 ml ${MK}`, "Pinch cinnamon"], ["Shake together. Drink 30 min before bed."]),
+    ],
+  ],
+};
+// Flax at every breakfast (blood report), same as week 1.
+Object.values(MENU_WEEKS).forEach((w) => w[0].forEach((o) => {
+  if (!o.items.some((x) => /flax/i.test(x))) {
+    o.items.push("1 tbsp (7 g) ground flaxseed"); o.steps.push("Stir in 1 tbsp ground flaxseed just before serving.");
+    o.kcal += 35; o.fib += 2;
+  }
+}));
+
+// Which menu week a date is in: journey weeks 1, 2, 3, 4, then repeat.
+function menuWeek(k) {
+  const w = Math.floor((new Date(k) - new Date(START_DATE)) / (7 * 864e5));
+  return w < 0 ? 1 : (w % 4) + 1;
+}
+// The dishes on offer for a meal slot on a date (swaps pick from this list).
+function mealOptions(i, k) {
+  const w = menuWeek(k);
+  return w === 1 ? MEALS[i].options : MENU_WEEKS[w][i];
+}
 // Default dish for a slot on a date (shared by the app and the Kitchen page).
 function defaultMealIdx(i, k) {
-  return Math.floor(new Date(k) / 864e5) % MEALS[i].options.length;
+  if (menuWeek(k) === 1) return Math.floor(new Date(k) / 864e5) % MEALS[i].options.length;
+  const d = Math.floor((new Date(k) - new Date(START_DATE)) / 864e5);
+  return ((d % 7) + 7) % 7;
+}
+// The dish for a slot on a date, given a saved swap index (ignored if it no longer fits).
+function dishFor(i, k, pick) {
+  const opts = mealOptions(i, k);
+  return opts[pick != null && pick < opts.length ? pick : defaultMealIdx(i, k)];
 }
 
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
@@ -489,6 +755,24 @@ const GROCERY = [
   { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber, lauki, bhindi, methi, broccoli", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
   { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
 ];
+// Each menu week needs slightly different shopping (counted from that week's dishes):
+// qty overrides the weekly packs above; add = extra items for that week only. Week-specific veg
+// (drumstick, sarson, mushrooms…) comes out of the normal vegetable budget.
+const PANEER_ITEM = GROCERY[0].item, MILK_ITEM = GROCERY[3].item, SOYA_ITEM = GROCERY[1].item;
+const WEEK_GROCERY = {
+  1: { qty: {}, add: [] },
+  2: { qty: { [PANEER_ITEM]: 4, [MILK_ITEM]: 15 }, add: [
+    { item: "Urad dal 500 g (ragi dosa, adai)", qty: 0.5, price: 90, q: "urad dal", group: "Pantry" },
+    { item: "Foxtail millet 500 g (bisi bele bath, khichdi)", qty: 0.5, price: 90, q: "foxtail millet", group: "Pantry" } ] },
+  3: { qty: { [PANEER_ITEM]: 3, [MILK_ITEM]: 20 }, add: [
+    { item: "Matki (moth beans) 500 g, for sprouting", qty: 0.5, price: 80, q: "matki moth beans", group: "Pantry" },
+    { item: "Bajra flour 500 g", qty: 0.5, price: 50, q: "bajra atta", group: "Pantry" } ] },
+  4: { qty: { [MILK_ITEM]: 15, [SOYA_ITEM]: 2 }, add: [
+    { item: "Low-sodium soy sauce + vinegar (last ~2 months)", qty: 0.5, price: 150, q: "low sodium soy sauce", group: "Pantry" },
+    { item: "Unsweetened cocoa 100 g (lasts months)", qty: 0.25, price: 130, q: "unsweetened cocoa powder", group: "Pantry" } ] },
+};
+// The weekly grocery list for menu week mw (1–4).
+const groceryFor = (mw) => [...GROCERY.map((g) => ({ ...g, qty: WEEK_GROCERY[mw].qty[g.item] ?? g.qty })), ...WEEK_GROCERY[mw].add];
 const MONTHLY_EXTRAS = [
   { item: "Big Muscles Premium Gold Whey 1.5 kg (₹2,127, lasts ~5 weeks; monthly share shown)", price: 1750, q: "big muscles premium gold whey 1.5 kg" },
   { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },

@@ -11,7 +11,7 @@ const journeyDay = (k) => Math.floor((new Date(k) - START) / DAY_MS) + 1;
 // Same rotation as the main app, so both show the same menu for a date.
 // Swaps made in the app come from /api/menu on the Cloudflare site.
 let SWAPS_BY_DATE = {};
-const mealIdx = (i, k) => SWAPS_BY_DATE[k]?.[i] ?? defaultMealIdx(i, k);
+const dishAt = (i, k) => dishFor(i, k, SWAPS_BY_DATE[k]?.[i]);
 let lastLoad = null;
 async function loadSwaps() {
   try {
@@ -29,12 +29,13 @@ function render() {
   const gym = isGymDay(cur);
   $("#view").innerHTML = `
   <div class="card pager"><button class="iconbtn" id="prev" ${cur <= firstDay() ? "disabled" : ""} aria-label="Previous day">‹</button>
-    <div class="center grow"><b>${esc(label(cur))}</b><div class="sub">${new Date(cur).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} · Day ${journeyDay(cur)}</div></div>
+    <div class="center grow"><b>${esc(label(cur))}</b><div class="sub">${new Date(cur).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} · Day ${journeyDay(cur)}</div>
+      <div class="sub">Menu week ${menuWeek(cur)} of 4 · ${esc(MENU_THEMES[menuWeek(cur)])}</div></div>
     <button class="iconbtn" id="next" aria-label="Next day">›</button></div>
   <p class="sub center">${lastLoad ? `Menu updated ${lastLoad.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} · ` : ""}<button class="btn ghost xs" id="refresh">↻ Refresh</button></p>
   <button class="btn ghost block sm" id="copy">📋 Copy this day's menu</button>
   ${MEALS.map((slot, i) => {
-    const m = slot.options[mealIdx(i, cur)], name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
+    const m = dishAt(i, cur), name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
     return `<div class="card"><span class="eyebrow">${esc(slot.time)} · ${esc(name)}</span>
       <h2 class="h2">${esc(m.name)}</h2>
       <h3 class="h3 mt">Take</h3><ul class="bullets">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
@@ -46,7 +47,7 @@ function render() {
 function menuText(k) {
   const gym = isGymDay(k);
   return `Menu for ${label(k)} (${new Date(k).toLocaleDateString("en-IN", { day: "numeric", month: "short" })})\n` + MEALS.map((slot, i) => {
-    const m = slot.options[mealIdx(i, k)], name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
+    const m = dishAt(i, k), name = !gym && slot.label.startsWith("Post-gym") ? "Breakfast" : slot.label;
     return `\n*${slot.time} ${name}: ${m.name}*\nTake:\n${m.items.map((x) => `- ${x}`).join("\n")}\nMethod:\n${m.steps.map((x, j) => `${j + 1}. ${x}`).join("\n")}`;
   }).join("\n");
 }

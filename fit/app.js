@@ -130,10 +130,10 @@ function sharePicks(d) {
 // Meals rotate by date so every day differs; a hand-picked option for that day wins.
 function mealPickIdx(i, d = today()) {
   const own = S.days[d]?.mealPick?.[i] ?? SHARED[d]?.[i];
-  if (own != null) return own;
+  if (own != null && own < mealOptions(i, d).length) return own;
   return defaultMealIdx(i, d);
 }
-const meal = (i, d = today()) => MEALS[i].options[mealPickIdx(i, d)];
+const meal = (i, d = today()) => mealOptions(i, d)[mealPickIdx(i, d)];
 
 // Today's calorie target: phase base, more on gym days, less on rest days, and lower
 // automatically when the gym or walk is skipped. After 9 pm an unlogged gym day counts as skipped.
@@ -690,9 +690,9 @@ function foodPlan() {
       <div><b>${T.protein} g</b><span>protein target</span></div><div><b>${total.p} g</b><span>protein planned</span></div>
       <div><b>${FIBER_TARGET} g</b><span>fiber target</span></div><div><b>${total.f} g</b><span>fiber planned</span></div></div>
     <p class="note">${esc(phase(new Date(pd)).food)}</p></div>
-  <p class="sub">Meals change every day. Tap another option to swap it for this day. No tofu, rajma or chole. Brands are suggestions; any equivalent works.</p>
+  <p class="sub"><b>Menu week ${menuWeek(pd)} of 4: ${esc(MENU_THEMES[menuWeek(pd)])}.</b> New dishes every week, same calories and protein. Tap another option to swap it for this day. No tofu, rajma or chole. Brands are suggestions; any equivalent works.</p>
   ${MEALS.map((slot, i) => slot.gymOnly && !gym ? "" : `<div class="card list"><span class="eyebrow">${esc(slot.time)} · ${esc(slot.label)}</span>
-    ${slot.options.map((m, j) => { const on = mealPickIdx(i, pd) === j;
+    ${mealOptions(i, pd).map((m, j) => { const on = mealPickIdx(i, pd) === j;
       return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}:${pd}" role="radio" aria-checked="${on}" tabindex="0"><span class="box round"></span>
         <div class="t"><b>${esc(m.name)}</b>${on ? `<ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
           <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>
@@ -702,7 +702,7 @@ function foodPlan() {
 let shopWeek = null;
 // What to buy in a given journey week: whole packs every week; fractions every few weeks.
 function weekOrder(w) {
-  const items = GROCERY.map((g) => ({ ...g, buy: g.qty >= 1 ? Math.round(g.qty) : Math.floor(w * g.qty + 1e-9) > Math.floor((w - 1) * g.qty + 1e-9) ? 1 : 0 }))
+  const items = groceryFor(((w - 1) % 4) + 1).map((g) => ({ ...g, buy: g.qty >= 1 ? Math.round(g.qty) : Math.floor(w * g.qty + 1e-9) > Math.floor((w - 1) * g.qty + 1e-9) ? 1 : 0 }))
     .filter((g) => g.buy > 0);
   if ((w - 1) % 4 === 0) MONTHLY_EXTRAS.forEach((g) => items.push({ ...g, buy: 1, group: "Monthly" }));
   return items;
@@ -710,9 +710,10 @@ function weekOrder(w) {
 const instamart = (q) => `https://www.swiggy.com/instamart/search?custom_back=true&query=${encodeURIComponent(q)}`;
 function foodShop() {
   const price = (g) => S.prices[g.item] ?? g.price;
-  const weekly = GROCERY.reduce((s, g) => s + g.qty * price(g), 0), extras = MONTHLY_EXTRAS.reduce((s, g) => s + price(g), 0);
+  // Average over the 4 menu weeks (each week's dishes need slightly different shopping).
+  const weekly = [1, 2, 3, 4].reduce((s, mw) => s + groceryFor(mw).reduce((a, g) => a + g.qty * price(g), 0), 0) / 4, extras = MONTHLY_EXTRAS.reduce((s, g) => s + price(g), 0);
   const monthly = weekly * 4.33 + extras, over = monthly > S.profile.budget;
-  const groups = [...new Set(GROCERY.map((g) => g.group))];
+  const all = [...GROCERY, ...[2, 3, 4].flatMap((mw) => WEEK_GROCERY[mw].add)], groups = [...new Set(all.map((g) => g.group))];
   const row = (g, qty = true) => `<div class="shop"><div class="grow"><b>${esc(g.item)}</b>
       <div class="sub">${qty ? `${g.qty < 1 ? `every ${Math.round(1 / g.qty)} weeks` : `× ${g.qty} / week`} · ` : ""}${shopLinks(g)}</div></div>
       <label class="price"><span>₹</span><input inputmode="numeric" data-price="${esc(g.item)}" value="${price(g)}" aria-label="Price of ${esc(g.item)}"></label></div>`;
@@ -738,7 +739,7 @@ function foodShop() {
     <div class="journey-bar"><i style="width:${Math.min(100, (monthly / S.profile.budget) * 100)}%"></i></div>
     <p class="sub">Groceries ${inr(weekly)} / week · supplements and skin ${inr(extras)} / month. Dermat fees are extra.</p>
     </div>
-  ${groups.map((gr) => `<div class="section-title"><h3>${esc(gr)}</h3></div><div class="card list">${GROCERY.filter((g) => g.group === gr).map((g) => row(g)).join("")}</div>`).join("")}
+  ${groups.map((gr) => `<div class="section-title"><h3>${esc(gr)}</h3></div><div class="card list">${all.filter((g) => g.group === gr).map((g) => row(g)).join("")}</div>`).join("")}
   <div class="section-title"><h3>Monthly buys</h3></div><div class="card list">${MONTHLY_EXTRAS.map((g) => row(g, false)).join("")}</div>
   <div class="section-title"><h3>One-time looks kit</h3><span class="sub">Not in the monthly budget</span></div>
   <div class="card list">${LOOKS_KIT.map((g) => row(g, false)).join("")}
@@ -1062,7 +1063,7 @@ document.addEventListener("click", async (e) => {
   if (d.wcheck) { const w = (S.weekly[d.bucket || weekKey()] ??= {}); w[d.wcheck] = !w[d.wcheck]; save(); return render(); }
   if (d.cyclemeal) {
     const i = +d.cyclemeal, dt = d.date || today(), x = day(dt);
-    (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % MEALS[i].options.length;
+    (x.mealPick ??= {})[i] = (mealPickIdx(i, dt) + 1) % mealOptions(i, dt).length;
     const at = x.food.findIndex((f) => f.plan === i);
     if (at >= 0) { const m = meal(i, dt); x.food[at] = { name: m.name, kcal: m.kcal, p: m.p, c: 0, f: 0, fib: m.fib, plan: i }; }
     save(); render(); toast(`Swapped to ${meal(i, dt).name}`);
