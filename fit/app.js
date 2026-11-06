@@ -648,8 +648,8 @@ function tickRest() {
 // ---------- food ----------
 let foodSeg = "today", planOffset = 0;
 V.food = () => {
-  const s = seg(foodSeg, "foodseg", [["today", "Today"], ["plan", "7-day plan"], ["shop", "Shopping"]]);
-  return s + (foodSeg === "plan" ? foodPlan() : foodSeg === "shop" ? foodShop() : foodToday());
+  const s = seg(foodSeg, "foodseg", [["today", "Today"], ["plan", "7-day plan"], ["shop", "Shopping"], ["prep", "Paneer & dahi"]]);
+  return s + (foodSeg === "plan" ? foodPlan() : foodSeg === "shop" ? foodShop() : foodSeg === "prep" ? prepGuideHTML() : foodToday());
 };
 let foodDate = null;
 function cookText(k) {

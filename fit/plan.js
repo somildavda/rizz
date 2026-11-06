@@ -246,10 +246,39 @@ const COOK_RULES = [
   "No chai or coffee within 1 hour of a meal (it blocks iron absorption).",
   "For cholesterol: nothing fried, no sweets, maida, cream, cheese, butter, ghee or coconut. Brown rice, not white.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
-  "PANEER (every 1–2 days, 3 L batch → ~480 g): whisk 360 g milk powder into 2.7 L lukewarm water, rest 30 min. Bring to a boil, switch off, wait ~3 min until it cools to about 70 °C (bubbles stop, too hot to touch for long). Pour in 3 tsp (15 g) citric acid (nimbu sat) dissolved in 750 ml warm water, or 9 tbsp lemon juice, slowly while stirring gently, until the whey turns clear greenish. Rest 5 min, strain in muslin, rinse with cold water. Press under a heavy weight: 30 min soft (bhurji, stuffing, chilla), 2 h firm (tikka, curry). Fridge in water, use within 2 days. Knead atta with the whey water.",
-  "DAHI (every night, 1 L): whisk 120 g milk powder into 900 ml lukewarm water, rest 15 min, boil 2 min (makes it thick), cool till just warm to the finger (~42 °C), stir in 1 tbsp old dahi, cover, keep in a warm spot 6–8 h, then fridge.",
+  "Paneer and dahi: follow the Paneer & dahi tab (milk powder, 70 °C, citric acid).",
   "Young skin: no added sugar (sweetness only from fruit), 2–3 colourful fruits a day (amla, guava, papaya, orange) + carrot, tomato or palak daily, low salt. Sunscreen every morning matters even more.",
 ];
+// Paneer & dahi guide (shown as its own tab in the app and on the Kitchen page).
+const PREP_GUIDE = [
+  { title: "🧀 Paneer: 3 L batch → ~480 g (every 1–2 days)", take: ["360 g skimmed milk powder (Amul Sagar or Nandini)", "2.7 L lukewarm water", "15 g (3 tsp) citric acid (nimbu sat) in 750 ml warm water, OR 9 tbsp lemon juice", "Muslin cloth, a big strainer, something heavy to press (a filled pot)"],
+    steps: ["Whisk the powder into the lukewarm water until no lumps. Rest 30 min so it dissolves fully.",
+      "Bring to a boil, stirring so it doesn't stick. Switch off.",
+      "Wait ~3 min until it cools to about 70 °C: bubbles stop, too hot to keep a finger in. (70 °C gives the most and softest paneer.)",
+      "Pour in the citric acid water (or lemon) slowly, stirring gently. Stop as soon as the liquid turns clear greenish and white lumps float.",
+      "Rest 5 min. Pour into the muslin over the strainer. Rinse with cold water (removes the sour taste, firms it).",
+      "Tie the muslin and press under the weight: 30 min = soft (bhurji, stuffing, chilla, pizza); 2 h = firm (tikka, curry cubes).",
+      "Cut, keep in a box of cold water in the fridge. Use within 2 days.",
+      "Keep the whey water: knead atta with it, or use in dal."],
+    tip: "Weigh the first batch. If it is far from 480 g, tell the app owner so protein numbers can be corrected." },
+  { title: "🥣 Dahi: 1 L (every night)", take: ["120 g skimmed milk powder", "900 ml lukewarm water", "1 tbsp old dahi (starter)"],
+    steps: ["Whisk the powder into the water, rest 15 min.", "Boil 2 min, stirring (this makes the dahi thick).",
+      "Cool until just warm to the finger, about 42 °C (20–30 min).", "Stir in 1 tbsp old dahi. Pour into a steel or clay pot, cover.",
+      "Keep in a warm spot (inside the switched-off oven or a closed cupboard) 6–8 h until set. Then fridge.",
+      "Save 1 tbsp as tomorrow's starter."],
+    tip: "Too sour: set for less time. Too thin: add 10–20 g more powder or boil 3 min. Busy day: Mother Dairy low-fat curd is fine." },
+  { title: "🧊 Hung curd (thick, like Greek yoghurt)", take: ["Dahi from above"], steps: ["Tie the dahi in muslin, hang it over a bowl in the fridge 2 h.", "250 g dahi gives ~150 g hung curd. Drink the drained whey or use it in atta."], tip: "" },
+  { title: "📅 This much every week", take: ["Paneer: ~2.75 kg → about 6 batches of 3 L (~2.1 kg powder)", "Dahi: ~2.5 kg → about 2.5 L (~0.3 kg powder)", "Order ~2.5 kg milk powder + 2 L Amul Slim n Trim tetra for drinking"],
+    steps: ["Store the powder airtight in a dry place, always use a dry spoon; use an opened pack within 3–4 weeks.", "Always boil reconstituted milk before use."], tip: "" },
+];
+function prepGuideHTML() {
+  const e = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return PREP_GUIDE.map((g) => `<div class="card"><h2 class="h2">${e(g.title)}</h2>
+    <h3 class="h3 mt">Take</h3><ul class="bullets">${g.take.map((x) => `<li>${e(x)}</li>`).join("")}</ul>
+    <h3 class="h3 mt">Method</h3><ol class="bullets">${g.steps.map((x) => `<li>${e(x)}</li>`).join("")}</ol>
+    ${g.tip ? `<p class="sub">💡 ${e(g.tip)}</p>` : ""}</div>`).join("") +
+    `<a class="btn ghost block" href="https://www.youtube.com/results?search_query=${encodeURIComponent("paneer from milk powder recipe")}" target="_blank" rel="noopener">▶ Watch: paneer from milk powder</a>`;
+}
 const TIKKA_STEPS = [
   "Cut the paneer into 2 cm cubes.",
   "Mix 30 g low-fat dahi + ½ tsp chilli powder + ¼ tsp haldi + ½ tsp garam masala + ½ tsp kasuri methi + ½ tsp ginger-garlic paste + lemon + salt.",

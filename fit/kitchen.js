@@ -24,10 +24,13 @@ const isGymDay = (k) => !gymBreak(k) && [1, 2, 3, 4, 5].includes(new Date(k).get
 const label = (k) => k === today() ? "Today" : k === addDays(today(), 1) ? "Tomorrow" :
   new Date(k).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 
-let cur = firstDay();
+let cur = firstDay(), kSeg = "menu";
+const segBar = () => `<div class="row" style="gap:8px;margin-bottom:12px"><button class="btn grow ${kSeg === "menu" ? "" : "ghost"}" id="segMenu">🍽 Today's menu</button>
+  <button class="btn grow ${kSeg === "prep" ? "" : "ghost"}" id="segPrep">🧀 Paneer & dahi</button></div>`;
 function render() {
+  if (kSeg === "prep") { $("#view").innerHTML = segBar() + prepGuideHTML(); return; }
   const gym = isGymDay(cur);
-  $("#view").innerHTML = `
+  $("#view").innerHTML = segBar() + `
   <div class="card pager"><button class="iconbtn" id="prev" ${cur <= firstDay() ? "disabled" : ""} aria-label="Previous day">‹</button>
     <div class="center grow"><b>${esc(label(cur))}</b><div class="sub">${new Date(cur).toLocaleDateString("en-IN", { day: "numeric", month: "long" })} · Day ${journeyDay(cur)}</div>
       <div class="sub">Menu week ${menuWeek(cur)} of 4 · ${esc(MENU_THEMES[menuWeek(cur)])}</div></div>
@@ -58,6 +61,7 @@ document.addEventListener("click", async (e) => {
   if (id === "prev") { cur = addDays(cur, -1); render(); }
   if (id === "next") { cur = addDays(cur, 1); render(); }
   if (id === "refresh") { loadSwaps(); }
+  if (id === "segMenu" || id === "segPrep") { kSeg = id === "segPrep" ? "prep" : "menu"; render(); window.scrollTo(0, 0); }
   if (id === "copy") {
     const t = $("#toast");
     try { await navigator.clipboard.writeText(menuText(cur)); t.textContent = "Menu copied"; }
