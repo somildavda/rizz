@@ -89,9 +89,10 @@ function exList(di) {
 }
 
 // Gym closed (GYM_BREAKS in plan.js): walk-only days and the strict food rules.
-const BREAK_DAY = { title: "Gym closed: walk day", ex: [["Flat walk", 1, "8,000 steps", "Split into 2–3 walks, flat ground only"], ["Physio knee exercises", 1, "2 × 10 each", "See the knee card"]] };
-const breakCard = () => `<div class="card notice"><b>🔒 Gym closed till ${fmt(GYM_BREAKS.find((b) => b.to >= today())?.to || today())}: strict days</b>
+const BREAK_DAY = { title: "Gym closed: walk day", ex: [["Flat walk", 1, "Steps target on Today", "Split into 2–3 walks, flat ground only"], ["Physio knee exercises", 1, "2 × 10 each", "See the knee card"]] };
+const breakCard = () => `<div class="card notice"><b>🔒 Gym closed till ${fmt(gymBreak(planDay())?.to || today())}: strict days</b>
   <p class="sub">~${phase(new Date(planDay())).kcal + (gymBreak(planDay())?.kcal || 0)} kcal, same protein, so you lose fat and keep muscle without lifting.</p>
+  ${gymBreak(planDay())?.note ? `<p class="warn small">${esc(gymBreak(planDay()).note)}</p>` : ""}
   <ul class="bullets">${BREAK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
 
 // Meal swaps shared with the kitchen view through the Claude page's shared store.
@@ -423,7 +424,7 @@ V.today = () => {
     <div class="hero-top"><span class="eyebrow">${notStarted ? `Day 1 starts tomorrow · ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${gymBreak(pd) ? `Gym closed till ${fmt(gymBreak(pd).to)}: 8,000 flat steps + knee exercises, strict food.` : rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
+    <p class="hero-sub">${gymBreak(pd) ? `Gym closed till ${fmt(gymBreak(pd).to)}: ${gymBreak(pd).steps.toLocaleString("en-IN")} easy flat steps + knee exercises, strict food.` : rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`

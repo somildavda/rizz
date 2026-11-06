@@ -39,7 +39,8 @@ const PHASES = [
 ];
 // Gym closures: every day in the range is a walk-only day with a stricter calorie target.
 // Protein stays the same so you keep muscle while you can't lift.
-const GYM_BREAKS = [{ from: "2026-10-27", to: "2026-11-05", kcal: -300, steps: 8000 }];
+const GYM_BREAKS = [{ from: "2026-10-27", to: "2026-11-05", kcal: -300, steps: 8000 },
+  { from: "2026-11-06", to: "2026-11-08", kcal: -300, steps: 5000, note: "Skin treatment: no sweating for 3 days (dermat's advice). Only easy, slow walks indoors or in the cool evening, no sun, no fast walking. Gym restarts Monday 9 Nov." }];
 const gymBreak = (k) => GYM_BREAKS.find((b) => k >= b.from && k <= b.to);
 const BREAK_RULES = [
   "Dinner: 1 phulka only and no rice at dinner. Fill the plate with extra sabzi or salad instead.",
