@@ -816,11 +816,24 @@ function calcDish(o) {
   if (si === 2 && !/pumpkin|mixed seed/i.test(o.items.join())) o.items.push("15 g mixed seeds (pumpkin, sunflower, melon…)");
   if (si === 1) { o.items.push("5 g (1 tsp) cold-pressed mustard or olive oil for the tadka"); o.steps.push("Use the 1 tsp oil in the tadka (healthy fat for hormones)."); }
 })));
+// Dietitian review (Nov 2026):
+// 1. Fat was ~19 % of kcal: +5 g walnuts or seeds at dinner (~21 %).
+// 2. Calcium in dahi cuts iron absorption from the dal/palak lunch, so the side dahi/raita
+//    moves to the 5 pm snack (dahi that IS the dish, like curd rice or kadhi, stays).
+[MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list, si) => list.forEach((o) => {
+  if (si === 3) o.items.push("5 g walnuts or mixed seeds on top (healthy fat)");
+  if (si === 1) {
+    const before = o.items.length;
+    o.items = o.items.filter((x) => !/^(Raita: )?\d+ g low-fat dahi/.test(x) || /curd rice|Kadhi/i.test(o.name));
+    if (o.items.length < before) o.steps = o.steps.map((t) => t.replace(/\s*(Dahi|Raita) on the side\.?/g, "").replace(/Raita: [^.]*\.\s*/g, "").trim()).filter(Boolean);
+  }
+  if (si === 2 && !/dahi|curd|lassi|chaas/i.test(o.items.join())) o.items.push(`100 g ${DH} (moved from lunch: keeps lunch iron absorption high)`);
+})));
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach(calcDish)));
 
 // Office days (Mon–Fri): the 5 pm snack is eggs from the office stall.
-const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 280, p: 21, fat: 12, fib: 5,
-  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple", "15 g mixed seeds from home"],
+const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 315, p: 25, fat: 12, fib: 5,
+  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple", "15 g mixed seeds from home", "100 g low-fat dahi when you get home (or plain chaas)"],
   steps: ["No pav, no butter, no mayo.", "Omelette only if made without butter, with little oil."] };
 const isOfficeDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 

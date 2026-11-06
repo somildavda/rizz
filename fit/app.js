@@ -424,7 +424,7 @@ V.today = () => {
     <div class="hero-top"><span class="eyebrow">${notStarted ? `Day 1 starts tomorrow · ${fmt(START_DATE)}` : `Day ${dayNo()} of ${totalDays()}`}</span>
       <span class="pill">${esc(ph.name)}${isDeload() ? " · deload" : ""}</span></div>
     <h2 class="hero-title">${esc(w.title)}</h2>
-    <p class="hero-sub">${gymBreak(pd) ? `Gym closed till ${fmt(gymBreak(pd).to)}: ${gymBreak(pd).steps.toLocaleString("en-IN")} easy flat steps + knee exercises, strict food.` : rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30`}</p>
+    <p class="hero-sub">${gymBreak(pd) ? `Gym closed till ${fmt(gymBreak(pd).to)}: ${gymBreak(pd).steps.toLocaleString("en-IN")} easy flat steps + knee exercises, strict food.` : rest ? "Recovery day. Walk, stretch and prep meals." : `${exList(cyc(new Date(pd))).length} exercises · ~45 min · gym ${GYM_TIME}–9:30 · feeling weak? 1 banana at 8:00`}</p>
     <div class="row">
       ${rest ? `<a class="btn ghost grow" href="#train" data-trainseg="run">See this week's walk/run</a>` : done
         ? `<span class="pill ok big">✓ Workout done</span><button class="btn ghost" data-go="train">View</button>`
