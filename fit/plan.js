@@ -237,7 +237,7 @@ const PANEER = "iD Fresh High Protein Paneer";
 const WHEY = "Big Muscles Gold whey";
 const COOK_RULES = [
   "Weigh dal, brown rice, oats, poha, soya and atta DRY, before soaking or cooking.",
-  `Paneer = ALWAYS home-made from Slim n Trim milk (no packet paneer). Dahi = low-fat dahi set at home from Slim n Trim skimmed milk (warm 1 L milk, mix in 1 tbsp old dahi, cover 8 h). Milk = Amul Slim n Trim skimmed milk.`,
+  `Paneer and dahi = ALWAYS home-made from skimmed milk powder (Amul Sagar or Nandini): 120 g powder + water to make 1 L. Drinking milk = Amul Slim n Trim tetra pack (UHT, tested clean). Mother Dairy low-fat curd is a fine backup when there's no time.`,
   "Oil = Tata Simply Better olive oil spray. 1 spray ≈ 1 second. No ghee, butter or extra oil.",
   "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka. NO ghee on phulkas, not even a small spoon: the 2 tsp a day was ~80 kcal and raises LDL. Plain phulka, or 1 spray if needed.",
   "Ninja air fryer (2 sprays, preheat 3 min): paneer or soya tikka 180 °C 8–10 min, shake once; veg 190 °C 10 min; makhana 160 °C 5 min; tikki 180 °C 12 min, flip halfway.",
@@ -246,7 +246,8 @@ const COOK_RULES = [
   "No chai or coffee within 1 hour of a meal (it blocks iron absorption).",
   "For cholesterol: nothing fried, no sweets, maida, cream, cheese, butter, ghee or coconut. Brown rice, not white.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
-  "Home-made paneer (every 1–2 days, ~3 L milk per batch): boil the milk, turn off the heat, wait 1 min, stir in 2 tbsp lemon juice per litre. Strain in muslin, rinse in cold water. Press under a heavy weight: 30 min for soft paneer (bhurji, stuffing, chilla), 2 h for firm cubes (tikka, curry). 1 L gives ~160 g with ~24 g protein. Keep in water in the fridge, use within 2 days. Use the leftover whey water to knead atta.",
+  "PANEER (every 1–2 days, 3 L batch → ~480 g): whisk 360 g milk powder into 2.7 L lukewarm water, rest 30 min. Bring to a boil, switch off, wait ~3 min until it cools to about 70 °C (bubbles stop, too hot to touch for long). Pour in 3 tsp (15 g) citric acid (nimbu sat) dissolved in 750 ml warm water, or 9 tbsp lemon juice, slowly while stirring gently, until the whey turns clear greenish. Rest 5 min, strain in muslin, rinse with cold water. Press under a heavy weight: 30 min soft (bhurji, stuffing, chilla), 2 h firm (tikka, curry). Fridge in water, use within 2 days. Knead atta with the whey water.",
+  "DAHI (every night, 1 L): whisk 120 g milk powder into 900 ml lukewarm water, rest 15 min, boil 2 min (makes it thick), cool till just warm to the finger (~42 °C), stir in 1 tbsp old dahi, cover, keep in a warm spot 6–8 h, then fridge.",
   "Young skin: no added sugar (sweetness only from fruit), 2–3 colourful fruits a day (amla, guava, papaya, orange) + carrot, tomato or palak daily, low salt. Sunscreen every morning matters even more.",
 ];
 const TIKKA_STEPS = [
@@ -261,13 +262,13 @@ const MEALS = [
       items: ["50 g Quaker rolled oats (dry)", "250 ml Amul Slim n Trim skimmed milk", `30 g ${WHEY} (1 level scoop)`, "1 banana (~100 g peeled)"],
       steps: ["Boil the milk, add the oats, cook 3–4 min stirring.", "Take off the heat, wait 1 min, then stir in the whey so it doesn't lump.", "Top with sliced banana. No sugar."] },
     { name: "Paneer besan chilla", kcal: 425, p: 49,
-      items: ["50 g Tata Sampann besan", `100 g home-made paneer (from Slim n Trim milk), grated`, "30 g onion + 30 g tomato, finely chopped", "1 green chilli, coriander, pinch of ajwain, haldi, salt",
+      items: ["50 g Tata Sampann besan", `100 g home-made paneer (from skimmed milk powder), grated`, "30 g onion + 30 g tomato, finely chopped", "1 green chilli, coriander, pinch of ajwain, haldi, salt",
         "4–5 sprays olive oil", "2 tbsp green chutney (coriander + mint + lemon, no coconut)", `15 g ${WHEY} (½ level scoop) in 150 ml Amul Slim n Trim skimmed milk`],
       steps: ["Mix besan with ~90 ml water into a pouring batter; add onion, tomato, chilli, coriander, ajwain, haldi, salt.",
         "Spray a hot tawa, make 2 thin chillas, 2 min each side.", "Fill with grated paneer and chutney, fold.", "Serve with the whey-milk shake."] },
     { name: "Moong dal chilla + whey", kcal: 410, p: 41,
       items: ["½ lemon (squeeze on top)", "60 g Tata Sampann yellow moong dal (dry), soaked 4 h or overnight", "10 g ginger, 1 green chilli, ½ tsp jeera, salt", "4–5 sprays olive oil",
-        "100 g low-fat dahi (home-set from Slim n Trim milk)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
+        "100 g low-fat dahi (home-set from skimmed milk powder)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
       steps: ["Grind the soaked dal with ginger, chilli and ~60 ml water into a thick batter; add jeera and salt.",
         "Spray a hot tawa, make 2 chillas, 2 min each side.", "Serve with dahi. Drink the whey shake with it.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Paneer poha + whey", kcal: 550, p: 51,
@@ -280,23 +281,23 @@ const MEALS = [
     { name: "Dal-soya thali", kcal: 570, p: 42,
       items: ["½ lemon (squeeze on top)", "60 g Milld High Protein Atta → 2 phulka", "40 g Tata Sampann yellow moong dal (dry)", "40 g Fortune mini soya chunks (dry)",
         "50 g onion + 50 g tomato, 1 tsp ginger-garlic paste, ½ tsp each chilli / dhania / garam masala", "4–5 sprays olive oil",
-        "Salad: 100 g cucumber + 50 g carrot", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+        "Salad: 100 g cucumber + 50 g carrot", "100 g low-fat dahi (home-set from skimmed milk powder)"],
       steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles. Jeera tadka with 2 sprays.",
         "Soya: boil 5 min in salted water, squeeze out all water.", "Spray kadhai, cook onion → ginger-garlic → tomato + spices into masala, add soya, cook 5 min.",
         "Make 2 phulkas, no ghee.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Paneer bhurji thali", kcal: 505, p: 43,
-      items: ["60 g Milld High Protein Atta → 2 phulka", `130 g home-made paneer (from Slim n Trim milk), crumbled`, "50 g onion + 50 g tomato + 50 g capsicum, chopped",
+      items: ["60 g Milld High Protein Atta → 2 phulka", `130 g home-made paneer (from skimmed milk powder), crumbled`, "50 g onion + 50 g tomato + 50 g capsicum, chopped",
         "¼ tsp haldi, ½ tsp chilli, ½ tsp garam masala, salt", "30 g Tata Sampann yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
       steps: ["Spray kadhai, onion 2 min, tomato + capsicum 3 min, add spices.", "Add crumbled paneer, cook 2 min only.",
         "Dal: pressure-cook with 200 ml water, haldi, salt, 3 whistles.", "Make 2 phulkas, no ghee."] },
     { name: "Moong khichdi + paneer tikka", kcal: 555, p: 39,
       items: ["½ lemon (squeeze on top)", "40 g brown rice (dry, soaked 30 min) + 40 g Tata Sampann yellow moong dal (dry)", "100 g mixed veg (carrot, beans, peas)", "½ tsp jeera, ¼ tsp haldi, salt",
-        "4–5 sprays olive oil", `75 g ${PANEER} for tikka (see tikka steps)`, "150 g low-fat dahi (home-set from Slim n Trim milk)"],
+        "4–5 sprays olive oil", `75 g ${PANEER} for tikka (see tikka steps)`, "150 g low-fat dahi (home-set from skimmed milk powder)"],
       steps: ["Wash brown rice and dal; pressure-cook with veg, haldi, salt and 500 ml water, 3 whistles.", "Jeera tadka with the sprays, pour over.",
         ...TIKKA_STEPS, "Serve with dahi.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
     { name: "Palak paneer + rice", kcal: 490, p: 42,
-      items: ["½ lemon (squeeze on top)", `130 g home-made paneer (from Slim n Trim milk), cubed`, "200 g palak (1 small bunch)", "40 g onion + 40 g tomato + 2 garlic cloves + 1 green chilli", "½ tsp garam masala, salt",
-        "60 g brown rice (dry, soaked 30 min)", "4–5 sprays olive oil", "Raita: 100 g low-fat dahi (home-set from Slim n Trim milk) + 50 g cucumber + roasted jeera powder + salt"],
+      items: ["½ lemon (squeeze on top)", `130 g home-made paneer (from skimmed milk powder), cubed`, "200 g palak (1 small bunch)", "40 g onion + 40 g tomato + 2 garlic cloves + 1 green chilli", "½ tsp garam masala, salt",
+        "60 g brown rice (dry, soaked 30 min)", "4–5 sprays olive oil", "Raita: 100 g low-fat dahi (home-set from skimmed milk powder) + 50 g cucumber + roasted jeera powder + salt"],
       steps: ["Blanch palak 2 min, dip in cold water, blend smooth.", "Spray kadhai, onion + garlic + chilli 2 min, tomato 2 min, add palak purée, salt, garam masala, cook 3 min.",
         "Add paneer, 2 min only.", "Brown rice: 60 g (soaked) in 180 ml water, 20 min, cook covered.",
         "Raita: grate cucumber and squeeze out water, whisk into dahi with a pinch of roasted jeera powder and salt.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
@@ -312,14 +313,14 @@ const MEALS = [
       items: [`75 g ${PANEER}`, "Tikka marinade (30 g dahi + spices)", "2 tbsp mint chutney", "1 guava or apple"],
       steps: [...TIKKA_STEPS, "Serve with mint chutney and the fruit."] },
     { name: "Soya chaat + dahi", kcal: 170, p: 21,
-      items: ["30 g Fortune mini soya chunks (dry)", "30 g onion + 30 g tomato + 30 g cucumber, chopped", "½ lemon, chaat masala, coriander", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+      items: ["30 g Fortune mini soya chunks (dry)", "30 g onion + 30 g tomato + 30 g cucumber, chopped", "½ lemon, chaat masala, coriander", "100 g low-fat dahi (home-set from skimmed milk powder)"],
       steps: ["Boil soya 5 min in salted water, squeeze dry, cool.", "Mix with the chopped veg, lemon, chaat masala and coriander.", "Dahi on the side."] },
   ]},
   { time: "8:30", label: "Dinner", options: [
     { name: "Soya pulao + raita", kcal: 450, p: 30,
       items: ["50 g brown rice (dry, soaked 30 min)", "40 g Fortune mini soya chunks (dry)", "80 g mixed veg (carrot, beans, peas) + 30 g onion",
         "1 bay leaf, 2 cloves, ½ tsp jeera, salt", "4–5 sprays olive oil",
-        "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g cucumber + 5 mint leaves + roasted jeera powder + salt"],
+        "Raita: 150 g low-fat dahi (home-set from skimmed milk powder) + 50 g cucumber + 5 mint leaves + roasted jeera powder + salt"],
       steps: ["Boil soya 5 min in salted water, squeeze dry.", "Spray the cooker; whole spices + onion 2 min, veg + soya 2 min.",
         "Add brown rice, 150 ml water and salt; 4 whistles, then rest 10 min.", "Raita: grate cucumber and squeeze out water, whisk into dahi with chopped mint, jeera powder and salt."] },
     { name: "Paneer-veg stir-fry", kcal: 545, p: 39,
@@ -336,9 +337,9 @@ const MEALS = [
       steps: [...TIKKA_STEPS, "Brown rice: 50 g (soaked) in 150 ml water, 20 min, cook covered.", "Sauté the veg with the sprays 4 min, salt and pepper.", "Serve paneer and veg on the rice."] },
   ]},
   { time: "10:00", label: "Night", options: [
-    { name: "Dahi", kcal: 70, p: 7, items: ["200 g low-fat dahi (home-set from Slim n Trim milk), plain"], steps: ["Serve as it is. No sugar."] },
+    { name: "Dahi", kcal: 70, p: 7, items: ["200 g low-fat dahi (home-set from skimmed milk powder), plain"], steps: ["Serve as it is. No sugar."] },
     { name: "Haldi milk", kcal: 85, p: 8, items: ["250 ml Amul Slim n Trim skimmed milk", "¼ tsp haldi + pinch of black pepper"], steps: ["Boil the milk with haldi and pepper for 2 min. No sugar."] },
-    { name: "Hung curd + cinnamon", kcal: 70, p: 10, items: ["200 g low-fat dahi (home-set from Slim n Trim milk)", "Pinch of cinnamon"],
+    { name: "Hung curd + cinnamon", kcal: 70, p: 10, items: ["200 g low-fat dahi (home-set from skimmed milk powder)", "Pinch of cinnamon"],
       steps: ["Tie the dahi in a muslin cloth, hang it in the fridge for 2 hours (leaves ~120 g thick curd).", "Top with cinnamon."] },
     { name: "Slow protein shake", kcal: 130, p: 19, items: [`15 g ${WHEY} (½ level scoop)`, "200 ml Amul Slim n Trim skimmed milk"], steps: ["Shake together. Drink 30 min before bed."] },
   ]},
@@ -349,7 +350,7 @@ const MEALS = [
 MEALS[0].options.push(
   { name: "Daliya upma + whey", kcal: 465, p: 43, fib: 7,
     items: ["½ lemon (squeeze on top)", "40 g daliya (broken wheat, dry)", "80 g veg: carrot, beans, peas, onion", `50 g ${PANEER}, cubed`, "½ tsp mustard seeds, curry leaves, salt",
-      "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
+      "4–5 sprays olive oil", "100 g low-fat dahi (home-set from skimmed milk powder)", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
     steps: ["Dry-roast daliya 2 min.", "Spray a cooker; mustard seeds + curry leaves, then veg 2 min.", "Add daliya, salt and 160 ml water; 2 whistles.",
       "Stir in paneer for the last minute. Dahi on the side; drink the whey shake.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Ragi-oats porridge", kcal: 435, p: 39, fib: 9,
@@ -361,32 +362,32 @@ MEALS[0].options.push(
     steps: ["Sprouts: soak 8 h, drain, keep covered 24 h until they sprout.", "Steam sprouts 5 min (easier to digest).", "Mix with chopped veg, lemon and chaat masala.",
       "Tawa the paneer cubes with 2 sprays, add on top. Drink the shake."] },
   { name: "Oats-besan uttapam + guava", kcal: 460, p: 47, fib: 10,
-    items: ["25 g Quaker rolled oats, ground + 20 g Tata Sampann besan + 40 g low-fat dahi (home-set from Slim n Trim milk) → batter", "60 g onion + tomato + capsicum, finely chopped",
-      `65 g home-made paneer (from Slim n Trim milk), grated`, "3–4 sprays olive oil", "1 guava", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
+    items: ["25 g Quaker rolled oats, ground + 20 g Tata Sampann besan + 40 g low-fat dahi (home-set from skimmed milk powder) → batter", "60 g onion + tomato + capsicum, finely chopped",
+      `65 g home-made paneer (from skimmed milk powder), grated`, "3–4 sprays olive oil", "1 guava", `30 g ${WHEY} (1 level scoop) in 250 ml cold water`],
     steps: ["Mix ground oats, besan, dahi, salt and ~50 ml water; rest 10 min.", "Spray a tawa, spread 2 small uttapams, top with veg and paneer.",
       "Cover and cook 3 min, flip for 1 min.", "Guava on the side; drink the whey shake."] },
   { name: "Overnight oats", kcal: 480, p: 37, fib: 12,
-    items: ["50 g Quaker rolled oats (dry)", "150 g low-fat dahi (home-set from Slim n Trim milk)", "50 ml Amul Slim n Trim skimmed milk", `30 g ${WHEY} (1 level scoop)`, "10 g chia seeds (1 tbsp)", "1 apple, chopped"],
+    items: ["50 g Quaker rolled oats (dry)", "150 g low-fat dahi (home-set from skimmed milk powder)", "50 ml Amul Slim n Trim skimmed milk", `30 g ${WHEY} (1 level scoop)`, "10 g chia seeds (1 tbsp)", "1 apple, chopped"],
     steps: ["At night: mix oats, dahi, milk, whey and chia in a jar.", "Refrigerate overnight.", "Morning: top with apple. Eat cold. No cooking needed."] },
 );
 MEALS[1].options.push(
   { name: "Masoor dal + bhindi thali", kcal: 590, p: 38, fib: 15,
-    items: ["½ lemon (squeeze on top)", "40 g masoor dal (dry)", "150 g bhindi, sliced", `50 g ${PANEER}, cubed into the dal`, "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+    items: ["½ lemon (squeeze on top)", "40 g masoor dal (dry)", "150 g bhindi, sliced", `50 g ${PANEER}, cubed into the dal`, "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from skimmed milk powder)"],
     steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 2 whistles; add paneer, simmer 2 min.",
       "Bhindi: wipe dry before cutting; spray kadhai, cook uncovered 8 min with salt, haldi, amchur.", "2 phulkas, no ghee. Dahi on the side.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Soya keema + roti", kcal: 505, p: 36, fib: 15,
     items: ["40 g Fortune mini soya chunks (dry), pulsed into keema", "50 g green peas", "50 g onion + 50 g tomato, ginger-garlic, garam masala",
-      "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+      "60 g Milld High Protein Atta → 2 phulka", "4–5 sprays olive oil", "100 g low-fat dahi (home-set from skimmed milk powder)"],
     steps: ["Boil soya 5 min, squeeze dry, pulse in a mixer (2–3 seconds) into mince.", "Spray kadhai, cook onion → ginger-garlic → tomato + spices.",
       "Add soya keema and peas, cook 6 min.", "2 phulkas, no ghee. Dahi on the side."] },
   { name: "Paneer kathi roll", kcal: 570, p: 41, fib: 9,
     items: ["60 g Milld High Protein Atta → 2 thin rotis", `100 g ${PANEER} for tikka (see tikka steps)`, "100 g onion + capsicum + cabbage, sliced",
-      "2 tbsp mint chutney", "100 g low-fat dahi (home-set from Slim n Trim milk)"],
+      "2 tbsp mint chutney", "100 g low-fat dahi (home-set from skimmed milk powder)"],
     steps: ["Make paneer tikka (marinate 15 min, tawa with 3 sprays).", "Toss the sliced veg on the tawa 2 min.",
       "Spread chutney on each roti, fill with paneer and veg, roll tightly.", "Dahi on the side."] },
   { name: "Veg daliya khichdi + raita", kcal: 560, p: 41, fib: 12,
     items: ["½ lemon (squeeze on top)", "40 g daliya + 30 g yellow moong dal (dry)", "150 g veg: carrot, beans, peas, lauki", `75 g ${PANEER}, cubed`, "½ tsp jeera, haldi, salt, 4–5 sprays olive oil",
-      "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g grated cucumber + roasted jeera + salt"],
+      "Raita: 150 g low-fat dahi (home-set from skimmed milk powder) + 50 g grated cucumber + roasted jeera + salt"],
     steps: ["Wash daliya and dal; pressure-cook with veg, haldi, salt and 450 ml water, 3 whistles.", "Jeera tadka with the sprays; stir in paneer, 2 min.",
       "Raita: squeeze the cucumber dry, whisk into dahi with jeera and salt.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Toor dal + lauki + rice", kcal: 595, p: 36, fib: 11,
@@ -394,17 +395,17 @@ MEALS[1].options.push(
     steps: ["Dal: pressure-cook with 250 ml water, haldi, salt, 3 whistles; jeera tadka.", "Lauki: spray kadhai, jeera, lauki + salt + haldi, cover 8 min.",
       "Brown rice: 50 g (soaked) in 150 ml water, 20 min.", "Paneer tikka: see tikka steps.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Methi paneer + jowar roti", kcal: 520, p: 44, fib: 11,
-    items: ["50 g jowar flour → 2 rotis", `130 g home-made paneer (from Slim n Trim milk), crumbled`, "50 g fresh methi leaves, chopped", "50 g onion + 50 g tomato",
+    items: ["50 g jowar flour → 2 rotis", `130 g home-made paneer (from skimmed milk powder), crumbled`, "50 g fresh methi leaves, chopped", "50 g onion + 50 g tomato",
       "30 g yellow moong dal (dry)", "4–5 sprays olive oil", "Salad: 100 g cucumber"],
     steps: ["Jowar roti: knead flour with hot water, pat thin between sheets, cook on tawa both sides.", "Spray kadhai, onion 2 min, methi 3 min, tomato 2 min, spices.",
       "Add paneer, 2 min only.", "Dal: pressure-cook with 200 ml water, haldi, salt, 3 whistles."] },
 );
 MEALS[2].options.push(
   { name: "Hung curd + apple + chia", kcal: 195, p: 14, fib: 6,
-    items: ["250 g low-fat dahi (home-set from Slim n Trim milk) hung for 2 h (~150 g)", "1 apple, chopped", "5 g chia seeds (1 tsp)", "Pinch of cinnamon"],
+    items: ["250 g low-fat dahi (home-set from skimmed milk powder) hung for 2 h (~150 g)", "1 apple, chopped", "5 g chia seeds (1 tsp)", "Pinch of cinnamon"],
     steps: ["Hang the dahi in muslin in the fridge for 2 hours.", "Top with apple, chia and cinnamon."] },
   { name: "Sprouts chaat + whey", kcal: 265, p: 26, fib: 9,
-    items: ["40 g whole green moong, sprouted (~120 g)", "Onion, tomato, cucumber, lemon, chaat masala", "100 g low-fat dahi (home-set from Slim n Trim milk)", `15 g ${WHEY} (½ level scoop) in 200 ml water`],
+    items: ["40 g whole green moong, sprouted (~120 g)", "Onion, tomato, cucumber, lemon, chaat masala", "100 g low-fat dahi (home-set from skimmed milk powder)", `15 g ${WHEY} (½ level scoop) in 200 ml water`],
     steps: ["Steam sprouts 5 min, cool.", "Mix with chopped veg, lemon and chaat masala.", "Dahi on the side; drink the shake."] },
   { name: "Makhana + whey + guava", kcal: 260, p: 29, fib: 7,
     items: ["20 g Farmley roasted makhana", `30 g ${WHEY} (1 level scoop) in 250 ml water`, "1 guava"],
@@ -412,10 +413,10 @@ MEALS[2].options.push(
 );
 MEALS[3].options.push(
   { name: "Grilled paneer + veg + roti", kcal: 500, p: 41, fib: 10,
-    items: [`100 g ${PANEER}`, "200 g veg: broccoli, beans, carrot", "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + mint", "3–4 sprays olive oil, pepper, garlic"],
+    items: [`100 g ${PANEER}`, "200 g veg: broccoli, beans, carrot", "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from skimmed milk powder) + mint", "3–4 sprays olive oil, pepper, garlic"],
     steps: ["Slice paneer thick, sprinkle salt, pepper, chilli; tawa with 2 sprays, 2 min each side.", "Toss veg with garlic and 2 sprays, 5 min (keep crunchy).", "1 phulka; mint raita on the side."] },
   { name: "Moong cheela + palak raita", kcal: 415, p: 36, fib: 8,
-    items: ["½ lemon (squeeze on top)", "60 g yellow moong dal (dry), soaked 4 h", `65 g home-made paneer (from Slim n Trim milk), grated, as stuffing`, "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + 50 g blanched palak, chopped", "Salad: 100 g cucumber", "4 sprays olive oil"],
+    items: ["½ lemon (squeeze on top)", "60 g yellow moong dal (dry), soaked 4 h", `65 g home-made paneer (from skimmed milk powder), grated, as stuffing`, "Raita: 150 g low-fat dahi (home-set from skimmed milk powder) + 50 g blanched palak, chopped", "Salad: 100 g cucumber", "4 sprays olive oil"],
     steps: ["Grind dal with ginger, chilli, salt into a thick batter.", "Spray tawa, make 2 cheelas, stuff with paneer.", "Raita: blanch palak 1 min, chop, mix into dahi with salt and jeera.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Paneer-capsicum curry + rice", kcal: 550, p: 35, fib: 8,
     items: [`100 g ${PANEER}, cubed`, "100 g capsicum", "50 g onion + 50 g tomato gravy, ginger-garlic, spices", "50 g brown rice (dry, soaked 30 min)", "Salad: 100 g cucumber", "4–5 sprays olive oil"],
@@ -424,13 +425,13 @@ MEALS[3].options.push(
     items: ["40 g masoor dal (dry)", "100 g veg: carrot, tomato, onion, garlic", `100 g ${PANEER} tikka`, "30 g Milld High Protein Atta → 1 phulka", "3 sprays olive oil"],
     steps: ["Pressure-cook dal and veg with 400 ml water, salt, haldi, 3 whistles; blend smooth, add pepper and lemon.", "Paneer tikka: see tikka steps.", "1 phulka."] },
   { name: "Soya-palak curry + roti", kcal: 465, p: 32, fib: 15,
-    items: ["½ lemon (squeeze on top)", "30 g Fortune mini soya chunks (dry)", "150 g palak", "50 g onion + 50 g tomato, garlic, garam masala", "60 g Milld High Protein Atta → 2 phulka", "100 g low-fat dahi (home-set from Slim n Trim milk)", "4 sprays olive oil"],
+    items: ["½ lemon (squeeze on top)", "30 g Fortune mini soya chunks (dry)", "150 g palak", "50 g onion + 50 g tomato, garlic, garam masala", "60 g Milld High Protein Atta → 2 phulka", "100 g low-fat dahi (home-set from skimmed milk powder)", "4 sprays olive oil"],
     steps: ["Boil soya 5 min, squeeze dry.", "Blanch palak 2 min, blend.", "Spray kadhai, onion-garlic-tomato masala, add palak purée and soya, 5 min.", "2 phulkas; dahi on the side.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Lauki moong dal + paneer", kcal: 530, p: 31, fib: 12,
     items: ["½ lemon (squeeze on top)", "30 g yellow moong dal (dry)", "200 g lauki", `50 g ${PANEER}, cubed`, "60 g Milld High Protein Atta → 2 phulka", "Salad: 100 g cucumber + carrot", "3 sprays olive oil"],
     steps: ["Pressure-cook dal + lauki with 300 ml water, haldi, salt, 3 whistles.", "Jeera tadka with sprays; add paneer, 2 min.", "2 phulkas.", "Squeeze the lemon on top just before eating (helps absorb iron)."] },
   { name: "Stuffed capsicum + raita", kcal: 385, p: 39, fib: 7,
-    items: ["2 capsicums (~200 g)", `130 g home-made paneer (from Slim n Trim milk), crumbled, with onion + spices`, "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from Slim n Trim milk) + cucumber", "3 sprays olive oil"],
+    items: ["2 capsicums (~200 g)", `130 g home-made paneer (from skimmed milk powder), crumbled, with onion + spices`, "30 g Milld High Protein Atta → 1 phulka", "Raita: 150 g low-fat dahi (home-set from skimmed milk powder) + cucumber", "3 sprays olive oil"],
     steps: ["Cut capsicum tops, remove seeds.", "Fill with paneer mixed with onion, salt, chilli, garam masala.",
       "Cook covered on a tawa or kadhai with 3 sprays, 10 min, turning.", "1 phulka; raita on the side."] },
 );
@@ -460,7 +461,7 @@ const FIBER_TARGET = 30; // g a day
 // ---- Weekly menus: week 1 = the dishes above; weeks 2–4 bring a new set of dishes each week,
 // then the 4-week cycle repeats. Each week has 7 dishes per meal (one per day) in the same
 // calorie / protein band as week 1. Same rules: low oil, no tofu, rajma, chole, roasted chana or peanuts.
-const HM = "home-made paneer (from Slim n Trim milk)", DH = "low-fat dahi (home-set from Slim n Trim milk)",
+const HM = "home-made paneer (from skimmed milk powder)", DH = "low-fat dahi (home-set from skimmed milk powder)",
   MK = "Amul Slim n Trim skimmed milk", AT = "Milld High Protein Atta", SY = "Fortune mini soya chunks (dry)";
 const LEMON_ITEM = "½ lemon (squeeze on top)", LEMON_STEP = "Squeeze the lemon on top just before eating (helps absorb iron).";
 const dish = (name, kcal, p, fib, items, steps, lemon) =>
@@ -739,7 +740,7 @@ function wholeFood(o, slot) {
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) =>
   (week[0]?.options ? week : week).forEach((list, si) => list.forEach((o) => wholeFood(o, si))));
 // ---- All paneer is home-made from Slim n Trim milk (Nov 2026). ----
-// Skim-milk paneer is soft and has ~15 g protein per 100 g (1 L milk → ~160 g, ~24 g protein),
+// Skim paneer is soft, ~15 g protein per 100 g (1 L made from 120 g milk powder → ~160 g; conservative),
 // about half of iD High Protein Paneer, so portions are ~1.8× bigger in grams.
 const HM_PER_L = 160;
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach((o) => {
@@ -849,7 +850,8 @@ const LINKS = {
 const GROCERY = [
   { item: "Fortune mini soya chunks", qty: 1, price: 55, q: "fortune mini soya chunks", link: LINKS.soya, group: "Protein" },
   { item: "Pumpkin seeds 200 g (zinc for testosterone)", qty: 0.5, price: 160, q: "pumpkin seeds", group: "Protein" },
-  { item: "Amul Slim n Trim skimmed milk 500 ml (drinking + dahi + ALL paneer: 1 L → ~160 g paneer)", qty: 47, price: 27, q: "amul slim n trim milk", group: "Dairy" },
+  { item: "Skimmed milk powder 1 kg (Amul Sagar or Nandini): all paneer + dahi, 120 g per litre", qty: 2.6, price: 360, q: "skimmed milk powder 1kg", group: "Dairy" },
+  { item: "Amul Slim n Trim tetra pack 1 L (drinking milk: oats, haldi milk)", qty: 2, price: 85, q: "amul slim n trim tetra pack", group: "Dairy" },
   { item: "Milld High Protein Atta", qty: 1, price: 130, q: "milld high protein atta", link: LINKS.atta, group: "Pantry" },
   { item: "Tata Simply Better olive oil cooking spray", qty: 0.25, price: 400, q: "olive oil cooking spray", link: LINKS.spray, group: "Pantry" },
   { item: "Tata Sampann yellow moong dal 1 kg", qty: 0.5, price: 160, q: "tata sampann moong dal", group: "Pantry" },
@@ -874,16 +876,16 @@ const GROCERY = [
 // Each menu week needs slightly different shopping (counted from that week's dishes):
 // qty overrides the weekly packs above; add = extra items for that week only. Week-specific veg
 // (drumstick, sarson, mushrooms…) comes out of the normal vegetable budget.
-const MILK_ITEM = GROCERY.find((g) => /Slim n Trim/.test(g.item)).item, SOYA_ITEM = GROCERY.find((g) => /soya/.test(g.item)).item;
+const MILK_ITEM = GROCERY.find((g) => /milk powder/.test(g.item)).item, SOYA_ITEM = GROCERY.find((g) => /soya/.test(g.item)).item;
 const WEEK_GROCERY = {
   1: { qty: {}, add: [] },
-  2: { qty: { [MILK_ITEM]: 43 }, add: [
+  2: { qty: { [MILK_ITEM]: 2.4 }, add: [
     { item: "Urad dal 500 g (ragi dosa, adai)", qty: 0.5, price: 90, q: "urad dal", group: "Pantry" },
     { item: "Foxtail millet 500 g (bisi bele bath, khichdi)", qty: 0.5, price: 90, q: "foxtail millet", group: "Pantry" } ] },
-  3: { qty: { [MILK_ITEM]: 40 }, add: [
+  3: { qty: { [MILK_ITEM]: 2.2 }, add: [
     { item: "Matki (moth beans) 500 g, for sprouting", qty: 0.5, price: 80, q: "matki moth beans", group: "Pantry" },
     { item: "Bajra flour 500 g", qty: 0.5, price: 50, q: "bajra atta", group: "Pantry" } ] },
-  4: { qty: { [MILK_ITEM]: 39, [SOYA_ITEM]: 2 }, add: [
+  4: { qty: { [MILK_ITEM]: 2.2, [SOYA_ITEM]: 2 }, add: [
     { item: "Low-sodium soy sauce + vinegar (last ~2 months)", qty: 0.5, price: 150, q: "low sodium soy sauce", group: "Pantry" },
     { item: "Unsweetened cocoa 100 g (lasts months)", qty: 0.25, price: 130, q: "unsweetened cocoa powder", group: "Pantry" } ] },
 };
