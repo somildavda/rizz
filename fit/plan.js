@@ -17,19 +17,19 @@ const GYM_TIME = "8:30 am"; // back by 9:30, so ~45 min in the gym
 // starting point is ~79 kg — about 28 weeks at a sustainable 0.5–0.8 kg/week.
 const PHASES = [
   { name: "Foundation", start: "2026-10-21", end: "2026-11-17", fromKg: 94.5, toKg: 91.5,
-    kcal: 1850, protein: 140, carbs: 190, fat: 45, steps: 8000,
+    kcal: 2000, protein: 140, carbs: 210, fat: 50, steps: 8000,
     focus: "Learn every exercise with light weights and build the daily habits. The first 1–2 kg is partly water.",
     food: "Follow the meal plan as written." },
   { name: "Fat loss I", start: "2026-11-18", end: "2027-01-12", fromKg: 91.5, toKg: 86.5,
-    kcal: 1800, protein: 140, carbs: 180, fat: 45, steps: 10000,
+    kcal: 1950, protein: 140, carbs: 200, fat: 50, steps: 10000,
     focus: "Add weight whenever you hit the top of the rep range. Harder Thursday intervals. Start walk-run.",
     food: "Night slot: dahi or hung curd only. One planned treat meal a week, Christmas and New Year included." },
   { name: "Fat loss II", start: "2027-01-13", end: "2027-03-09", fromKg: 86.5, toKg: 82.5,
-    kcal: 1750, protein: 140, carbs: 170, fat: 45, steps: 11000,
+    kcal: 1900, protein: 140, carbs: 190, fat: 50, steps: 11000,
     focus: "Chest and V-taper look starts to show. Keep strength up. First week is a diet break at ~2,600 kcal to reset.",
     food: "Dinner: swap rice for extra sabzi. Treat meal every 2 weeks." },
   { name: "Abs reveal", start: "2027-03-10", end: "2027-05-04", fromKg: 82.5, toKg: 79,
-    kcal: 1700, protein: 140, carbs: 160, fat: 45, steps: 12000,
+    kcal: 1850, protein: 140, carbs: 180, fat: 50, steps: 12000,
     focus: "Target ~12–14% body fat: upper 2 abs first, then 4. Ab training 3× a week, low salt before photos.",
     food: "No treat meals. Pre-gym snack only on leg and conditioning days." },
   { name: "Stay lean", start: "2027-05-05", end: "2027-08-31", fromKg: 79, toKg: 79,
@@ -593,8 +593,8 @@ const MENU_WEEKS = {
         ["Grind dal with palak and ginger-chilli; mix in dahi and salt; add eno.", "Steam 12 min. Cut in squares; chutney on the side.", "Drink the shake."], true),
       dish("Banana-whey milkshake", 210, 25, 1, [`250 ml ${MK}, cold`, `20 g ${WHEY} (⅔ level scoop)`, "½ banana", "Cinnamon"],
         ["Blend everything 20 seconds. No sugar."]),
-      dish("Soya tikki + dahi", 220, 18, 4, [`25 g ${SY}`, "20 g Quaker oats, ground", "Onion, coriander, ginger, chaat masala", "3 sprays olive oil", "50 g " + DH + " + mint chutney"],
-        [SOYA_BOIL + " Pulse with oats, onion and spices.", "Shape 3 tikkis; tawa with sprays, 3 min per side (not fried).", "Mint-dahi dip on the side."]),
+      dish("Air-fried soya tikka + dahi", 0, 0, 5, [`30 g ${SY}`, "Marinade: 30 g " + DH + ", chilli, garam masala, ginger-garlic, lemon", "50 g capsicum + onion", "2 sprays olive oil", "70 g " + DH + " + mint chutney (dip)"],
+        [SOYA_BOIL, "Marinate soya and veg 15 min.", "Ninja air fryer 190 °C, 10 min, shake once.", "Mint-dahi dip on the side."]),
     ],
     [ // Dinner
       dish("Kolhapuri soya + phulka", 470, 39, 13, [`40 g ${SY}`, "Onion, tomato, garlic, 1 tsp Kolhapuri masala (no coconut)", "150 g capsicum + onion", PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
@@ -605,8 +605,8 @@ const MENU_WEEKS = {
         [...TIKKA_STEPS, "Gravy: spray kadhai, onion 3 min, tomato + spices 3 min, blend; add peas and 100 ml water, 4 min.", "Off the heat stir in whisked dahi; add the paneer.", "1 phulka."]),
       dish("Zunka-paneer + jowar bhakri", 535, 41, 10, ["35 g besan", "100 g onion, garlic, chilli, mustard, haldi", `100 g ${HM}, crumbled`, "50 g jowar flour → 2 bhakris", "150 g " + DH, "3 sprays olive oil"],
         ["Spray kadhai, mustard + garlic + onion 4 min, haldi + chilli.", "Sprinkle besan, stir on low 5 min (dry and crumbly); add paneer, 2 min.", "Bhakris; dahi on the side."]),
-      dish("Punjabi mix veg + soya + phulka", 435, 35, 13, ["200 g veg: cauliflower, carrot, beans, peas, capsicum", `30 g ${SY}`, "Onion, tomato, ginger-garlic, kasuri methi", PHULKA(2), "100 g " + DH, "4 sprays olive oil"],
-        [SOYA_BOIL, "Spray kadhai, onion → ginger-garlic → tomato + spices; add veg + soya + 100 ml water, cover 8 min.", "2 phulkas. Dahi on the side."]),
+      dish("Kurkuri bhindi + dal + phulka", 0, 0, 13, ["200 g bhindi, slit lengthwise", "10 g besan + chilli, amchur, haldi, salt", "40 g yellow moong dal (dry)", `70 g ${HM}, cubed into the dal`, PHULKA(2), "100 g " + DH, "3 sprays olive oil"],
+        ["Wipe bhindi dry, toss with besan, spices and 2 sprays.", "Ninja air fryer 190 °C, 10–12 min, shake twice.", "Dal: pressure-cook with haldi, salt, 3 whistles; jeera tadka; add paneer, 2 min.", "2 phulkas. Dahi on the side."], true),
       dish("Masoor dal + methi-paneer thepla", 480, 36, 13, ["40 g masoor dal (dry)", `30 g ${AT} + 30 g jowar flour + 20 g methi → 2 theplas`, `65 g ${HM}, grated into the dough`, "100 g " + DH, "4 sprays olive oil"],
         ["Pressure-cook dal with haldi, salt, tomato, 3 whistles; jeera tadka.", "Knead flours, methi, paneer and spices; roll 2 theplas; tawa with sprays.", "Dahi on the side."], true),
       dish("Tandoori paneer-veg + raita", 455, 42, 7, [`100 g ${PANEER} + 150 g capsicum, onion, tomato chunks`, "Tandoori marinade: 30 g dahi, chilli, garam masala, ginger-garlic, lemon", "Raita: 150 g " + DH + " + mint", PHULKA(1), "3 sprays olive oil"],
@@ -656,8 +656,8 @@ const MENU_WEEKS = {
         ["Pressure-cook dal with haldi, 3 whistles; jeera-garlic tadka.", SOYA_BOIL + " Toss with capsicum, onion, garlic and soy, high heat 4 min.", "Brown rice: 40 g in 120 ml water, 20 min. 1 phulka. Dahi on the side."], true),
     ],
     [ // Snack
-      dish("Soya chilli bites + apple", 225, 19, 6, [`25 g ${SY}`, "Garlic, capsicum, ½ tsp low-sodium soy sauce, chilli flakes, 2 sprays", "100 g " + DH, "1 apple"],
-        [SOYA_BOIL, "High heat, sprays, garlic, soya, capsicum, soy and chilli, 3 min.", "Dahi and apple on the side."]),
+      dish("Moong-paneer tikki (air fryer)", 0, 0, 5, ["40 g yellow moong dal (dry), soaked 3 h", `70 g ${HM}`, "Onion, coriander, ginger-chilli, chaat masala", "2 sprays olive oil", "Mint chutney"],
+        ["Grind dal thick (no water); mix with crumbled paneer, onion, spices, salt; shape 4 tikkis.", "Spray both sides. Ninja air fryer 180 °C, 12 min, flip halfway.", "Mint chutney on the side."], true),
       dish("Greek-style curd bowl", 200, 21, 2, ["250 g " + DH + ", hung 2 h", `15 g ${WHEY} (½ level scoop)`, "½ apple, chopped, cinnamon"],
         ["Whisk whey into the hung curd; top with apple and cinnamon."]),
       dish("Paneer-veg skewers + guava", 240, 19, 6, [`60 g ${PANEER}`, "Capsicum, onion, tomato chunks", "Tikka spice, 2 sprays", "1 guava"],
@@ -680,8 +680,8 @@ const MENU_WEEKS = {
         ["Pressure-cook millet, dal, veg, haldi, salt, 450 ml water, 3 whistles; stir in paneer.", "Kadhi: whisk dahi, besan, 200 ml water; simmer 8 min, stirring (no sugar)."], true),
       dish("Paneer-palak wrap", 460, 40, 10, [PHULKA(2).replace("phulkas", "thin rotis"), `75 g ${PANEER}, sliced`, "100 g palak, onion, garlic", "Mint chutney", "100 g " + DH, "3 sprays olive oil"],
         ["Spray pan, garlic + onion 2 min, palak 2 min, salt.", TAWA_PANEER, "Chutney on each roti, fill with palak and paneer, roll. Dahi on the side."], true),
-      dish("Dal-veg soup + paneer tikka salad", 450, 38, 9, ["30 g yellow moong dal (dry)", "150 g veg: carrot, tomato, onion, garlic", `75 g ${PANEER} for tikka (see tikka steps)`, "100 g lettuce + cucumber", PHULKA(1), "2 sprays olive oil"],
-        ["Pressure-cook dal and veg with 400 ml water, salt, haldi, 3 whistles; blend smooth, pepper.", ...TIKKA_STEPS, "Toss tikka on the salad. 1 phulka."], true),
+      dish("MILLD paneer pizza (air fryer)", 0, 0, 8, [`60 g ${AT} → 2 thin pizza bases`, "Sauce: 1 tomato, 1 garlic clove, oregano, chilli flakes, salt (no ketchup)", `100 g ${HM}, crumbled`, "100 g capsicum + onion + mushroom", "2 sprays olive oil", "Salad: 100 g cucumber + lettuce"],
+        ["Knead atta with salt, ½ tsp oregano and water; roll 2 thin 15 cm rounds, prick with a fork.", "Ninja air fryer: bases 180 °C, 4 min.", "Sauce: blend tomato, garlic, spices; cook 3 min.", "Spread sauce, top with paneer and veg, 1 spray. Air fryer 180 °C, 5–6 min.", "No cheese (cholesterol). Salad on the side."]),
       dish("Soya keema + bajra roti", 460, 35, 14, [`40 g ${SY}, minced`, "50 g peas, onion, tomato, ginger-garlic, garam masala", "50 g bajra flour → 2 rotis", "100 g " + DH, "4 sprays olive oil"],
         [SOYA_BOIL + " Pulse 2–3 seconds into mince.", "Spray kadhai, onion → ginger-garlic → tomato + spices, soya + peas 6 min.", "Bajra rotis. Dahi on the side."]),
       dish("Paneer-mushroom pepper fry + jowar roti", 450, 35, 9, [`75 g ${PANEER}, cubed`, "150 g mushrooms + 50 g capsicum", "Garlic, black pepper, 1 tsp low-sodium soy sauce", "50 g jowar flour → 2 rotis", "100 g " + DH, "3 sprays olive oil"],
@@ -748,41 +748,49 @@ const HM_PER_L = 160;
 // ---- Calories and protein are CALCULATED from the ingredients (label values, per g or ml). ----
 // Sources: Amul Slim n Trim 35 kcal / 3.5 g protein per 100 ml; MILLD atta 387 kcal / 46 g per 100 g;
 // Fortune soya 343 kcal / 52.5 g per 100 g; dals, grains, seeds from IFCT 2017 (NIN) averages.
-const NUTRI = [ // [match, kcal per g, protein per g]
-  [/Milld|High Protein Atta/i, 3.87, 0.46], [/jowar/i, 3.5, 0.10], [/bajra/i, 3.6, 0.11], [/ragi/i, 3.3, 0.073],
-  [/oats/i, 3.8, 0.13], [/brown rice/i, 3.6, 0.075], [/poha/i, 3.5, 0.066], [/daliya/i, 3.4, 0.12], [/millet/i, 3.5, 0.12],
-  [/urad/i, 3.4, 0.24], [/besan/i, 3.8, 0.22], [/whole (green )?moong|sprout/i, 3.3, 0.24], [/matki|moth/i, 3.4, 0.23],
-  [/moong/i, 3.5, 0.24], [/masoor/i, 3.5, 0.25], [/toor/i, 3.4, 0.22], [/soya/i, 3.43, 0.525],
-  [/paneer/i, 0.8, 0.15], [/dahi|curd/i, 0.35, 0.035], [/Slim n Trim|milk/i, 0.35, 0.035],
-  [/walnut/i, 6.5, 0.15], [/pumpkin seed/i, 5.6, 0.30], [/chia/i, 4.9, 0.17], [/flax/i, 5.3, 0.18], [/sesame/i, 5.7, 0.18],
-  [/makhana/i, 3.5, 0.095], [/peas/i, 0.8, 0.05], [/sweet potato/i, 0.86, 0.016], [/palak|methi|sarson|spinach/i, 0.25, 0.03],
-  [/mushroom/i, 0.22, 0.03], [/onion|tomato|cucumber|carrot|capsicum|lauki|beans|cabbage|broccoli|bhindi|brinjal|lettuce|veg|salad|cauliflower|drumstick|papdi/i, 0.3, 0.015],
+const NUTRI = [ // [match, kcal per g, protein per g, fat per g]
+  [/Milld|High Protein Atta/i, 3.87, 0.46, 0.023], [/jowar/i, 3.5, 0.10, 0.02], [/bajra/i, 3.6, 0.11, 0.05], [/ragi/i, 3.3, 0.073, 0.013],
+  [/oats/i, 3.8, 0.13, 0.07], [/brown rice/i, 3.6, 0.075, 0.027], [/poha/i, 3.5, 0.066, 0.012], [/daliya/i, 3.4, 0.12, 0.015], [/millet/i, 3.5, 0.12, 0.04],
+  [/urad/i, 3.4, 0.24, 0.015], [/besan/i, 3.8, 0.22, 0.06], [/whole (green )?moong|sprout/i, 3.3, 0.24, 0.013], [/matki|moth/i, 3.4, 0.23, 0.01],
+  [/moong/i, 3.5, 0.24, 0.012], [/masoor/i, 3.5, 0.25, 0.01], [/toor/i, 3.4, 0.22, 0.015], [/soya/i, 3.43, 0.525, 0.005],
+  [/paneer/i, 0.8, 0.15, 0.01], [/dahi|curd/i, 0.35, 0.035, 0.001], [/Slim n Trim|milk/i, 0.35, 0.035, 0.001],
+  [/walnut/i, 6.5, 0.15, 0.65], [/pumpkin seed/i, 5.6, 0.30, 0.49], [/chia/i, 4.9, 0.17, 0.31], [/flax/i, 5.3, 0.18, 0.42], [/sesame/i, 5.7, 0.18, 0.5],
+  [/makhana/i, 3.5, 0.095, 0.001], [/peas/i, 0.8, 0.05, 0.004], [/sweet potato/i, 0.86, 0.016, 0.001], [/palak|methi|sarson|spinach/i, 0.25, 0.03, 0.004],
+  [/mushroom/i, 0.22, 0.03, 0.003], [/onion|tomato|cucumber|carrot|capsicum|lauki|beans|cabbage|broccoli|bhindi|brinjal|lettuce|veg|salad|cauliflower|drumstick|papdi/i, 0.3, 0.015, 0.002],
+  [/\boil\b/i, 9, 0, 1],
 ];
 const FRUIT = [[/seasonal fruit/i, 70, 1], [/½ banana/i, 45, 0.5], [/banana/i, 90, 1.1], [/½ apple/i, 40, 0.2], [/apple/i, 80, 0.4], [/guava/i, 70, 2.6], [/orange/i, 60, 1.2], [/fruit/i, 70, 1]];
 function calcDish(o) {
-  let k = 0, p = 0;
+  let k = 0, p = 0, f = 0;
   for (const x of o.items) {
     const re = /(?<!~)(\d+(?:\.\d+)?)\s*(g|ml)\b/g, hits = [...x.matchAll(re)];
     hits.forEach((h, j) => {
       const seg = x.slice(h.index + h[0].length, hits[j + 1]?.index ?? x.length) || x;
       if (h[2] === "ml" && !/Slim n Trim|milk/i.test(seg)) return; // water
       const n = NUTRI.find(([r]) => r.test(seg));
-      if (n) { k += +h[1] * n[1]; p += +h[1] * n[2]; }
+      if (n) { k += +h[1] * n[1]; p += +h[1] * n[2]; f += +h[1] * n[3]; }
     });
-    const sp = x.match(/(\d+)(?:–\d+)? sprays?/); if (sp) k += +sp[1] * 6;
+    const sp = x.match(/(\d+)(?:–\d+)? sprays?/); if (sp) { k += +sp[1] * 6; f += +sp[1] * 0.6; }
     if (!hits.length) { const f = FRUIT.find(([r]) => r.test(x)); if (f) { k += f[1]; p += f[2]; } }
   }
-  o.kcal = Math.round(k / 5) * 5; o.p = Math.round(p);
+  o.kcal = Math.round(k / 5) * 5; o.p = Math.round(p); o.fat = Math.round(f);
 }
 // More whole fruit (vitamin C for collagen, carotenoids for skin): 1 fruit after every lunch.
 [MEALS[1].options, ...Object.values(MENU_WEEKS).map((w) => w[1])].forEach((list) => list.forEach((o) => {
   if (!o.items.some((x) => /fruit|guava|apple|banana|orange|papaya/i.test(x))) { o.items.push("1 seasonal fruit after lunch: papaya bowl, guava, orange or 2 amla"); o.fib += 3; }
 }));
+// Testosterone: very low-fat diets (<~20% of calories) lower it, so every day gets ~20 g extra
+// fat from whole foods: walnuts at breakfast, pumpkin seeds (zinc) at the snack, 1 tsp oil at lunch.
+[MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list, si) => list.forEach((o) => {
+  if (si === 0 && !/walnut/i.test(o.items.join())) o.items.push("10 g walnuts (3 halves)");
+  if (si === 2 && !/pumpkin/i.test(o.items.join())) o.items.push("15 g pumpkin seeds (zinc)");
+  if (si === 1) { o.items.push("5 g (1 tsp) cold-pressed mustard or olive oil for the tadka"); o.steps.push("Use the 1 tsp oil in the tadka (healthy fat for hormones)."); }
+})));
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach(calcDish)));
 
 // Office days (Mon–Fri): the 5 pm snack is eggs from the office stall.
-const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 195, p: 17, fib: 4,
-  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple"],
+const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 280, p: 21, fat: 12, fib: 5,
+  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple", "15 g pumpkin seeds from home (zinc)"],
   steps: ["No pav, no butter, no mayo.", "Omelette only if made without butter, with little oil."] };
 const isOfficeDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 
@@ -845,6 +853,7 @@ const GROCERY = [
   { item: "Jowar flour 500 g", qty: 0.25, price: 70, q: "jowar atta", group: "Pantry" },
   { item: "Ragi flour 500 g", qty: 0.25, price: 70, q: "ragi flour", group: "Pantry" },
   { item: "Whole green moong (for sprouts) 500 g", qty: 0.25, price: 90, q: "whole green moong", group: "Pantry" },
+  { item: "Cold-pressed mustard oil 1 L (1 tsp a day at lunch; lasts months)", qty: 0.04, price: 220, q: "cold pressed mustard oil", group: "Pantry" },
   { item: "Masoor + toor dal 500 g each", qty: 0.25, price: 160, q: "masoor dal", group: "Pantry" },
   { item: "Chia seeds 200 g", qty: 0.25, price: 140, q: "chia seeds", group: "Pantry" },
   { item: "Flax seeds 200 g (grind a week at a time)", qty: 0.25, price: 80, q: "flax seeds", group: "Pantry" },
@@ -1026,8 +1035,8 @@ const TESTOSTERONE = [
   ["Sleep 7.5–8 h", "A week of 5-hour nights can drop testosterone noticeably. The biggest lever."],
   ["Lose the fat", "Body fat converts testosterone to estrogen. Every kg lost helps, and helps the chest too."],
   ["Lift heavy compounds", "Presses, rows, pulldowns, hip thrusts and RDLs, mostly in the 6–10 rep range once form is solid."],
-  ["Don't cut fat too low", "Keep 55–65 g fat a day from walnuts, pumpkin seeds, flax, dahi and paneer."],
-  ["Zinc and vitamin D", "15 g pumpkin seeds a day and 15 min of morning sun. Supplement only if a blood test says you're low."],
+  ["Don't cut fat too low", "Low-fat diets (<20% of calories) lower testosterone. The plan now gives ~50 g fat a day: walnuts, pumpkin seeds, flax, 1 tsp oil, 1 egg yolk."],
+  ["Zinc and vitamin D", "15 g pumpkin seeds a day (in the snack) and 15 min of morning sun. Your vitamin D is low (11.5): take the D3 your doctor prescribed; low D is linked to low testosterone."],
   ["Limit alcohol", "Max 2 drinks a week; none in the 8 weeks before the abs reveal."],
   ["Keep stress down", "Walks, sunlight and sleep keep cortisol in check."],
 ];
