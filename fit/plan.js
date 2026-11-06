@@ -48,7 +48,7 @@ const BREAK_RULES = [
   "No treat meal, no outside food, no extra nuts, makhana or fruit beyond the plan.",
   "Cook with the sprays in the recipe only. Weigh dal, rice, oats and atta dry.",
   "Dinner done by 8:30 pm; normal salt, no papad or pickle.",
-  "Walk 8,000 flat steps in 2–3 parts: 10–15 min after lunch and after dinner helps fat loss and triglycerides.",
+  "Walk the day's step target (flat) in 2–3 parts: 10–15 min after lunch and after dinner helps fat loss and triglycerides.",
   "Keep 4 L water and the physio knee exercises every day.",
 ];
 const DELOAD_WEEKS = [6, 12, 18, 24]; // weeks since start: same exercises, ~60% of the weight
