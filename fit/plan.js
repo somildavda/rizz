@@ -571,7 +571,7 @@ const MENU_WEEKS = {
       dish("Jeera chaas", 80, 8, 0, ["200 g " + DH, "Roasted jeera powder, salt, mint"], ["Whisk dahi with 150 ml water, jeera, salt, mint."]),
       dish("Kesar-elaichi milk", 85, 9, 0, [`250 ml ${MK}`, "2 strands saffron, pinch cardamom"], ["Warm the milk with saffron and cardamom 3 min. No sugar."]),
       dish("Mint-cucumber raita", 85, 8, 1, ["200 g " + DH, "50 g cucumber, grated", "Mint, roasted jeera, salt"], ["Squeeze the cucumber, whisk into the dahi with mint, jeera and salt."]),
-      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Haldi-elaichi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper + pinch of cardamom", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
       dish("Ajwain chaas", 80, 8, 0, ["200 g " + DH, "¼ tsp ajwain, pinch black salt"], ["Whisk dahi with 150 ml water, crushed ajwain and black salt."]),
       dish("Nutmeg warm milk", 85, 9, 0, [`250 ml ${MK}`, "Pinch of nutmeg"], ["Warm the milk with nutmeg. No sugar."]),
       dish("Dahi + flax", 85, 7, 2, ["150 g " + DH, "1 tsp ground flaxseed"], ["Stir the flax into the dahi."]),
@@ -645,7 +645,7 @@ const MENU_WEEKS = {
     [ // Night
       dish("Elaichi milk", 85, 9, 0, [`250 ml ${MK}`, "Pinch cardamom"], ["Warm the milk with cardamom. No sugar."]),
       dish("Pudina chaas", 60, 6, 0, ["150 g " + DH, "Mint, roasted jeera, black salt"], ["Blend dahi with 150 ml water, mint, jeera and salt."]),
-      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Haldi-dalchini milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper + pinch of cinnamon", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
       dish("Cinnamon dahi + flax", 80, 7, 2, ["150 g " + DH, "1 tsp ground flaxseed, pinch cinnamon"], ["Stir flax and cinnamon into the dahi."]),
       dish("Ginger-tulsi milk", 85, 9, 0, [`250 ml ${MK}`, "Small piece ginger, 3 tulsi leaves"], ["Simmer the milk with ginger and tulsi 3 min, strain. No sugar."]),
       dish("Hung curd + chia", 105, 8, 3, ["200 g " + DH + ", hung 2 h", "5 g chia seeds (1 tsp)"], ["Hang the dahi 2 h in the fridge; stir in chia."]),
@@ -720,7 +720,7 @@ const MENU_WEEKS = {
     [ // Night
       dish("Cocoa milk", 95, 9, 1, [`250 ml ${MK}`, "1 tsp unsweetened cocoa"], ["Warm the milk, whisk in cocoa. No sugar."]),
       dish("Cardamom-cinnamon dahi", 80, 8, 0, ["200 g " + DH, "Pinch cardamom + cinnamon"], ["Stir the spices into the dahi."]),
-      dish("Haldi milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
+      dish("Haldi-saunf milk + ½ scoop", 128, 19, 0, [`200 ml ${MK}`, "¼ tsp haldi + pinch of black pepper + ½ tsp fennel (saunf)", `15 g ${WHEY} (½ level scoop)`], ["Boil milk with haldi and pepper 2 min; cool 2 min, stir in whey."]),
       dish("Jeera-pudina chaas", 80, 8, 0, ["200 g " + DH, "Mint, roasted jeera, black salt"], ["Blend dahi with 150 ml water, mint, jeera and salt."]),
       dish("Ginger milk", 85, 9, 0, [`250 ml ${MK}`, "Small piece ginger"], ["Simmer the milk with ginger 3 min, strain. No sugar."]),
       dish("Hung curd + flax", 105, 8, 2, ["200 g " + DH + ", hung 2 h", "1 tsp ground flaxseed"], ["Hang the dahi 2 h; stir in flax."]),
