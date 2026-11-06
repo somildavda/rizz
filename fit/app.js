@@ -479,7 +479,7 @@ function mealTicks(T, d = today()) {
     return `<div class="tick meal ${on ? "on" : ""}" data-meal="${i}" data-date="${d}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
       <div class="t"><span class="time">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span><b>${esc(m.name)}</b>
         <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-        <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>
+        <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>${videoLink(m)}</details>
         ${slot.label === "Snack" ? `<p class="sub">🥚 ${esc(OFFICE_SNACK)}</p>` : ""}</div>
       <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
@@ -712,7 +712,7 @@ function foodPlan() {
     ${mealOptions(i, pd).map((m, j) => { const on = mealPickIdx(i, pd) === j;
       return `<div class="tick ${on ? "on" : ""}" data-pickmeal="${i}:${j}:${pd}" role="radio" aria-checked="${on}" tabindex="0"><span class="box round"></span>
         <div class="t"><b>${esc(m.name)}</b>${on ? `<ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-          <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>` : ""}</div>
+          <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>${videoLink(m)}</details>` : ""}</div>
         <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber</span></div>`; }).join("")}</div>`).join("")}
   <div class="card"><h3 class="h3">Need new ideas?</h3><button class="btn ghost block" data-ask="Give me 3 new high-protein vegetarian recipes using high-protein paneer or soya for my current phase, with exact grams and macros, under ₹120 each. Nothing that bloats.">✨ 3 new paneer / soya recipes</button></div>`;
 }
@@ -946,7 +946,7 @@ V.kitchen = () => {
     return `<div class="card"><span class="eyebrow">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span>
       <h2 class="h2">${esc(m.name)}</h2>
       <h3 class="h3 mt">Take</h3><ul class="bullets">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-      <h3 class="h3 mt">Method</h3><ol class="bullets">${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>`;
+      <h3 class="h3 mt">Method</h3><ol class="bullets">${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>${videoLink(m)}</div>`;
   }).join("")}
   <div class="card"><h3 class="h3">Kitchen rules</h3><ul class="bullets">${COOK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}
     <li>Never use tofu, rajma, chole or kabuli chana.</li></ul></div>`;

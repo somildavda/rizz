@@ -41,7 +41,7 @@ function render() {
     return `<div class="card"><span class="eyebrow">${esc(slot.time)} · ${esc(name)}</span>
       <h2 class="h2">${esc(m.name)}</h2>
       <h3 class="h3 mt">Take</h3><ul class="bullets">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-      <h3 class="h3 mt">Method</h3><ol class="bullets">${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>`;
+      <h3 class="h3 mt">Method</h3><ol class="bullets">${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>${videoLink(m)}<p class="sub">Video is for the method only: use the grams above and oil spray, no ghee or butter.</p></div>`;
   }).join("")}
   <div class="card"><h3 class="h3">Kitchen rules</h3><ul class="bullets">${COOK_RULES.map((x) => `<li>${esc(x)}</li>`).join("")}
     <li>Never use tofu, rajma, chole or kabuli chana.</li></ul></div>`;

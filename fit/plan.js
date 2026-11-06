@@ -794,6 +794,17 @@ const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 280, p: 21, fat
   steps: ["No pav, no butter, no mayo.", "Omelette only if made without butter, with little oil."] };
 const isOfficeDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 
+// Recipe video: a YouTube search for the dish (videos aren't hosted here). Custom dishes get a
+// search for the closest classic recipe; follow OUR grams and oil rules, not the video's.
+const VIDEO_QUERY = { "MILLD paneer pizza (air fryer)": "atta pizza paneer air fryer no cheese", "Office: boiled eggs + fruit": "",
+  "Air-fried soya tikka + dahi": "soya chunks tikka air fryer", "Moong-paneer tikki (air fryer)": "moong dal paneer tikki air fryer",
+  "Kurkuri bhindi + dal + phulka": "kurkuri bhindi air fryer", "Pesarattu + paneer": "pesarattu recipe", "Adai (mixed dal dosa)": "adai dosa recipe" };
+function videoUrl(m) {
+  const q = VIDEO_QUERY[m.name] ?? m.name.replace(/\(.*?\)/g, "").split(/ \+ /)[0].trim() + " recipe";
+  return q ? "https://www.youtube.com/results?search_query=" + encodeURIComponent(q) : "";
+}
+const videoLink = (m) => videoUrl(m) ? `<a class="btn ghost xs" href="${videoUrl(m)}" target="_blank" rel="noopener">▶ Watch how to make it</a>` : "";
+
 // Which menu week a date is in: journey weeks 1, 2, 3, 4, then repeat.
 function menuWeek(k) {
   const w = Math.floor((new Date(k) - new Date(START_DATE)) / (7 * 864e5));
