@@ -249,8 +249,8 @@ function localReview() {
   if (logged.length) {
     const avg = (f) => Math.round(logged.reduce((a, [, d]) => a + f(d), 0) / logged.length);
     const k = avg((d) => d.totals.kcal), t = avg((d) => d.target), pr = avg((d) => d.totals.p);
-    out.push(`Calories: you averaged ${k} kcal against a ${t} kcal target (${k > t + 100 ? "over, trim dinner rice/roti" : k < t - 300 ? "too low, add a whey shake so you don't lose muscle" : "on target"}).`);
-    out.push(`Protein: ${pr} g a day on average; target ${phase().protein} g. ${pr < phase().protein - 15 ? "Add ½ scoop whey or 75 g High Protein Paneer." : "Good."}`);
+    out.push(`Calories: you averaged ${k} kcal against a ${t} kcal target (${k > t + 100 ? "over, trim dinner rice/roti" : k < t - 300 ? "too low, add 75 g paneer or a bowl of dahi so you don't lose muscle" : "on target"}).`);
+    out.push(`Protein: ${pr} g a day on average; target ${phase().protein} g. ${pr < phase().protein - 15 ? "Add 75 g paneer, 150 g dahi or a bowl of soya." : "Good."}`);
   } else out.push("No food logged yet. Tick your meals on Today so the review has something to work with.");
   const gymDays = days.filter(([k]) => isGymDay(new Date(k))).length, done = days.filter(([, d]) => d.checks.workout).length;
   out.push(`Workouts: ${done} done${gymDays ? ` out of ${gymDays} planned` : ""} in the last 2 weeks.`);
@@ -275,7 +275,7 @@ function localReview() {
 const coachContext = () => {
   const p = S.profile, ph = phase();
   return `User: ${p.age}y Indian male, ${p.heightCm} cm, ${latestWeight()} kg, ~${p.bodyFat}% body fat at start, vegetarian,
-never suggest: ${AVOID_FOODS.join(", ")}; for cholesterol also avoid ${HEALTH_AVOID.join(", ")}. Uses iD Fresh High Protein Paneer. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
+never suggest: ${AVOID_FOODS.join(", ")}; for cholesterol also avoid ${HEALTH_AVOID.join(", ")}. All paneer is home-made from skimmed milk (~15 g protein per 100 g). No protein powder, no creatine: whole food only. Beginner lifter, gym at ${GYM_TIME} at ${p.gym}, ${p.knee}.
 Blood (${BLOOD.date}): total cholesterol ${BLOOD.tc}, LDL ${BLOOD.ldl}, non-HDL ${BLOOD.nonHdl}, triglycerides ${BLOOD.tg}, HDL ${BLOOD.hdl}, vitamin D ${BLOOD.vitD} (deficient), B12 ${BLOOD.b12},
 hsCRP ${BLOOD.hscrp}, BUN/creatinine ratio ${BLOOD.bunCreat} (hydrate), glucose ${BLOOD.glucose}, HbA1c ${BLOOD.hba1c}, TSH ${BLOOD.tsh}, eGFR ${BLOOD.egfr}; on D3 and Cartigen.
 ${KNEE.side} knee ACL sprain in rehab (follow-up ${KNEE.followUp}): never suggest stairs, squats, lunges, kneeling, jumping or running.
@@ -412,7 +412,7 @@ V.today = () => {
   const pct = Math.min(100, Math.round((dayNo() / totalDays()) * 100));
   const habits = [
     ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", gymBreak(pd) ? `${(gymBreak(pd).steps / 1000).toFixed(0)}k flat steps (2–3 walks)` : KNEE.rehab ? "Walk as comfortable (flat, up to 8k)" : `${(ph.steps / 1000).toFixed(0)}k steps`],
-    ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
+    ["fruit", "🍊", "2–3 fruits (amla, guava, papaya, orange)"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk, no pav, no ghee, chai without sugar"],
     ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds + walnuts"],
@@ -928,7 +928,7 @@ function looksDerm() {
     <li>Treatment plan for marks, tan or acne, and how many sessions?</li>
     <li>Can I train or sweat the day after a peel or laser?</li>
     <li>Is the puffiness under my nipples fat or gland (gynecomastia)?</li>
-    <li>Do I need anything for hair fall? Any issue with whey or creatine?</li></ul></div>`;
+    <li>Do I need anything for hair fall? Which diet changes help my skin?</li></ul></div>`;
 }
 
 // ---------- kitchen (food only, for the person cooking) ----------

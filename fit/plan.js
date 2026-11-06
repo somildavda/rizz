@@ -17,19 +17,19 @@ const GYM_TIME = "8:30 am"; // back by 9:30, so ~45 min in the gym
 // starting point is ~79 kg — about 28 weeks at a sustainable 0.5–0.8 kg/week.
 const PHASES = [
   { name: "Foundation", start: "2026-10-21", end: "2026-11-17", fromKg: 94.5, toKg: 91.5,
-    kcal: 2050, protein: 145, carbs: 195, fat: 60, steps: 8000,
+    kcal: 1850, protein: 140, carbs: 190, fat: 45, steps: 8000,
     focus: "Learn every exercise with light weights and build the daily habits. The first 1–2 kg is partly water.",
     food: "Follow the meal plan as written." },
   { name: "Fat loss I", start: "2026-11-18", end: "2027-01-12", fromKg: 91.5, toKg: 86.5,
-    kcal: 2000, protein: 150, carbs: 175, fat: 60, steps: 10000,
+    kcal: 1800, protein: 140, carbs: 180, fat: 45, steps: 10000,
     focus: "Add weight whenever you hit the top of the rep range. Harder Thursday intervals. Start walk-run.",
     food: "Night slot: dahi or hung curd only. One planned treat meal a week, Christmas and New Year included." },
   { name: "Fat loss II", start: "2027-01-13", end: "2027-03-09", fromKg: 86.5, toKg: 82.5,
-    kcal: 1950, protein: 155, carbs: 180, fat: 55, steps: 11000,
+    kcal: 1750, protein: 140, carbs: 170, fat: 45, steps: 11000,
     focus: "Chest and V-taper look starts to show. Keep strength up. First week is a diet break at ~2,600 kcal to reset.",
     food: "Dinner: swap rice for extra sabzi. Treat meal every 2 weeks." },
   { name: "Abs reveal", start: "2027-03-10", end: "2027-05-04", fromKg: 82.5, toKg: 79,
-    kcal: 1900, protein: 160, carbs: 160, fat: 55, steps: 12000,
+    kcal: 1700, protein: 140, carbs: 160, fat: 45, steps: 12000,
     focus: "Target ~12–14% body fat: upper 2 abs first, then 4. Ab training 3× a week, low salt before photos.",
     food: "No treat meals. Pre-gym snack only on leg and conditioning days." },
   { name: "Stay lean", start: "2027-05-05", end: "2027-08-31", fromKg: 79, toKg: 79,
@@ -237,7 +237,7 @@ const PANEER = "iD Fresh High Protein Paneer";
 const WHEY = "Big Muscles Gold whey";
 const COOK_RULES = [
   "Weigh dal, brown rice, oats, poha, soya and atta DRY, before soaking or cooking.",
-  `Paneer = ${PANEER} (from the fridge pack). Dahi = low-fat dahi set at home from Slim n Trim skimmed milk (warm 1 L milk, mix in 1 tbsp old dahi, cover 8 h). Milk = Amul Slim n Trim skimmed milk.`,
+  `Paneer = ALWAYS home-made from Slim n Trim milk (no packet paneer). Dahi = low-fat dahi set at home from Slim n Trim skimmed milk (warm 1 L milk, mix in 1 tbsp old dahi, cover 8 h). Milk = Amul Slim n Trim skimmed milk.`,
   "Oil = Tata Simply Better olive oil spray. 1 spray ≈ 1 second. No ghee, butter or extra oil.",
   "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka. NO ghee on phulkas, not even a small spoon: the 2 tsp a day was ~80 kcal and raises LDL. Plain phulka, or 1 spray if needed.",
   "Ninja air fryer (2 sprays, preheat 3 min): paneer or soya tikka 180 °C 8–10 min, shake once; veg 190 °C 10 min; makhana 160 °C 5 min; tikki 180 °C 12 min, flip halfway.",
@@ -246,8 +246,8 @@ const COOK_RULES = [
   "No chai or coffee within 1 hour of a meal (it blocks iron absorption).",
   "For cholesterol: nothing fried, no sweets, maida, cream, cheese, butter, ghee or coconut. Brown rice, not white.",
   "Paneer cooks fast: add it at the end and cook 2 minutes only, or it turns rubbery.",
-  "Home-made paneer (optional, instead of the pack): boil 1 L Slim n Trim milk, turn off the heat, wait 1 min, stir in 2 tbsp lemon juice. Strain in muslin, rinse, press under a weight 30 min. Gives ~120 g soft, low-fat paneer with ~25 g protein: best for bhurji, stuffing and chilla, not tikka cubes.",
-  "Whey shake: liquid in the shaker first, then 1 LEVEL scoop (not heaped), shake 20 seconds. Never boil whey; stir it into oats after cooking.",
+  "Home-made paneer (every 1–2 days, ~3 L milk per batch): boil the milk, turn off the heat, wait 1 min, stir in 2 tbsp lemon juice per litre. Strain in muslin, rinse in cold water. Press under a heavy weight: 30 min for soft paneer (bhurji, stuffing, chilla), 2 h for firm cubes (tikka, curry). 1 L gives ~160 g with ~24 g protein. Keep in water in the fridge, use within 2 days. Use the leftover whey water to knead atta.",
+  "Young skin: no added sugar (sweetness only from fruit), 2–3 colourful fruits a day (amla, guava, papaya, orange) + carrot, tomato or palak daily, low salt. Sunscreen every morning matters even more.",
 ];
 const TIKKA_STEPS = [
   "Cut the paneer into 2 cm cubes.",
@@ -706,6 +706,86 @@ Object.values(MENU_WEEKS).forEach((w) => w[0].forEach((o) => {
   }
 }));
 
+// ---- Whole food only (Nov 2026): no whey, no protein buttermilk, no creatine. ----
+// Each whey portion becomes iD paneer on the side (30 g whey → 75 g paneer, 15–20 g → 40–50 g);
+// at night it is simply dropped. Protein buttermilk becomes home-made masala chaas.
+function wholeFood(o, slot) {
+  let kcal = o.kcal, p = o.p, side = 0;
+  const items = [];
+  for (const x of o.items) {
+    if (/whey/i.test(x)) {
+      const g = +(x.match(/(\d+) g/) || [0, 30])[1], ml = +(x.match(/in (\d+) ml/) || [0, 0])[1];
+      kcal -= g * 4; p -= Math.round(g * 0.8);
+      if (ml && /Slim n Trim/.test(x)) items.push(`${ml} ml ${MK}`);
+      if (slot !== 4) side = g >= 30 ? 75 : g >= 20 ? 50 : 40;
+    } else if (/High Protein Buttermilk/.test(x)) {
+      items.push(`Masala chaas: 200 g ${DH} + 150 ml water, jeera, mint, salt`); kcal -= 20; p -= 7;
+    } else items.push(x);
+  }
+  if (side) { items.push(`${side} g ${PANEER}, cubed, with chaat masala (raw, or air fryer 180 °C 5 min)`); kcal += Math.round(side * 2.3); p += Math.round(side * 0.28); }
+  const fix = (t) => t.replace(/[Dd]rink the whey[- ](shake|milk)( with it)?/g, "Eat the paneer cubes on the side")
+    .replace(/Serve with the whey-milk shake/g, "Serve with the paneer cubes and the milk")
+    .replace(/stir in (the )?whey and /gi, "stir in ").replace(/Shake the whey; /g, "Paneer cubes and ")
+    .replace(/Drink the buttermilk/g, "Drink the chaas").replace(/drink the buttermilk/g, "drink the chaas");
+  let steps = o.steps.map(fix).flatMap((t) => t.split(/(?<=\.)\s+/).filter((x) => !/whey|shake|shaker/i.test(x)).join(" ") || []);
+  if (/High Protein Buttermilk/.test(o.items.join())) steps.push("Chaas: blend the dahi with water, jeera, mint and salt.");
+  if (!steps.length) steps = ["Warm the milk (or have it cold). No sugar."];
+  const name = o.name.replace(/Banana-whey milkshake/, "Banana milkshake + paneer").replace(/Whey shake \+ walnuts/, "Paneer + walnuts + milk")
+    .replace(/Cocoa whey milk/, "Cocoa milk").replace(/(Slow protein|Cocoa slow|Cinnamon slow) shake/, (m, a) => a === "Slow protein" ? "Warm skimmed milk" : a === "Cocoa slow" ? "Cocoa night milk" : "Cinnamon milk")
+    .replace(/ \+ ½ scoop/, "").replace(/protein buttermilk/i, "masala chaas").replace(/protein chaas/i, "masala chaas")
+    .replace(/ \+ whey/g, slot === 4 ? "" : " + paneer").replace(/-whey/g, "");
+  Object.assign(o, { name, kcal, p, items, steps });
+}
+[MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) =>
+  (week[0]?.options ? week : week).forEach((list, si) => list.forEach((o) => wholeFood(o, si))));
+// ---- All paneer is home-made from Slim n Trim milk (Nov 2026). ----
+// Skim-milk paneer is soft and has ~15 g protein per 100 g (1 L milk → ~160 g, ~24 g protein),
+// about half of iD High Protein Paneer, so portions are ~1.8× bigger in grams.
+const HM_PER_L = 160;
+[MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach((o) => {
+  o.items = o.items.map((x) => x.replace(/(\d+) g iD Fresh High Protein Paneer/, (m, g) => `${Math.round(+g * 1.8 / 5) * 5} g ${HM}`));
+})));
+// ---- Calories and protein are CALCULATED from the ingredients (label values, per g or ml). ----
+// Sources: Amul Slim n Trim 35 kcal / 3.5 g protein per 100 ml; MILLD atta 387 kcal / 46 g per 100 g;
+// Fortune soya 343 kcal / 52.5 g per 100 g; dals, grains, seeds from IFCT 2017 (NIN) averages.
+const NUTRI = [ // [match, kcal per g, protein per g]
+  [/Milld|High Protein Atta/i, 3.87, 0.46], [/jowar/i, 3.5, 0.10], [/bajra/i, 3.6, 0.11], [/ragi/i, 3.3, 0.073],
+  [/oats/i, 3.8, 0.13], [/brown rice/i, 3.6, 0.075], [/poha/i, 3.5, 0.066], [/daliya/i, 3.4, 0.12], [/millet/i, 3.5, 0.12],
+  [/urad/i, 3.4, 0.24], [/besan/i, 3.8, 0.22], [/whole (green )?moong|sprout/i, 3.3, 0.24], [/matki|moth/i, 3.4, 0.23],
+  [/moong/i, 3.5, 0.24], [/masoor/i, 3.5, 0.25], [/toor/i, 3.4, 0.22], [/soya/i, 3.43, 0.525],
+  [/paneer/i, 0.8, 0.15], [/dahi|curd/i, 0.35, 0.035], [/Slim n Trim|milk/i, 0.35, 0.035],
+  [/walnut/i, 6.5, 0.15], [/pumpkin seed/i, 5.6, 0.30], [/chia/i, 4.9, 0.17], [/flax/i, 5.3, 0.18], [/sesame/i, 5.7, 0.18],
+  [/makhana/i, 3.5, 0.095], [/peas/i, 0.8, 0.05], [/sweet potato/i, 0.86, 0.016], [/palak|methi|sarson|spinach/i, 0.25, 0.03],
+  [/mushroom/i, 0.22, 0.03], [/onion|tomato|cucumber|carrot|capsicum|lauki|beans|cabbage|broccoli|bhindi|brinjal|lettuce|veg|salad|cauliflower|drumstick|papdi/i, 0.3, 0.015],
+];
+const FRUIT = [[/seasonal fruit/i, 70, 1], [/½ banana/i, 45, 0.5], [/banana/i, 90, 1.1], [/½ apple/i, 40, 0.2], [/apple/i, 80, 0.4], [/guava/i, 70, 2.6], [/orange/i, 60, 1.2], [/fruit/i, 70, 1]];
+function calcDish(o) {
+  let k = 0, p = 0;
+  for (const x of o.items) {
+    const re = /(?<!~)(\d+(?:\.\d+)?)\s*(g|ml)\b/g, hits = [...x.matchAll(re)];
+    hits.forEach((h, j) => {
+      const seg = x.slice(h.index + h[0].length, hits[j + 1]?.index ?? x.length) || x;
+      if (h[2] === "ml" && !/Slim n Trim|milk/i.test(seg)) return; // water
+      const n = NUTRI.find(([r]) => r.test(seg));
+      if (n) { k += +h[1] * n[1]; p += +h[1] * n[2]; }
+    });
+    const sp = x.match(/(\d+)(?:–\d+)? sprays?/); if (sp) k += +sp[1] * 6;
+    if (!hits.length) { const f = FRUIT.find(([r]) => r.test(x)); if (f) { k += f[1]; p += f[2]; } }
+  }
+  o.kcal = Math.round(k / 5) * 5; o.p = Math.round(p);
+}
+// More whole fruit (vitamin C for collagen, carotenoids for skin): 1 fruit after every lunch.
+[MEALS[1].options, ...Object.values(MENU_WEEKS).map((w) => w[1])].forEach((list) => list.forEach((o) => {
+  if (!o.items.some((x) => /fruit|guava|apple|banana|orange|papaya/i.test(x))) { o.items.push("1 seasonal fruit after lunch: papaya bowl, guava, orange or 2 amla"); o.fib += 3; }
+}));
+[MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach(calcDish)));
+
+// Office days (Mon–Fri): the 5 pm snack is eggs from the office stall.
+const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 195, p: 17, fib: 4,
+  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple"],
+  steps: ["No pav, no butter, no mayo.", "Omelette only if made without butter, with little oil."] };
+const isOfficeDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
+
 // Which menu week a date is in: journey weeks 1, 2, 3, 4, then repeat.
 function menuWeek(k) {
   const w = Math.floor((new Date(k) - new Date(START_DATE)) / (7 * 864e5));
@@ -713,11 +793,12 @@ function menuWeek(k) {
 }
 // The dishes on offer for a meal slot on a date (swaps pick from this list).
 function mealOptions(i, k) {
-  const w = menuWeek(k);
-  return w === 1 ? MEALS[i].options : MENU_WEEKS[w][i];
+  const w = menuWeek(k), list = w === 1 ? MEALS[i].options : MENU_WEEKS[w][i];
+  return i === 2 && isOfficeDay(k) ? [...list, OFFICE_EGGS] : list;
 }
 // Default dish for a slot on a date (shared by the app and the Kitchen page).
 function defaultMealIdx(i, k) {
+  if (i === 2 && isOfficeDay(k)) return mealOptions(i, k).length - 1;
   if (menuWeek(k) === 1) return Math.floor(new Date(k) / 864e5) % MEALS[i].options.length;
   const d = Math.floor((new Date(k) - new Date(START_DATE)) / 864e5);
   return ((d % 7) + 7) % 7;
@@ -747,11 +828,9 @@ const LINKS = {
 };
 // qty = packs per week. Fractions mean "every few weeks" (0.5 = every 2nd week).
 const GROCERY = [
-  { item: "iD Fresh High Protein Paneer 200 g", qty: 4, price: 150, q: "id fresh high protein paneer", link: LINKS.paneer, group: "Protein" },
   { item: "Fortune mini soya chunks", qty: 1, price: 55, q: "fortune mini soya chunks", link: LINKS.soya, group: "Protein" },
   { item: "Pumpkin seeds 200 g (zinc for testosterone)", qty: 0.5, price: 160, q: "pumpkin seeds", group: "Protein" },
-  { item: "Amul Slim n Trim skimmed milk 500 ml (incl. 1 L for dahi + 4.5 L for home-made paneer)", qty: 16, price: 27, q: "amul slim n trim milk", group: "Dairy" },
-  { item: "Amul High Protein Buttermilk", qty: 1, price: 25, q: "amul high protein buttermilk", group: "Dairy" },
+  { item: "Amul Slim n Trim skimmed milk 500 ml (drinking + dahi + ALL paneer: 1 L → ~160 g paneer)", qty: 47, price: 27, q: "amul slim n trim milk", group: "Dairy" },
   { item: "Milld High Protein Atta", qty: 1, price: 130, q: "milld high protein atta", link: LINKS.atta, group: "Pantry" },
   { item: "Tata Simply Better olive oil cooking spray", qty: 0.25, price: 400, q: "olive oil cooking spray", link: LINKS.spray, group: "Pantry" },
   { item: "Tata Sampann yellow moong dal 1 kg", qty: 0.5, price: 160, q: "tata sampann moong dal", group: "Pantry" },
@@ -770,29 +849,27 @@ const GROCERY = [
   { item: "Chia seeds 200 g", qty: 0.25, price: 140, q: "chia seeds", group: "Pantry" },
   { item: "Flax seeds 200 g (grind a week at a time)", qty: 0.25, price: 80, q: "flax seeds", group: "Pantry" },
   { item: "Vegetables: onion, tomato, palak, capsicum, beans, cucumber, lauki, bhindi, methi, broccoli", qty: 1, price: 260, q: "fresh vegetables", group: "Fresh" },
-  { item: "Fruits: 7 bananas, 4 apples, guava", qty: 1, price: 150, q: "banana", group: "Fresh" },
+  { item: "Fruits, 2–3 a day: guava, papaya, orange, amla, apple, banana", qty: 1, price: 320, q: "banana", group: "Fresh" },
 ];
 // Each menu week needs slightly different shopping (counted from that week's dishes):
 // qty overrides the weekly packs above; add = extra items for that week only. Week-specific veg
 // (drumstick, sarson, mushrooms…) comes out of the normal vegetable budget.
-const PANEER_ITEM = GROCERY[0].item, MILK_ITEM = GROCERY[3].item, SOYA_ITEM = GROCERY[1].item;
+const MILK_ITEM = GROCERY.find((g) => /Slim n Trim/.test(g.item)).item, SOYA_ITEM = GROCERY.find((g) => /soya/.test(g.item)).item;
 const WEEK_GROCERY = {
   1: { qty: {}, add: [] },
-  2: { qty: { [PANEER_ITEM]: 4, [MILK_ITEM]: 15 }, add: [
+  2: { qty: { [MILK_ITEM]: 43 }, add: [
     { item: "Urad dal 500 g (ragi dosa, adai)", qty: 0.5, price: 90, q: "urad dal", group: "Pantry" },
     { item: "Foxtail millet 500 g (bisi bele bath, khichdi)", qty: 0.5, price: 90, q: "foxtail millet", group: "Pantry" } ] },
-  3: { qty: { [PANEER_ITEM]: 3, [MILK_ITEM]: 20 }, add: [
+  3: { qty: { [MILK_ITEM]: 40 }, add: [
     { item: "Matki (moth beans) 500 g, for sprouting", qty: 0.5, price: 80, q: "matki moth beans", group: "Pantry" },
     { item: "Bajra flour 500 g", qty: 0.5, price: 50, q: "bajra atta", group: "Pantry" } ] },
-  4: { qty: { [MILK_ITEM]: 15, [SOYA_ITEM]: 2 }, add: [
+  4: { qty: { [MILK_ITEM]: 39, [SOYA_ITEM]: 2 }, add: [
     { item: "Low-sodium soy sauce + vinegar (last ~2 months)", qty: 0.5, price: 150, q: "low sodium soy sauce", group: "Pantry" },
     { item: "Unsweetened cocoa 100 g (lasts months)", qty: 0.25, price: 130, q: "unsweetened cocoa powder", group: "Pantry" } ] },
 };
 // The weekly grocery list for menu week mw (1–4).
 const groceryFor = (mw) => [...GROCERY.map((g) => ({ ...g, qty: WEEK_GROCERY[mw].qty[g.item] ?? g.qty })), ...WEEK_GROCERY[mw].add];
 const MONTHLY_EXTRAS = [
-  { item: "Big Muscles Premium Gold Whey 1.5 kg (₹2,127, lasts ~5 weeks; monthly share shown)", price: 1750, q: "big muscles premium gold whey 1.5 kg" },
-  { item: "Creatine monohydrate 250 g (AS-IT-IS or MuscleBlaze), lasts 2 months", price: 300, q: "creatine monohydrate" },
   { item: "Skin basics refill (sunscreen, face wash)", price: 380, q: "sunscreen spf 50" },
 ];
 // One-time looks kit. Buy after the dermat visit; they may prescribe something else.
@@ -955,8 +1032,8 @@ const TESTOSTERONE = [
   ["Keep stress down", "Walks, sunlight and sleep keep cortisol in check."],
 ];
 const BLOOD_TEST = "Retest in mid-January 2027 (fasting 10–12 h): lipid profile (LDL, HDL, triglycerides), vitamin D, " +
-  "vitamin B12, ferritin, hsCRP, fasting insulin, HbA1c, TSH, and kidney markers (BUN, creatinine). Tell the doctor you take " +
-  "creatine 5 g a day: it can raise creatinine without any kidney problem. Take the October 2026 report along to compare.";
+  "vitamin B12, ferritin, hsCRP, fasting insulin, HbA1c, TSH, and kidney markers (BUN, creatinine). " +
+  "Take the October 2026 report along to compare.";
 // Blood report: Orange Health Labs, 25 Oct 2026 (fasting).
 const BLOOD = { date: "25 Oct 2026", ldl: 162, tg: 191, hdl: 49, tc: 249, nonHdl: 200, vldl: 38, vitD: 11.5, b12: 201,
   hscrp: 1.69, bun: 19.6, bunCreat: 29.3, glucose: 87, hba1c: 4.7, insulin: 10.4, tsh: 1.35, egfr: 130 };
