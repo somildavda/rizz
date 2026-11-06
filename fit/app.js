@@ -415,7 +415,7 @@ V.today = () => {
     ["fruit", "🍊", "2–3 fruits (amla, guava, papaya, orange)"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
     ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk, no pav, no ghee, chai without sugar"],
-    ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "Walnuts + pumpkin seeds (in your meals)"],
+    ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "Walnuts + mixed seeds (in your meals)"],
     ["knee", "🦵", "Knee exercises"], ["meds", "💊", "D3 with lunch, Cartigen as prescribed"],
     ["isabgol", "🌾", "1 tsp isabgol before dinner"],
   ];

@@ -754,7 +754,7 @@ const NUTRI = [ // [match, kcal per g, protein per g, fat per g]
   [/urad/i, 3.4, 0.24, 0.015], [/besan/i, 3.8, 0.22, 0.06], [/whole (green )?moong|sprout/i, 3.3, 0.24, 0.013], [/matki|moth/i, 3.4, 0.23, 0.01],
   [/moong/i, 3.5, 0.24, 0.012], [/masoor/i, 3.5, 0.25, 0.01], [/toor/i, 3.4, 0.22, 0.015], [/soya/i, 3.43, 0.525, 0.005],
   [/paneer/i, 0.8, 0.15, 0.01], [/dahi|curd/i, 0.35, 0.035, 0.001], [/Slim n Trim|milk/i, 0.35, 0.035, 0.001],
-  [/walnut/i, 6.5, 0.15, 0.65], [/pumpkin seed/i, 5.6, 0.30, 0.49], [/chia/i, 4.9, 0.17, 0.31], [/flax/i, 5.3, 0.18, 0.42], [/sesame/i, 5.7, 0.18, 0.5],
+  [/walnut/i, 6.5, 0.15, 0.65], [/pumpkin seed|mixed seed/i, 5.6, 0.25, 0.47], [/chia/i, 4.9, 0.17, 0.31], [/flax/i, 5.3, 0.18, 0.42], [/sesame/i, 5.7, 0.18, 0.5],
   [/makhana/i, 3.5, 0.095, 0.001], [/peas/i, 0.8, 0.05, 0.004], [/sweet potato/i, 0.86, 0.016, 0.001], [/palak|methi|sarson|spinach/i, 0.25, 0.03, 0.004],
   [/mushroom/i, 0.22, 0.03, 0.003], [/onion|tomato|cucumber|carrot|capsicum|lauki|beans|cabbage|broccoli|bhindi|brinjal|lettuce|veg|salad|cauliflower|drumstick|papdi/i, 0.3, 0.015, 0.002],
   [/\boil\b/i, 9, 0, 1],
@@ -783,14 +783,14 @@ function calcDish(o) {
 // fat from whole foods: walnuts at breakfast, pumpkin seeds (zinc) at the snack, 1 tsp oil at lunch.
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list, si) => list.forEach((o) => {
   if (si === 0 && !/walnut/i.test(o.items.join())) o.items.push("10 g walnuts (3 halves)");
-  if (si === 2 && !/pumpkin/i.test(o.items.join())) o.items.push("15 g pumpkin seeds (zinc)");
+  if (si === 2 && !/pumpkin|mixed seed/i.test(o.items.join())) o.items.push("15 g mixed seeds (pumpkin, sunflower, melon…)");
   if (si === 1) { o.items.push("5 g (1 tsp) cold-pressed mustard or olive oil for the tadka"); o.steps.push("Use the 1 tsp oil in the tadka (healthy fat for hormones)."); }
 })));
 [MEALS.map((s) => s.options), ...Object.values(MENU_WEEKS)].forEach((week) => week.forEach((list) => list.forEach(calcDish)));
 
 // Office days (Mon–Fri): the 5 pm snack is eggs from the office stall.
 const OFFICE_EGGS = { name: "Office: boiled eggs + fruit", kcal: 280, p: 21, fat: 12, fib: 5,
-  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple", "15 g pumpkin seeds from home (zinc)"],
+  items: ["4 boiled eggs from the office stall: eat all 4 whites + 1 yolk", "Salt, pepper, chaat masala", "1 fruit from home: guava, orange or apple", "15 g mixed seeds from home"],
   steps: ["No pav, no butter, no mayo.", "Omelette only if made without butter, with little oil."] };
 const isOfficeDay = (k) => [1, 2, 3, 4, 5].includes(new Date(k).getDay());
 
