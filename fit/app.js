@@ -413,7 +413,7 @@ V.today = () => {
     ["water", "💧", `${DAILY.waterL} L water`], ["steps", "👟", gymBreak(pd) ? `${(gymBreak(pd).steps / 1000).toFixed(0)}k flat steps (2–3 walks)` : KNEE.rehab ? "Walk as comfortable (flat, up to 8k)" : `${(ph.steps / 1000).toFixed(0)}k steps`],
     ["creatine", "⚡", "Creatine 5 g"], ["skinAM", "☀️", "AM skin + SPF"],
     ["posture", "🧍", "Posture 5 min"], ["skinPM", "🌙", "PM skin"],
-    ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk"],
+    ["sleep", "😴", `Sleep ${DAILY.sleepH} h`], ["nojunk", "🥗", "No junk, no pav, no ghee, chai without sugar"],
     ["sun", "🌅", "15 min sun"], ["seeds", "🎃", "15 g pumpkin seeds + walnuts"],
     ["knee", "🦵", "Knee exercises"], ["meds", "💊", "D3 with lunch, Cartigen as prescribed"],
     ["isabgol", "🌾", "1 tsp isabgol before dinner"],
@@ -478,7 +478,8 @@ function mealTicks(T, d = today()) {
     return `<div class="tick meal ${on ? "on" : ""}" data-meal="${i}" data-date="${d}" role="checkbox" aria-checked="${on}" tabindex="0"><span class="box"></span>
       <div class="t"><span class="time">${esc(slot.time)} · ${esc(slotLabel(slot, T.gym && !T.skippedGym))}</span><b>${esc(m.name)}</b>
         <ul class="ing">${m.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-        <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details></div>
+        <details class="how"><summary>How to cook</summary><ol>${m.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol></details>
+        ${slot.label === "Snack" ? `<p class="sub">🥚 ${esc(OFFICE_SNACK)}</p>` : ""}</div>
       <span class="meta">${m.kcal} kcal<br>${m.p} g P<br>${m.fib} g fiber<br><button class="btn ghost xs" data-cyclemeal="${i}" data-date="${d}" aria-label="Swap meal">⇄</button></span></div>`;
   }).join("");
   return rows + (T.brk ? `<p class="sub center">Strict day: 1 phulka, no rice at dinner; plain dahi at night.</p>` : !T.gym || T.skippedGym ? `<p class="sub center">Lower-calorie day: 1 phulka or ¼ cup rice less at dinner.</p>` : "");

@@ -238,7 +238,8 @@ const COOK_RULES = [
   "Weigh dal, brown rice, oats, poha, soya and atta DRY, before soaking or cooking.",
   `Paneer = ${PANEER} (from the fridge pack). Dahi = low-fat dahi set at home from Slim n Trim skimmed milk (warm 1 L milk, mix in 1 tbsp old dahi, cover 8 h). Milk = Amul Slim n Trim skimmed milk.`,
   "Oil = Tata Simply Better olive oil spray. 1 spray ≈ 1 second. No ghee, butter or extra oil.",
-  "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka, no ghee on top.",
+  "Atta = Milld High Protein Atta. 30 g dry atta = 1 phulka. NO ghee on phulkas, not even a small spoon: the 2 tsp a day was ~80 kcal and raises LDL. Plain phulka, or 1 spray if needed.",
+  "Ninja air fryer (2 sprays, preheat 3 min): paneer or soya tikka 180 °C 8–10 min, shake once; veg 190 °C 10 min; makhana 160 °C 5 min; tikki 180 °C 12 min, flip halfway.",
   "1 katori = 150 ml. No sugar in anything. Normal salt.",
   "Squeeze lemon on dal, palak and sprouts just before eating: vitamin C helps the body absorb their iron.",
   "No chai or coffee within 1 hour of a meal (it blocks iron absorption).",
@@ -726,6 +727,8 @@ function dishFor(i, k, pick) {
   return opts[pick != null && pick < opts.length ? pick : defaultMealIdx(i, k)];
 }
 
+// Office snack (egg stall below the office): eat this INSTEAD of the 5 pm plan snack, not as well.
+const OFFICE_SNACK = "At the office stall instead: 3 boiled eggs, eat all 3 whites + 1 yolk (~120 kcal, 16 g protein), salt + pepper. No pav, no butter; omelette only if made with no butter. Chai: no sugar.";
 const AVOID_FOODS = ["tofu", "rajma", "chole / kabuli chana", "roasted chana"]; // dislikes / cause bloating
 // Blood report (high LDL and triglycerides): keep these out of meals and AI suggestions.
 const HEALTH_AVOID = ["fried snacks (vada pav, samosa, pakoda, bhajia)", "sweets and sugar", "maida (white bread, pav, naan, pizza, biscuits)",
