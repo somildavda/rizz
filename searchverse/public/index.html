@@ -62,8 +62,10 @@ h1{font-size:clamp(38px,6.2vw,76px);line-height:1.04;letter-spacing:-.04em;font-
 @media(max-width:520px){.hero h1 .ln{white-space:normal}}
 .lead{margin-top:22px;color:var(--muted);font-size:19px;line-height:1.6;max-width:540px}
 .cta{margin-top:34px;display:flex;gap:12px;flex-wrap:wrap}
-.trust{margin-top:34px;display:flex;gap:22px;flex-wrap:wrap;color:var(--muted);font-size:14px}
-.trust b{display:block;color:var(--text);font-size:26px;letter-spacing:-.02em}
+.trust{margin-top:34px;display:flex;gap:12px;flex-wrap:wrap}
+.trust div{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:14px;background:rgba(18,21,38,.6);border:1px solid var(--line);color:var(--muted);font-size:14px;font-weight:500;backdrop-filter:blur(6px)}
+.trust i{font-style:normal;font-size:18px}
+.trust b{color:var(--text);font-weight:700}
 
 /* 3D orbit: the modules circle the SearchVerse planet */
 .scene{position:relative;height:520px;perspective:1100px}
@@ -245,7 +247,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
         <h1><span class="ln">Every search answer,</span><br><span class="grad ln">one click away.</span></h1>
         <p class="lead">SearchVerse helps your team scale faster and get more done. It turns hours of search analysis into clear answers in a single click.</p>
         <div class="cta"><a class="btn primary" href="#tools">Find my tool <span class="arr">→</span></a><a class="btn" href="#how">See how it works</a></div>
-        <div class="trust"><div><b data-count="0">0</b>tools</div><div><b>0</b>installs</div><div><b>1</b>place for everything</div></div>
+        <div class="trust"><div><i>🧰</i><span><b data-count="0">0</b> <b>tools</b>, one sign-in</span></div><div><i>⚡</i><span><b>Answers</b> in one click</span></div><div><i>🔒</i><span><b>Access</b> by approval</span></div></div>
       </div>
       <div class="scene rv" id="scene" aria-hidden="true">
         <div class="orbit" id="orbit">
