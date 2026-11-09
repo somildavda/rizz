@@ -44,6 +44,7 @@ export function buildPlanPrompt(project, report, n) {
   }
   out.push("", "## Task",
     "1. State the source context, the central entity and the central search intent in one line each.",
+    "   Every idea must be a DIFFERENT search intent: merge near-duplicates (e.g. 'best jio prepaid plans' and 'jio recharge plans' are one idea) and skip anything the brand's pages above already cover.",
     "2. Recommend the " + n + " best NEW topics to write (not ones the brand already covers), split into core and outer section.",
     "   Prefer gaps that several competitors cover, that fit the brand's knowledge base, and that the brand can realistically rank for.",
     "3. Score each 0-100: relevance (fit with the source context and knowledge base), rank_potential (can this brand rank, given its existing pages to link from and how competitors cover it), topic_score (overall).",
@@ -90,8 +91,16 @@ export async function serpSnapshot(instance, q, lang, engines) {
 import { tokens as _tokens, stem as _stem, STOPSET as _STOP } from "./engine.js";
 
 // Meaningful, stemmed words of a phrase ("Best Jio prepaid plans" -> jio, prepaid, plan).
+// Reduces word forms to one root: activate / activation / activating / activated -> "activ".
+function root(w) {
+  w = _stem(w);
+  for (const suf of ["ations", "ation", "ating", "ated", "ate", "ions", "ion", "ings", "ing", "ers", "er", "ed", "ly"]) {
+    if (w.length - suf.length >= 4 && w.endsWith(suf)) return w.slice(0, -suf.length);
+  }
+  return w;
+}
 export function wordSet(s) {
-  return new Set(_tokens(s).filter((w) => !_STOP.has(w) && w.length > 1).map(_stem));
+  return new Set(_tokens(s).filter((w) => !_STOP.has(w) && w.length > 1).map(root));
 }
 // How much of the smaller phrase the other one covers (0..1).
 export function overlap(a, b) {
@@ -143,8 +152,9 @@ export function buildBriefPrompt(project, topic, primary, inputs, suggestions) {
     "- Give a complete H2/H3 structure that beats the competitors: cover everything they cover, plus what they miss. Add a one-line note per H2 on what to write.",
     "- word_count_target: based on the competitor word counts (a bit above the median), as a number.",
     "- internal_links: only URLs from the brand pages listed above.",
+    "- eeat: concrete, article-specific actions for Google's E-E-A-T. experience = first-hand proof (real screenshots, tested steps, customer examples from the brand); expertise = who writes/reviews it and what credentials to show; authoritativeness = official sources, data and citations to reference, brand facts; trust = accuracy, dates, prices/terms disclosure, update date, contact/support info. 2-4 items each.",
     "", "Reply with JSON only:",
-    '{"same_as_existing":{"is_duplicate":false,"url":"","note":""},"primary_keyword":"","search_intent":"informational|commercial|transactional|navigational","audience_angle":"","title_tag":"","meta_description":"","h1":"","url_slug":"","word_count_target":0,"keywords":[{"keyword":"","role":"primary|secondary|supporting","use_in":["title","h1","h2","body","faq","meta","slug"],"why":""}],"structure":[{"h2":"","h3":[""],"note":""}],"faqs":[""],"internal_links":[{"anchor":"","url":""}],"must_cover":[""],"beat_competitors":"","cta":""}');
+    '{"same_as_existing":{"is_duplicate":false,"url":"","note":""},"primary_keyword":"","search_intent":"informational|commercial|transactional|navigational","audience_angle":"","title_tag":"","meta_description":"","h1":"","url_slug":"","word_count_target":0,"keywords":[{"keyword":"","role":"primary|secondary|supporting","use_in":["title","h1","h2","body","faq","meta","slug"],"why":""}],"structure":[{"h2":"","h3":[""],"note":""}],"faqs":[""],"internal_links":[{"anchor":"","url":""}],"must_cover":[""],"beat_competitors":"","cta":"","eeat":{"experience":[""],"expertise":[""],"authoritativeness":[""],"trust":[""]}}');
   return out.join("\n");
 }
 
@@ -174,6 +184,12 @@ export function localBrief(project, topic, primary, inputs, suggestions, extraKe
       .concat(secondary.map((k) => ({ keyword: k, role: "secondary", use_in: questions.includes(k) ? ["faq", "h2"] : ["h2", "body"], why: suggestions && suggestions.includes(k) ? "People search this on Google" : "Competitors use it on this topic" }))),
     structure: heads.slice(0, 10).map((x) => ({ h2: x.h, h3: [], note: `${x.n} competitor page(s) cover this` })),
     faqs: questions.slice(0, 6), internal_links: inputs.related.slice(0, 5).map((x) => ({ anchor: x.title, url: x.url })),
+    eeat: {
+      experience: ["Add real screenshots of the steps on your own " + ((project.brand || {}).name || "brand") + " product or app", "Include a worked example or a real customer scenario"],
+      expertise: ["Show the author's name, role and why they know this topic", "Have a subject expert review it and say so"],
+      authoritativeness: ["Cite official sources and data (regulators, official docs, your own published numbers)", "Link to your related product or help pages"],
+      trust: ["Show the last-updated date and keep prices, plans and terms current", "State any conditions clearly and add where to get help"],
+    },
     must_cover: [], beat_competitors: heads.length ? "Cover every heading above, then add what none of them answer." : "No competitor headings captured — re-scan to collect them.",
   };
 }

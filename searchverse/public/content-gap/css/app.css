@@ -168,6 +168,11 @@ details.log summary{cursor:pointer;color:var(--muted);font-size:13px}
 .h2list{margin:0 0 0 18px;font-size:13px;color:#C9CEE0;line-height:1.6}
 @media(max-width:820px){.briefgrid{grid-template-columns:1fr}}
 
+.eeat{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.eeat .outline{margin-left:0;list-style:none}
+.eeat label{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:14px}
+.eeat input{margin-top:4px}
+
 /* topical map */
 .tmap-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
 .tmap-head div{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}

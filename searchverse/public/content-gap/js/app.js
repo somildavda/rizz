@@ -621,13 +621,14 @@ function tabNext(T, c) {
     key: topicKey(t.topic), topic: t.topic, primary_keyword: t.topic, section: t.section, score: t.score, relevance: t.relevance, gap: t.gap, demand: t.demand, rankability: t.rankability,
     why: `${t.compsWith} of your ${R.comps.length} competitors write about this (${plural(t.total - t.you, "page")}), and you have no page on it yet.`,
     competitor_urls: Object.keys(t.by).filter((d) => d !== R.you.domain).flatMap((d) => t.by[d].slice(0, 2).map((x) => x.finalUrl)).slice(0, 4), secondary_keywords: t.keywords.split(", ").slice(1) }));
-  markSameTopics(items, R);
+  const sorted = markSameTopics(items, R);
+  const all = items; items = sorted.fresh;
   T.innerHTML = explain(plan
     ? "These are the topics the AI picked for you, best first. The <b>score</b> mixes how well it fits your brand, how big the gap is, and how likely you are to rank. Click <b>Add to my plan</b> to keep it."
     : `These are the best gaps we found, best first. ${local("gemKey") ? "" : `For keywords, titles and outlines written for you, <a href="#/settings">add a free Gemini key</a> and click the button below.`}`) +
     `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"><button class="btn ${plan ? "" : "primary"}" id="aiPlan">✨ ${plan ? "Ask the AI again" : "Ask the AI for a full plan"}</button>
       <button class="btn ghost" id="ideasCsv">⬇ Download as CSV</button></div><div id="ideas"></div>`;
-  $("#ideas").innerHTML = items.length ? items.map((it, i) => ideaCard(it, i, backlog.get(it.key), p)).join("") : `<div class="card emptybig"><b>🏆</b>No gaps found — you already cover everything your competitors write about!</div>`;
+  $("#ideas").innerHTML = (items.length ? items.map((it, i) => ideaCard(it, i, backlog.get(it.key), p)).join("") : `<div class="card emptybig"><b>🏆</b>No new gaps — you already cover everything your competitors write about!</div>`) + onSiteList(sorted.onSite, p);
   $("#aiPlan").onclick = async () => {
     const b = $("#aiPlan"); b.disabled = true; b.textContent = "✨ Thinking… (about 30 seconds)";
     try { await runPlan(p, R, c.summary); c.backlog = await db(`projects/${p.id}/topics`); toast("Your new plan is ready"); tabNext(T, c); }
@@ -636,12 +637,13 @@ function tabNext(T, c) {
   $("#ideasCsv").onclick = () => download(`topic-ideas-${p.domain}.csv`, toCsv([["Rank", "Topic", "Section", "Primary keyword", "Secondary keywords", "Score", "Relevance", "Rank potential", "Intent", "Type", "Title", "Why", "Autocomplete", "Competitor URLs", "Link to", "Outline"]]
     .concat(items.map((it, i) => [i + 1, it.topic, it.section, it.primary_keyword, (it.secondary_keywords || []).join("; "), it.score, it.relevance, it.rank_potential != null ? it.rank_potential : it.rankability, it.search_intent, it.content_type, it.suggested_title, it.why, it.autocomplete, (it.competitor_urls || []).join(" "), it.link_to, (it.outline || []).join(" / ")]))));
   wireIdeas(T, c, items);
+  void all;
 }
 
 function ideaCard(it, i, saved, p) {
   const status = saved ? saved.status : null;
   const dup = it.sameAs ? `<div class="warnbox">⚠️ Looks like the same topic as your page ${link(it.sameAs.url, it.sameAs.title || it.sameAs.url)} (${it.sameAs.score}% match). Updating that page may be better than writing a new one.</div>` : "";
-  const twin = it.twinOf != null ? `<div class="warnbox">🔁 Same topic as idea #${it.twinOf + 1} — write them as one article.</div>` : "";
+  const twin = (it.alsoCovers || []).length ? `<div class="okbox" style="margin:10px 0">🔁 One article also covers: <b>${esc(it.alsoCovers.join(", "))}</b> — same topic, so we merged them.</div>` : "";
   const ac = { exact: ["✓ people search this on Google", "good"], prefix: ["✓ people search longer versions", "good"], related: ["~ only similar searches", "mid"], none: ["✗ not seen in Google suggestions", "low"] }[it.autocomplete];
   return `<article class="idea ${i === 0 ? "top" : ""}" data-i="${i}">
     <div>${scoreRing(it.score)}</div>
@@ -697,13 +699,41 @@ function wireIdeas(T, c, items) {
 }
 
 // Flags ideas that match one of your pages, or another idea in the list.
+// Same topic = the same search intent. Two ideas are the same when their keywords share at
+// least two meaningful words and most of the shorter one (e.g. "best jio prepaid plans" and
+// "jio recharge plans"). Returns new ideas (duplicates merged into the first) and ideas your
+// site already covers (to update rather than write again).
+function sameTopic(a, b) {
+  const x = wordSet(a), y = wordSet(b); let n = 0; x.forEach((w) => { if (y.has(w)) n++; });
+  return (n >= 2 && n / Math.min(x.size, y.size) >= 0.66) || (n >= 1 && Math.max(x.size, y.size) === 1);
+}
 function markSameTopics(items, R) {
-  items.forEach((it, i) => {
-    const hit = similarPages(R.you.pages, it.primary_keyword || it.topic, 0.67)[0];
+  const fresh = [], onSite = [];
+  items.forEach((it) => {
+    const q = it.primary_keyword || it.topic;
+    const hit = similarPages(R.you.pages, q, 0.67)[0];
     if (hit) it.sameAs = { url: hit.p.finalUrl, title: hit.p.title, score: Math.round(hit.score * 100) };
-    const ws = wordSet(it.primary_keyword || it.topic);
-    for (let j = 0; j < i; j++) { if (items[j].twinOf == null && overlap(ws, wordSet(items[j].primary_keyword || items[j].topic)) >= 0.8) { it.twinOf = j; break; } }
+    if (hit && hit.score >= 0.8) { onSite.push(it); return; }
+    const first = fresh.find((f) => sameTopic(q, f.primary_keyword || f.topic) || sameTopic(it.topic, f.topic));
+    if (first) {
+      first.alsoCovers = (first.alsoCovers || []).concat(q !== first.primary_keyword ? [q] : []);
+      first.secondary_keywords = Array.from(new Set((first.secondary_keywords || []).concat([q], it.secondary_keywords || []))).filter((k) => k !== first.primary_keyword);
+      first.competitor_urls = Array.from(new Set((first.competitor_urls || []).concat(it.competitor_urls || [])));
+      return;
+    }
+    fresh.push(it);
   });
+  return { fresh, onSite };
+}
+
+// Ideas your site already has a page for: improve that page instead of writing a new one.
+function onSiteList(list, p) {
+  if (!list.length) return "";
+  return `<h2 style="margin:26px 0 6px">🔁 Already on your site — update these instead</h2>
+    <p class="muted">These ideas are the same topic as a page you already have, so we didn't list them as new articles.</p>
+    <div class="cards" style="margin-top:12px">${list.map((it) => `<div class="card"><b>${esc(it.topic)}</b><div class="muted" style="font-size:13px;margin:4px 0 8px">🔑 ${esc(it.primary_keyword || "")}</div>
+      Your page: ${link(it.sameAs.url, it.sameAs.title || it.sameAs.url)} <span class="muted">(${it.sameAs.score}% match)</span>
+      <div style="margin-top:10px"><a class="btn sm" href="#/p/${esc(p.id)}/brief/${encodeURIComponent(it.key)}">📝 Brief to improve it</a></div></div>`).join("")}</div>`;
 }
 
 // ---------------- 📝 content brief ----------------
@@ -791,7 +821,17 @@ function briefBody(b) {
       <div class="card"><h3>❓ FAQs to answer</h3><ul class="outline">${(b.faqs || []).map((q) => `<li>${esc(q)}</li>`).join("") || "<li class=muted>—</li>"}</ul>
         ${(b.must_cover || []).length ? `<h3 style="margin-top:14px">✅ Must cover</h3><ul class="outline">${b.must_cover.map((q) => `<li>${esc(q)}</li>`).join("")}</ul>` : ""}</div>
       <div class="card"><h3>🔗 Internal links</h3><ul class="outline">${(b.internal_links || []).map((l) => `<li>“${esc(l.anchor)}” → ${link(l.url)}</li>`).join("") || "<li class=muted>—</li>"}</ul>
-        ${b.beat_competitors ? `<h3 style="margin-top:14px">🏆 How to beat competitors</h3><p>${esc(b.beat_competitors)}</p>` : ""}</div></div>`;
+        ${b.beat_competitors ? `<h3 style="margin-top:14px">🏆 How to beat competitors</h3><p>${esc(b.beat_competitors)}</p>` : ""}</div></div>
+    ${eeatCard(b.eeat)}`;
+}
+
+// E-E-A-T: what this article needs to show Experience, Expertise, Authoritativeness and Trust.
+const EEAT = [["experience", "🧪 Experience", "Show you've actually used or done it"], ["expertise", "🎓 Expertise", "Show who knows the subject"],
+  ["authoritativeness", "🏛️ Authority", "Show why others trust this source"], ["trust", "🔒 Trust", "Make it accurate, safe and transparent"]];
+function eeatCard(e) {
+  if (!e) return "";
+  return `<div class="card" style="margin-top:16px"><h3>⭐ E-E-A-T — what to include</h3><p class="muted" style="font-size:13px;margin:4px 0 12px">Google rewards content that shows Experience, Expertise, Authoritativeness and Trust. Tick these off as you write.</p>
+    <div class="eeat">${EEAT.map(([k, t, sub]) => `<div><b>${t}</b><div class="muted" style="font-size:12px">${sub}</div><ul class="outline">${(e[k] || []).map((x) => `<li><label><input type="checkbox"> ${esc(x)}</label></li>`).join("") || "<li class=muted>—</li>"}</ul></div>`).join("")}</div></div>`;
 }
 
 function briefText(topic, b) {
@@ -802,7 +842,8 @@ function briefText(topic, b) {
   L.push("## Structure", ...(b.structure || []).flatMap((s) => [`## ${s.h2}`].concat(s.note ? [`  ${s.note}`] : [], (s.h3 || []).filter(Boolean).map((h) => `  ### ${h}`))), "");
   if ((b.faqs || []).length) L.push("## FAQs", ...b.faqs.map((q) => `- ${q}`), "");
   if ((b.internal_links || []).length) L.push("## Internal links", ...b.internal_links.map((l) => `- "${l.anchor}" -> ${l.url}`), "");
-  if (b.beat_competitors) L.push("## Beat competitors", b.beat_competitors);
+  if (b.beat_competitors) L.push("## Beat competitors", b.beat_competitors, "");
+  if (b.eeat) { L.push("## E-E-A-T"); EEAT.forEach(([k, t]) => { if ((b.eeat[k] || []).length) L.push(`### ${t.replace(/^\S+ /, "")}`, ...b.eeat[k].map((x) => `- [ ] ${x}`)); }); }
   return L.join("\n");
 }
 
