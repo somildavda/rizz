@@ -1,0 +1,60 @@
+/* SearchVerse shared theme: one look for every page (homepage, sign-in, Topic Planner,
+   dashboard). Light by default; dark when <html data-theme="dark">. Pages keep using the
+   same variable names (--bg, --panel, --text, …), so this file only switches their values
+   and fixes the few colours that were written for the dark theme. */
+
+/* B1 · Executive Light */
+html[data-theme="light"]{
+  --bg:#FAFAFC;--panel:rgba(255,255,255,.9);--panel2:#FFFFFF;--panel3:#EEF0F6;--line:rgba(15,23,42,.09);
+  --text:#0F172A;--muted:#5B6478;--a:#5B4BDB;--b:#2BA8C8;--c:#5B4BDB;--glow:rgba(91,75,219,.14);
+  --blue:#2563EB;--good:#059669;--mid:#B45309;--low:#DC2626;--shadow:0 24px 50px -30px rgba(15,23,42,.28);
+  color-scheme:light;
+}
+/* B4 · Navy Boardroom (default) */
+html[data-theme="dark"]{
+  --bg:#0B1530;--panel:#111E40;--panel2:#13224A;--panel3:#1A2B5C;--line:rgba(241,244,250,.10);
+  --text:#F1F4FA;--muted:#9FAAC4;--a:#9D8CFF;--b:#6FD3E6;--c:#9D8CFF;--blue:#7DB4FF;
+  color-scheme:dark;
+}
+html[data-theme="dark"] body{background:var(--bg)}
+html[data-theme="light"] body{background:var(--bg);color:var(--text)}
+
+/* ---------- soft shadows instead of glow in light mode ---------- */
+html[data-theme="light"] .card,html[data-theme="light"] .kpi,html[data-theme="light"] .ask,html[data-theme="light"] .stat,
+html[data-theme="light"] .feat,html[data-theme="light"] .tl,html[data-theme="light"] .sitem,html[data-theme="light"] .idea,
+html[data-theme="light"] .tsec,html[data-theme="light"] .mcard,html[data-theme="light"] .box{box-shadow:0 1px 2px rgba(16,19,38,.05),0 12px 32px -18px rgba(16,19,38,.18)}
+html[data-theme="light"] .tbl{background:#fff}
+html[data-theme="light"] th{background:#F3F4FA}
+
+/* ---------- homepage ---------- */
+html[data-theme="light"] #stars{display:none}
+html[data-theme="light"] .blob{opacity:.22}
+html[data-theme="light"] .blob.b3{opacity:.14}
+html[data-theme="light"] .floor{opacity:.35}
+html[data-theme="light"] nav{background:rgba(255,255,255,.72)}
+html[data-theme="light"] nav .links a:hover{background:rgba(16,19,38,.05)}
+html[data-theme="light"] .moon .card3d{background:#fff;box-shadow:0 18px 36px -16px rgba(16,19,38,.35)}
+html[data-theme="light"] .band{background:linear-gradient(135deg,rgba(124,92,255,.14),rgba(34,211,238,.10) 60%,rgba(244,114,182,.10))}
+html[data-theme="light"] .band p,html[data-theme="light"] .mrole{color:#3B4266}
+html[data-theme="light"] .vbar{background:#fff}
+html[data-theme="light"] .ring{border-color:rgba(124,92,255,.3)}
+html[data-theme="light"] .pill i{box-shadow:none}
+
+/* ---------- Topic Planner ---------- */
+html[data-theme="light"] body::before{opacity:.5}
+html[data-theme="light"] .explain{color:#28405A;background:rgba(34,211,238,.08)}
+html[data-theme="light"] .idea .why,html[data-theme="light"] .h2list{color:#3B4266}
+html[data-theme="light"] .warnbox{color:#7A4A06}
+html[data-theme="light"] .okbox{color:#065F46}
+html[data-theme="light"] .step b{background:#E6E8F2}
+html[data-theme="light"] .ring::before{background:#fff}
+
+/* ---------- sign-in & dashboard ---------- */
+html[data-theme="light"] .msg.err{color:#991B1B}
+html[data-theme="light"] .msg.ok{color:#065F46}
+
+/* ---------- the light/dark switch ---------- */
+.sv-theme{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:99px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font:inherit;line-height:1;flex:none}
+.sv-theme span{width:30px;height:26px;border-radius:99px;display:grid;place-items:center;font-size:14px;transition:background .2s}
+html[data-theme="light"] .sv-theme .l,html[data-theme="dark"] .sv-theme .d{background:var(--panel3, rgba(124,92,255,.18))}
+.sv-theme.float{position:fixed;right:16px;bottom:16px;z-index:60;box-shadow:0 10px 30px -12px rgba(0,0,0,.35)}

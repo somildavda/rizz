@@ -1,0 +1,81 @@
+/* SearchVerse site styles. Base tokens and components (.card, .btn, .pill, .kpi …)
+   come from /topic-planner/css/app.css and /sv/theme.css, so every page matches. */
+body{min-height:100vh}
+h1,h2,h3{letter-spacing:-.02em}
+.wrap{position:relative;z-index:1;max-width:1180px;margin:auto;padding:0 16px}
+
+/* public site */
+.nav{display:flex;align-items:center;gap:12px;padding:18px 0;flex-wrap:wrap}
+.nav .brand{font-weight:900;font-size:20px;color:var(--text)}
+.nav .brand:hover{text-decoration:none}
+.hero{padding:64px 0 40px;text-align:center}
+.hero h1{font-size:clamp(34px,6vw,60px);line-height:1.05;font-weight:900;max-width:880px;margin:auto}
+.hero p{color:var(--muted);font-size:18px;max-width:640px;margin:18px auto 0;line-height:1.6}
+.hero .cta{display:flex;gap:12px;justify-content:center;margin-top:28px;flex-wrap:wrap}
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px;margin:24px 0 56px}
+.feat{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px}
+.feat .ic{font-size:28px}.feat h3{margin:10px 0 6px;font-size:18px}.feat p{color:var(--muted);line-height:1.55;font-size:14.5px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:16px;margin-bottom:56px}
+.step{border-left:3px solid var(--a);padding:6px 16px}.step b{display:block;margin-bottom:4px}
+.foot{border-top:1px solid var(--line);padding:24px 0 40px;color:var(--muted);font-size:13px;display:flex;gap:16px;flex-wrap:wrap}
+.prose{max-width:760px;margin:24px auto 64px;line-height:1.7}.prose h1{font-size:34px;margin-bottom:8px}.prose h2{font-size:20px;margin:24px 0 6px}.prose p,.prose li{color:var(--muted)}.prose ul{padding-left:20px}
+
+/* sign-in */
+.authbox{max-width:440px;margin:48px auto;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:32px}
+.tabs2{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg);padding:5px;border-radius:12px;border:1px solid var(--line);margin:18px 0 6px}
+.tabs2 button{background:transparent;border:0;color:var(--muted);padding:10px;border-radius:9px;font-weight:700;cursor:pointer}
+.tabs2 button.on{background:var(--panel2);color:var(--text)}
+.fld{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
+.inp{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:12px 14px;color:var(--text);font:inherit}
+.inp:focus{outline:0;border-color:var(--a)}
+.msg{margin-top:16px;padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.5}
+.msg.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35)}
+.msg.ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.35)}
+
+/* app shell */
+.shell{display:grid;grid-template-columns:250px 1fr;min-height:100vh;position:relative;z-index:1}
+.side{border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:0;height:100vh;overflow:auto;background:var(--bg)}
+.side .brand{font-weight:900;font-size:18px;color:var(--text);padding:4px 8px}
+.side nav{display:grid;gap:2px}
+.side nav a{display:block;padding:9px 10px;border-radius:10px;color:var(--text);font-size:14.5px}
+.side nav a:hover{background:var(--panel2);text-decoration:none}
+.side nav a.on{background:var(--panel2);box-shadow:inset 3px 0 0 var(--a);font-weight:700}
+.navh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 10px 4px}
+.side .me{margin-top:auto;font-size:13px;color:var(--muted);display:grid;gap:8px;padding:8px}
+.main{min-width:0;padding:0 24px 80px}
+.topbar{display:flex;align-items:center;gap:10px;padding:16px 0;border-bottom:1px solid var(--line);margin-bottom:24px}
+.menu{display:none}
+.psel select{width:100%}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .side{position:fixed;inset:0 auto 0 0;width:260px;z-index:20;transform:translateX(-100%);transition:transform .2s}
+  .side.open{transform:none;box-shadow:var(--shadow)}
+  .menu{display:inline-flex}
+  .main{padding:0 16px 80px}
+}
+
+/* dashboard bits */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.kpi b{display:block;font-size:28px;font-weight:800}.kpi span{color:var(--muted);font-size:13px}
+.kpi.low b{color:var(--low)}.kpi.mid b{color:var(--mid)}.kpi.good b{color:var(--good)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tw{overflow-x:auto}
+.t{width:100%;border-collapse:collapse;font-size:14px}
+.t th,.t td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.t th{color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.t td.n,.t th.n{text-align:right;font-variant-numeric:tabular-nums}
+.t td a{word-break:break-all}
+.issue{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--panel)}
+.issue summary{padding:12px 14px;cursor:pointer;display:flex;gap:10px;align-items:center}
+.issue ul{padding:0 14px 12px 34px;font-size:13px;color:var(--muted);max-height:240px;overflow:auto}
+.sev{width:10px;height:10px;border-radius:50%;flex:none}.sev.error{background:var(--low)}.sev.warning{background:var(--mid)}.sev.notice{background:var(--b)}
+.gauge{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--v)*1%),var(--line) 0)}
+.gauge b{width:78px;height:78px;border-radius:50%;background:var(--panel2);display:grid;place-items:center;font-size:24px}
+.gauges{display:flex;gap:24px;flex-wrap:wrap}.gauges span{display:block;text-align:center;font-size:13px;color:var(--muted);margin-top:6px}
+.prog{height:8px;border-radius:99px;background:var(--line);overflow:hidden}.prog i{display:block;height:100%;background:linear-gradient(90deg,var(--a),var(--b))}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.bars{display:flex;align-items:flex-end;gap:6px;height:120px}
+.bars div{flex:1;background:linear-gradient(var(--b),var(--a));border-radius:6px 6px 2px 2px;min-height:2px;position:relative}
+.bars div:hover::after{content:attr(data-t);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:3px 8px;border-radius:8px;font-size:12px;white-space:nowrap}
