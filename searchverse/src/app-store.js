@@ -1,8 +1,9 @@
 // Accounts, sessions and usage analytics for SearchVerse: one SQLite Durable Object
 // ("main"), created automatically on deploy (see wrangler.jsonc). Works on the free plan.
 //
-// - The first account ever created becomes the admin (approved). Everyone else starts as
-//   "pending" and can only sign in after the admin approves them.
+// - The first account ever created becomes the owner (approved). Everyone else starts as
+//   "pending" and can only sign in after an owner or team admin approves them.
+// - Roles: owner > admin (team admin) > manager (project manager) > member > viewer.
 // - Passwords: PBKDF2-SHA256 with a per-user salt. Sessions: random token in an HttpOnly
 //   cookie; only its SHA-256 hash is stored.
 // - Events: page views (with time on page), tool clicks, sign-ups and logins, with country,
@@ -43,6 +44,9 @@ export class AppStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS events_user ON events(user_id, ts);
       CREATE TABLE IF NOT EXISTS attempts (key TEXT PRIMARY KEY, n INTEGER NOT NULL, since INTEGER NOT NULL);
     `);
+    // Older accounts used "admin"/"user"; they become owner/member.
+    this.sql.exec("UPDATE users SET role = 'owner' WHERE role = 'admin' AND id = (SELECT MIN(id) FROM users)");
+    this.sql.exec("UPDATE users SET role = 'member' WHERE role = 'user'");
   }
   rows(q, ...a) { return this.sql.exec(q, ...a).toArray(); }
   one(q, ...a) { return this.rows(q, ...a)[0] || null; }
@@ -76,7 +80,7 @@ export class AppStore extends DurableObject {
       const first = !this.one("SELECT id FROM users LIMIT 1");
       const salt = randomHex(16), pass = await hashPassword(pw, salt);
       const u = this.one(`INSERT INTO users (name, email, pass, salt, status, role, note, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        name, email, pass, salt, first ? "approved" : "pending", first ? "admin" : "user", String(body.note || "").slice(0, 500), now, first ? now : null);
+        name, email, pass, salt, first ? "approved" : "pending", first ? "owner" : "member", String(body.note || "").slice(0, 500), now, first ? now : null);
       this.track({ ...body.meta, type: "signup", user_id: u.id });
       if (!first) return json({ pending: true });
       return json({ ...(await this.newSession(u.id)), admin: true });
@@ -110,14 +114,25 @@ export class AppStore extends DurableObject {
           (SELECT MAX(ts) FROM events e WHERE e.user_id = u.id) AS last_seen
         FROM users u ORDER BY CASE u.status WHEN 'pending' THEN 0 ELSE 1 END, u.created_at DESC`));
     }
+    // Change someone's access and/or role. `by` is the signed-in person (set by the Worker).
+    // Owners can give any role except owner; team admins can approve people and give
+    // project manager, member or viewer, but can't change owners or other admins.
     if (path === "/admin/user" && m === "POST") {
-      const id = Number(body.id), st = body.status;
-      if (!["approved", "rejected", "pending"].includes(st)) return json({ error: "Bad status" }, 400);
+      const id = Number(body.id), st = body.status, role = body.role, by = body.by || {};
       const u = this.one("SELECT role FROM users WHERE id = ?", id);
-      if (!u) return json({ error: "No such user" }, 404);
-      if (u.role === "admin") return json({ error: "The admin account can't be changed here." }, 400);
-      this.sql.exec("UPDATE users SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?", st, st, now, id);
-      if (st !== "approved") this.sql.exec("DELETE FROM sessions WHERE user_id = ?", id);
+      if (!u) return json({ error: "No such person" }, 404);
+      if (u.role === "owner") return json({ error: "The owner's account can't be changed." }, 400);
+      if (by.role !== "owner" && u.role === "admin") return json({ error: "Only the owner can change a team admin." }, 403);
+      if (st != null) {
+        if (!["approved", "rejected", "pending"].includes(st)) return json({ error: "Bad status" }, 400);
+        this.sql.exec("UPDATE users SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?", st, st, now, id);
+        if (st !== "approved") this.sql.exec("DELETE FROM sessions WHERE user_id = ?", id);
+      }
+      if (role != null) {
+        const allowed = by.role === "owner" ? ["admin", "manager", "member", "viewer"] : ["manager", "member", "viewer"];
+        if (!allowed.includes(role)) return json({ error: "You can't give that role." }, 403);
+        this.sql.exec("UPDATE users SET role = ? WHERE id = ?", role, id);
+      }
       return json({ ok: true });
     }
     if (path === "/admin/stats") {

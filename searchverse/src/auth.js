@@ -40,6 +40,10 @@ export async function currentUser(request, env) {
   return r.user && r.user.status === "approved" ? r.user : null;
 }
 
+// Role ladder: owner > admin (team admin) > manager (project manager) > member > viewer.
+export const RANK = { viewer: 1, member: 2, manager: 3, admin: 4, owner: 5 };
+export const atLeast = (user, role) => !!user && (RANK[user.role] || 0) >= RANK[role];
+
 const setSession = (token, maxAge) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 // Handles auth/admin/tracking routes. Returns a Response, or null when the request
@@ -84,10 +88,10 @@ export async function gate(request, env, url) {
   }
 
   if (p === "/admin" || p.startsWith("/api/admin/")) {
-    if (user.role !== "admin") return p === "/admin" ? new Response(null, { status: 302, headers: { Location: "/" } }) : json({ error: "Admins only" }, 403);
+    if (!atLeast(user, "admin")) return p === "/admin" ? new Response(null, { status: 302, headers: { Location: "/" } }) : json({ error: "Team admins only" }, 403);
     if (p === "/admin") return page(ADMIN_HTML);
     const sub = p.replace("/api/admin", "/admin");
-    const r = request.method === "POST" ? await call(env, sub, await request.json().catch(() => ({}))) : await store(env).fetch("https://app" + sub + url.search);
+    const r = request.method === "POST" ? await call(env, sub, { ...(await request.json().catch(() => ({}))), by: { id: user.id, role: user.role } }) : await store(env).fetch("https://app" + sub + url.search);
     return new Response(r.body, r);
   }
 

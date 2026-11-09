@@ -75,6 +75,7 @@ async function home() {
       <div class="meta">${pill(plural((p.competitors || []).length, "competitor"))}${pill(p.scans ? plural(p.scans, "scan") : "not scanned yet", p.scans ? "" : "mid")}${p.gaps ? pill(plural(p.gaps, "topic") + " to write", "low") : ""}</div>
       <div class="muted" style="font-size:12px;margin-top:10px">${p.last_scan ? "Last scan " + when(p.last_scan) : "Created " + when(p.updated_at)}</div>
       <button type="button" class="pdel" data-del="${esc(p.id)}" title="Delete this project">🗑️ Delete</button></a>`).join("");
+  offerImport();
   $$("[data-del]").forEach((b) => {
     b.onclick = (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -82,6 +83,18 @@ async function home() {
       deleteProject(p, () => home());
     };
   });
+}
+
+// Projects saved in this browser before team sharing can be copied into the team workspace.
+async function offerImport() {
+  if (!["manager", "admin", "owner"].includes(document.body.dataset.role)) return;
+  const r = await db("import-personal").catch(() => null);
+  if (!r || !(r.projects || []).length) return;
+  const box = document.createElement("div");
+  box.className = "card"; box.style.cssText = "grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap";
+  box.innerHTML = `<div style="flex:1;min-width:240px"><b>📦 ${plural(r.projects.length, "project")} saved only in this browser</b><div class="muted" style="font-size:13px">${esc(r.projects.map((p) => p.name).join(", "))}: move them to the team so everyone can see them.</div></div><button class="btn sm primary" id="impBtn">Move to team</button>`;
+  $("#plist").prepend(box);
+  $("#impBtn").onclick = async () => { $("#impBtn").disabled = true; try { const x = await db("import-personal", "POST", {}); toast(`Moved ${plural(x.moved, "project")} to the team`); home(); } catch (e) { toast(e.message, true); } };
 }
 
 // Asks for confirmation (typing the project name), then deletes the project and all its scans.
@@ -1091,4 +1104,6 @@ function tabDetails(T, c, sub) {
   }
 }
 
-route();
+// Your role decides which buttons show (the server checks too).
+fetch("/api/auth/me").then((r) => r.json()).then((d) => { document.body.dataset.role = (d.user && d.user.role) || "manager"; })
+  .catch(() => { document.body.dataset.role = "manager"; }).finally(route);

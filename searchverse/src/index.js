@@ -77,7 +77,7 @@ export default {
     // page, tool or API needs a signed-in, approved user.
     const g = await gate(request, env, url);
     if (g instanceof Response) return g;
-    if (url.pathname.startsWith("/api/cg/db/")) return handleDb(request, env);
+    if (url.pathname.startsWith("/api/cg/db/")) return handleDb(request, env, g && g.user);
     if (url.pathname.startsWith("/api/cg/")) return handleContentGap(request, url);
     const mod = resolve(url, request);
     if (mod) return withTracking(await proxy(request, url, mod));

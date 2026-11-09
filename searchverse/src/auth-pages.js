@@ -9,6 +9,7 @@ a{color:var(--b);text-decoration:none}
 .grad{background:linear-gradient(90deg,var(--a),var(--b) 60%,var(--c));-webkit-background-clip:text;background-clip:text;color:transparent}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 20px;border-radius:12px;font:inherit;font-weight:700;border:1px solid var(--line);cursor:pointer;background:var(--panel2);color:var(--text)}
 .btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff;box-shadow:0 12px 30px -12px rgba(124,92,255,.9)}
+.rolesel{width:auto;padding:6px 10px;font-size:13px;margin-right:6px}
 .btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}
 .btn:disabled{opacity:.5;cursor:default}
 input,textarea,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:11px;padding:12px 14px;color:var(--text);font:inherit}
@@ -147,7 +148,13 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 <script>
 (function(){
-  var $=function(s){return document.querySelector(s)}, days=30, users=[];
+  var $=function(s){return document.querySelector(s)}, days=30, users=[], me={role:""};
+  var RN={owner:"Owner",admin:"Team admin",manager:"Project manager",member:"Member",viewer:"Viewer"};
+  function canGive(){return me.role==="owner"?["admin","manager","member","viewer"]:["manager","member","viewer"]}
+  function canEdit(u){return u.role!=="owner"&&(me.role==="owner"||u.role!=="admin")}
+  function rolePick(u){if(!canEdit(u))return '<span class="pill admin">'+(RN[u.role]||u.role)+(u.email===me.email?" (you)":"")+"</span>";
+    var opts=canGive();if(opts.indexOf(u.role)<0)opts=[u.role].concat(opts);
+    return '<select class="rolesel" data-rid="'+u.id+'">'+opts.map(function(r){return '<option value="'+r+'"'+(r===u.role?" selected":"")+">"+RN[r]+"</option>"}).join("")+"</select>"}
   function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
   function when(t){return t?new Date(t).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}):"—"}
   function secs(s){if(!s)return"—";s=Math.round(s);return s<60?s+"s":Math.floor(s/60)+"m "+(s%60)+"s"}
@@ -171,19 +178,22 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   })}
   function people(){get("/api/admin/users").then(function(list){users=list;
     var pend=list.filter(function(u){return u.status==="pending"});
-    $("#pendBox").innerHTML="<h2>⏳ Waiting for your approval ("+pend.length+")</h2>"+(pend.length?pend.map(function(u){return '<div class="pend"><div style="flex:1;min-width:220px"><b>'+esc(u.name)+'</b> <span class="muted">'+esc(u.email)+"</span>"+(u.note?'<div class="muted" style="font-size:13px;margin-top:4px">“'+esc(u.note)+"”</div>":"")+'<div class="muted" style="font-size:12px;margin-top:4px">Asked '+when(u.created_at)+'</div></div><button class="btn sm primary" data-id="'+u.id+'" data-s="approved">✓ Approve</button><button class="btn sm" data-id="'+u.id+'" data-s="rejected">✕ Reject</button></div>'}).join(""):'<p class="empty">Nobody is waiting. 🎉</p>');
-    $("#people").innerHTML='<table><tr><th>Person</th><th>Status</th><th class="n">Tool clicks</th><th class="n">Page views</th><th>Last seen</th><th>Joined</th><th></th></tr>'+list.map(function(u){
-      return "<tr><td><b>"+esc(u.name)+'</b><br><span class="muted" style="font-size:12px">'+esc(u.email)+'</span></td><td><span class="pill '+(u.role==="admin"?"admin":u.status)+'">'+(u.role==="admin"?"admin (you)":u.status)+'</span></td><td class="n">'+u.clicks+'</td><td class="n">'+u.views+"</td><td>"+when(u.last_seen)+"</td><td>"+when(u.created_at)+"</td><td>"+(u.role==="admin"?"":u.status==="approved"?'<button class="btn sm" data-id="'+u.id+'" data-s="rejected">Remove access</button>':'<button class="btn sm" data-id="'+u.id+'" data-s="approved">Approve</button>')+' <button class="btn sm" data-act="'+u.id+'">Activity</button></td></tr>'}).join("")+"</table>";
+    $("#pendBox").innerHTML="<h2>⏳ Waiting for your approval ("+pend.length+")</h2>"+(pend.length?pend.map(function(u){return '<div class="pend"><div style="flex:1;min-width:220px"><b>'+esc(u.name)+'</b> <span class="muted">'+esc(u.email)+"</span>"+(u.note?'<div class="muted" style="font-size:13px;margin-top:4px">“'+esc(u.note)+"”</div>":"")+'<div class="muted" style="font-size:12px;margin-top:4px">Asked '+when(u.created_at)+'</div></div><select class="rolesel" id="pr'+u.id+'">'+canGive().map(function(r){return '<option value="'+r+'"'+(r==="member"?" selected":"")+">"+RN[r]+"</option>"}).join("")+'</select><button class="btn sm primary" data-id="'+u.id+'" data-s="approved">✓ Approve</button><button class="btn sm" data-id="'+u.id+'" data-s="rejected">✕ Reject</button></div>'}).join(""):'<p class="empty">Nobody is waiting. 🎉</p>');
+    $("#people").innerHTML='<table><tr><th>Person</th><th>Role</th><th>Status</th><th class="n">Tool clicks</th><th class="n">Page views</th><th>Last seen</th><th>Joined</th><th></th></tr>'+list.map(function(u){
+      return "<tr><td><b>"+esc(u.name)+'</b><br><span class="muted" style="font-size:12px">'+esc(u.email)+'</span></td><td>'+rolePick(u)+'</td><td><span class="pill '+u.status+'">'+u.status+'</span></td><td class="n">'+u.clicks+'</td><td class="n">'+u.views+"</td><td>"+when(u.last_seen)+"</td><td>"+when(u.created_at)+"</td><td>"+(!canEdit(u)?"":u.status==="approved"?'<button class="btn sm" data-id="'+u.id+'" data-s="rejected">Remove access</button>':'<button class="btn sm" data-id="'+u.id+'" data-s="approved">Approve</button>')+' <button class="btn sm" data-act="'+u.id+'">Activity</button></td></tr>'}).join("")+"</table>";
     var sel=$("#fUser"),cur=sel.value;sel.innerHTML='<option value="">Everyone</option>'+list.map(function(u){return'<option value="'+u.id+'">'+esc(u.name)+"</option>"}).join("");sel.value=cur;
   })}
   function activity(){var q="?"+(($("#fUser").value)?"user="+$("#fUser").value+"&":"")+(($("#fType").value)?"type="+$("#fType").value:"");
     get("/api/admin/activity"+q).then(function(list){var label={view:"👀 viewed",click:"🖱️ opened",login:"🔑 signed in",signup:"🙋 asked for access"};
       $("#activity").innerHTML=list.length?'<table><tr><th>When</th><th>Who</th><th>What</th><th>Time</th><th>Where</th></tr>'+list.map(function(e){
         return"<tr><td>"+when(e.ts)+"</td><td>"+esc(e.name||"Visitor")+"</td><td>"+(label[e.type]||e.type)+" "+esc(e.tool?(TOOL[e.tool]||e.tool):(e.title||e.path||""))+'</td><td>'+secs(e.duration/1000)+'</td><td class="muted">'+esc([e.country,e.device,e.referrer].filter(Boolean).join(" · "))+"</td></tr>"}).join("")+"</table>":'<p class="empty">No activity yet.</p>'})}
-  document.addEventListener("click",function(e){var b=e.target.closest("[data-s]");if(b){b.disabled=true;post("/api/admin/user",{id:+b.dataset.id,status:b.dataset.s}).then(function(){people();stats()});return}
+  document.addEventListener("click",function(e){var b=e.target.closest("[data-s]");if(b){b.disabled=true;var pk=document.getElementById("pr"+b.dataset.id),body={id:+b.dataset.id,status:b.dataset.s};if(pk&&b.dataset.s==="approved")body.role=pk.value;
+      post("/api/admin/user",body).then(function(r){if(r.error)alert(r.error);people();stats()});return}
     var a=e.target.closest("[data-act]");if(a){$("#fUser").value=a.dataset.act;activity();$("#activity").scrollIntoView({behavior:"smooth"})}});
+  document.addEventListener("change",function(e){var s=e.target.closest("[data-rid]");if(!s)return;
+    post("/api/admin/user",{id:+s.dataset.rid,role:s.value}).then(function(r){if(r.error)alert(r.error);people()})});
   $("#fUser").onchange=activity;$("#fType").onchange=activity;
   document.querySelectorAll("#range button").forEach(function(b){b.onclick=function(){document.querySelectorAll("#range button").forEach(function(x){x.classList.toggle("on",x===b)});days=+b.dataset.d;stats()}});
-  stats();people();activity();
+  fetch("/api/auth/me").then(function(r){return r.json()}).then(function(d){if(d.user)me=d.user}).finally(function(){stats();people();activity()});
 })();
 </script></body></html>`;

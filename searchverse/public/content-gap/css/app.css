@@ -237,3 +237,10 @@ td select{padding:5px 8px;font-size:13px;width:auto}
   .comp-row .cNiche{grid-column:1/3}
   .recap{grid-template-columns:1fr}
 }
+
+/* Members and viewers: no project editing, scanning or deleting. */
+body[data-role="member"] .newproj, body[data-role="viewer"] .newproj,
+body[data-role="member"] .pdel, body[data-role="viewer"] .pdel,
+body[data-role="member"] #delProj, body[data-role="viewer"] #delProj,
+body[data-role="member"] a[href$="/edit"], body[data-role="viewer"] a[href$="/edit"],
+body[data-role="member"] a[href$="/scan"], body[data-role="viewer"] a[href$="/scan"] { display: none !important; }
