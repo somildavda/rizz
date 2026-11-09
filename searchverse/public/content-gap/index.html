@@ -53,25 +53,68 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 .p-unique{color:var(--b);border-color:rgba(34,211,238,.4)}
 .muted{color:var(--muted)}
 .empty{padding:30px;text-align:center;color:var(--muted)}
+.sec{font-size:13px;font-weight:700;color:var(--b);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 12px}
+.sec:first-child{margin-top:0}
+.idea{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:12px}
+.idea.top{border-color:var(--a);box-shadow:0 0 0 1px var(--a) inset}
+.idea h3{font-size:16px;margin:6px 0 4px}
+.idea .kw{font-size:15px;font-weight:700;color:var(--b)}
+.idea .meta{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.idea p{color:var(--muted);line-height:1.55;margin-top:6px}
+.idea ol{margin:8px 0 0 20px;color:var(--text);line-height:1.6}
+.idea .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:10px}
 .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="grad">Content Gap</span> Report</h1>
-  <p class="sub">Crawls your site and your competitors — every subdomain — and finds each page's topic and main keyword.
-    Add a DataForSEO login to also pull the keywords each site ranks for and see the keywords and topics competitors win that you don't.</p>
+  <h1><span class="grad">Content Gap</span> &amp; Topic Planner</h1>
+  <p class="sub">Describe your brand, list your competitors, and it crawls every site — whole blogs, subdomains and any URLs you paste —
+    finds each page's topic and main keyword, then asks Gemini which topics you should write next, each with its primary keyword.</p>
 
   <div class="panel">
+    <div class="sec">1 · Brand profile</div>
     <div class="row">
-      <div><label for="you">Your domain</label><input id="you" placeholder="yoursite.com"></div>
-      <div style="grid-column:span 2"><label for="comp">Competitor domains (comma or new line, up to 5)</label><textarea id="comp" placeholder="competitor1.com&#10;competitor2.com"></textarea></div>
+      <div><label for="profiles">Saved brands</label><select id="profiles"><option value="">— new brand —</option></select></div>
+      <div><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn sm" id="saveProfile" type="button">Save brand</button><button class="btn sm" id="delProfile" type="button">Delete</button></div></div>
     </div>
     <div class="row" style="margin-top:14px">
-      <div><label for="maxPages">Pages to crawl per site</label><input id="maxPages" type="number" value="60" min="5" max="500"></div>
-      <div><label for="maxSubs">Max subdomains per site</label><input id="maxSubs" type="number" value="15" min="1" max="60"></div>
-      <div><label>&nbsp;</label><label class="chk"><input id="useSubs" type="checkbox" checked> Discover &amp; crawl subdomains</label></div>
+      <div><label for="brandName">Brand name</label><input id="brandName" placeholder="Acme"></div>
+      <div><label for="you">Your domain</label><input id="you" placeholder="yoursite.com"></div>
+      <div><label for="audience">Target audience</label><input id="audience" placeholder="e.g. founders of 5–50 person B2B startups"></div>
     </div>
+    <div class="row" style="margin-top:14px">
+      <div><label for="about">What the brand is about</label><textarea id="about" placeholder="What you sell, the problems you solve, what makes you different"></textarea></div>
+      <div><label for="offer">Products / services &amp; focus areas</label><textarea id="offer" placeholder="One per line, e.g. CRM, email automation, lead scoring"></textarea></div>
+      <div><label for="avoid">Topics to avoid / notes (optional)</label><textarea id="avoid" placeholder="e.g. no medical advice; we don't serve enterprise"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div><label for="comp">Competitor domains (comma or new line, up to 5)</label><textarea id="comp" placeholder="competitor1.com&#10;competitor2.com"></textarea></div>
+    </div>
+
+    <div class="sec">2 · What to crawl</div>
+    <div class="row">
+      <div><label for="mode">Crawl scope</label><select id="mode"><option value="full">Whole site / blog (every sitemap URL)</option><option value="sample">Sample across sections</option></select></div>
+      <div><label for="pathFilter">Only URLs containing (optional)</label><input id="pathFilter" placeholder="/blog/   (comma for several)"></div>
+      <div><label for="maxPages">Max pages per site</label><input id="maxPages" type="number" value="300" min="5" max="3000"></div>
+      <div><label for="maxSubs">Max subdomains per site</label><input id="maxSubs" type="number" value="15" min="1" max="60"></div>
+    </div>
+    <label class="chk" style="margin-top:10px"><input id="useSubs" type="checkbox" checked> Discover &amp; crawl subdomains</label>
+    <div class="row" style="margin-top:14px">
+      <div><label for="yourUrls">Your URLs to include (one per line, optional)</label><textarea id="yourUrls" placeholder="https://yoursite.com/blog/post-1"></textarea></div>
+      <div><label for="compUrls">Competitor URLs to include (one per line, optional — new domains are added as competitors)</label><textarea id="compUrls" placeholder="https://competitor1.com/blog/great-post"></textarea></div>
+    </div>
+    <p class="note">Pasted URLs are always crawled, even outside the path filter or page limit. Whole-site crawls of big blogs take a few minutes; pages are fetched 6 at a time.</p>
+
+    <div class="sec">3 · Data &amp; AI keys</div>
+    <details open>
+      <summary>Gemini (topic recommendations)</summary>
+      <div class="row" style="margin-top:12px">
+        <div><label for="gemKey">Gemini API key</label><input id="gemKey" type="password" autocomplete="off" placeholder="from aistudio.google.com/apikey"></div>
+        <div><label for="gemModel">Model</label><input id="gemModel" value="gemini-2.5-flash"></div>
+        <div><label for="nIdeas">Topics to suggest</label><input id="nIdeas" type="number" value="15" min="3" max="40"></div>
+      </div>
+    </details>
     <details>
       <summary>Ranking keywords (DataForSEO, optional)</summary>
       <div class="row" style="margin-top:12px">
@@ -81,9 +124,9 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
           <select id="loc"><option value="2840">United States</option><option value="2356">India</option><option value="2826">United Kingdom</option><option value="2124">Canada</option><option value="2036">Australia</option><option value="2276">Germany</option><option value="2250">France</option><option value="2784">United Arab Emirates</option><option value="2702">Singapore</option></select></div>
         <div><label for="lang">Language code</label><input id="lang" value="en"></div>
       </div>
-      <label class="chk" style="margin-top:10px"><input id="remember" type="checkbox"> Remember the login in this browser</label>
+      <label class="chk" style="margin-top:10px"><input id="remember" type="checkbox"> Remember my DataForSEO login and Gemini key in this browser</label>
       <p class="note">The login is sent only through this tool's Worker straight to api.dataforseo.com and is not stored on any server.
-        Each site costs about one Labs "ranked keywords" request (up to 1,000 keywords). Get a key at dataforseo.com.</p>
+        Each site costs about one Labs "ranked keywords" request (up to 1,000 keywords). Get a key at dataforseo.com. The Gemini key is likewise only passed through to Google.</p>
     </details>
     <div class="actions">
       <button class="btn primary" id="run">Run report</button>
@@ -107,20 +150,36 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   var STOP = "a about above after again all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further get had has have having he her here hers him his how i if in into is it its just like me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up us very was we were what when where which while who whom why will with would you your yours new best top guide vs via per one two get see use using page home blog read more click here learn contact us privacy policy terms login sign menu search skip content cookie cookies complete ultimate definitive tips ideas examples everything need know free official welcome index default untitled 2023 2024 2025 2026 2027".split(" ");
   var STOPSET = new Set(STOP);
 
-  // ---------- settings ----------
-  try {
-    var saved = JSON.parse(localStorage.getItem("cg-settings") || "{}");
-    ["you", "comp", "maxPages", "maxSubs", "loc", "lang", "dfsLogin", "dfsPass"].forEach(function (k) { if (saved[k] != null) $("#" + k).value = saved[k]; });
-    if (saved.dfsLogin) $("#remember").checked = true;
-  } catch (_) {}
+  // ---------- settings & brand profiles ----------
+  var FIELDS = ["brandName", "you", "audience", "about", "offer", "avoid", "comp", "mode", "pathFilter", "maxPages", "maxSubs", "yourUrls", "compUrls", "gemModel", "nIdeas", "loc", "lang"];
+  var SECRETS = ["dfsLogin", "dfsPass", "gemKey"];
+  function readLS(k, d) { try { return JSON.parse(localStorage.getItem(k) || "") || d; } catch (_) { return d; } }
+  function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+  function fill(obj, keys) { keys.forEach(function (k) { if (obj[k] != null) $("#" + k).value = obj[k]; }); }
+  function collect(keys) { var o = {}; keys.forEach(function (k) { o[k] = $("#" + k).value; }); return o; }
+  var saved = readLS("cg-settings", {});
+  fill(saved, FIELDS.concat(SECRETS));
+  if (saved.dfsLogin || saved.gemKey) $("#remember").checked = true;
   function saveSettings() {
-    try {
-      var s = {};
-      ["you", "comp", "maxPages", "maxSubs", "loc", "lang"].forEach(function (k) { s[k] = $("#" + k).value; });
-      if ($("#remember").checked) { s.dfsLogin = $("#dfsLogin").value; s.dfsPass = $("#dfsPass").value; }
-      localStorage.setItem("cg-settings", JSON.stringify(s));
-    } catch (_) {}
+    var s = collect(FIELDS);
+    if ($("#remember").checked) Object.assign(s, collect(SECRETS));
+    writeLS("cg-settings", s);
   }
+  function listProfiles(sel) {
+    var ps = readLS("cg-profiles", {}), el = $("#profiles");
+    el.innerHTML = '<option value="">— new brand —</option>' + Object.keys(ps).sort().map(function (n) { return "<option>" + esc(n) + "</option>"; }).join("");
+    el.value = sel || "";
+  }
+  $("#profiles").onchange = function () { var p = readLS("cg-profiles", {})[this.value]; if (p) fill(p, FIELDS); };
+  $("#saveProfile").onclick = function () {
+    var name = $("#brandName").value.trim() || root($("#you").value);
+    if (!name) { alert("Give the brand a name or domain first."); return; }
+    var ps = readLS("cg-profiles", {}); ps[name] = collect(FIELDS); writeLS("cg-profiles", ps); listProfiles(name);
+  };
+  $("#delProfile").onclick = function () {
+    var n = $("#profiles").value; if (!n || !confirm("Delete brand “" + n + "”?")) return;
+    var ps = readLS("cg-profiles", {}); delete ps[n]; writeLS("cg-profiles", ps); listProfiles("");
+  };
 
   // ---------- helpers ----------
   var stopped = false;
@@ -141,6 +200,8 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   function normUrl(u) { try { var x = new URL(u); x.hash = ""; return (x.host + x.pathname).replace(/\/$/, "").toLowerCase(); } catch (_) { return String(u).toLowerCase(); } }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   var junkPath = /\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mp3|css|js|xml|json|ico)(\?|$)|\/(wp-admin|wp-json|cart|checkout|account|login|signin|signup|feed|tag|author)\b|[?&](replytocom|share|utm_)/i;
+
+  listProfiles(saved.brandName || "");
 
   // ---------- keyword extraction ----------
   function tokens(s) {
@@ -221,7 +282,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     });
     site.hosts = Array.from(live.values()).slice(0, opts.maxSubs);
     log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
-    if (!site.hosts.length) return site;
+    if (!site.hosts.length && !(opts.extra[r] || []).length) return site;
 
     // Collect candidate URLs from sitemaps, else from the home page's links.
     for (var i = 0; i < site.hosts.length && !stopped; i++) {
@@ -234,25 +295,40 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       H.candidates = Array.from(new Set(urls.filter(function (u) { return !junkPath.test(u); })));
     }
 
-    // Share the page budget across hosts, spreading picks across sections.
-    var budget = opts.maxPages, per = Math.max(3, Math.floor(budget / site.hosts.length)), queue = [];
-    site.hosts.forEach(function (H) {
-      var bySec = new Map();
-      H.candidates.forEach(function (u) { var k = topicOf({ url: u }); if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(u); });
-      var lists = Array.from(bySec.values()), pick = [], k = 0;
-      while (pick.length < per - 1 && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pick.push(l.shift()); }
-      H.picked = pick.length + 1;
-      queue.push({ url: H.home.finalUrl, data: H.home });
-      pick.forEach(function (u) { if (normUrl(u) !== normUrl(H.home.finalUrl)) queue.push({ url: u }); });
-    });
-    queue = queue.slice(0, budget);
+    // Pick pages: the whole site (optionally only paths matching the filter), or a
+    // sample spread across sections. Pasted URLs are always added on top.
+    var budget = opts.maxPages, queue = [], filt = opts.pathFilter;
+    var match = function (u) { return !filt.length || filt.some(function (f) { return u.toLowerCase().indexOf(f) > -1; }); };
+    if (opts.full) {
+      site.hosts.forEach(function (H) {
+        H.candidates = H.candidates.filter(match);
+        if (match(H.home.finalUrl)) queue.push({ url: H.home.finalUrl, data: H.home });
+      });
+      // Round-robin across hosts so one huge subdomain doesn't eat the budget.
+      var lists = site.hosts.map(function (H) { return H.candidates.slice(); }), k = 0;
+      while (queue.length < budget && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) queue.push({ url: l.shift() }); }
+    } else {
+      var per = Math.max(3, Math.floor(budget / site.hosts.length));
+      site.hosts.forEach(function (H) {
+        var bySec = new Map();
+        H.candidates.filter(match).forEach(function (u) { var k = topicOf({ url: u }); if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(u); });
+        var lists = Array.from(bySec.values()), pick = [], k = 0;
+        while (pick.length < per - 1 && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pick.push(l.shift()); }
+        queue.push({ url: H.home.finalUrl, data: H.home });
+        pick.forEach(function (u) { queue.push({ url: u }); });
+      });
+      queue = queue.slice(0, budget);
+    }
+    (opts.extra[r] || []).forEach(function (u) { queue.push({ url: u, fed: true }); });
+    var qs = new Set(); queue = queue.filter(function (q) { var n = normUrl(q.url); if (qs.has(n)) return false; qs.add(n); return true; });
+    log("[" + r + "] crawling " + queue.length + " page(s)…");
 
     var brand = brandTokens(r), done = 0;
-    var pages = await pool(queue, 5, async function (q) {
+    var pages = await pool(queue, 6, async function (q) {
       var p = q.data || await api("page?url=" + encodeURIComponent(q.url)).catch(function () { return { ok: false, url: q.url }; });
       done++; part(done / queue.length);
       if (!p.ok) return null;
-      p.host = new URL(p.finalUrl).host;
+      p.host = new URL(p.finalUrl).host; p.fed = !!q.fed;
       p.keywords = mainKeywords(p, brand);
       p.mainKeyword = p.keywords[0] || "";
       p.onPageKeyword = p.mainKeyword; p.keywordSource = "on-page";
@@ -336,9 +412,98 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     return out.sort(function (a, b) { var o = { missing: 0, partial: 1, covered: 2 }; return o[a.coverage] - o[b.coverage] || b.rankingVolume - a.rankingVolume; });
   }
 
+  // ---------- Gemini topic recommendations ----------
+  function brandProfile() { return { name: $("#brandName").value.trim(), domain: root($("#you").value), audience: $("#audience").value.trim(), about: $("#about").value.trim(), offer: $("#offer").value.trim(), avoid: $("#avoid").value.trim() }; }
+  function pageLine(p) {
+    var path = (function () { try { var u = new URL(p.finalUrl); return u.host.replace(/^www\./, "") + u.pathname; } catch (_) { return p.finalUrl; } })();
+    var vol = p.ranks.reduce(function (a, k) { return a + (k.position <= 20 ? k.volume : 0); }, 0);
+    return "- " + p.mainKeyword + " | " + (p.title || "").slice(0, 90) + " | " + path + (p.ranks.length ? " | ranks for " + p.ranks.length + " kws, top-20 vol " + vol : "");
+  }
+  function buildPrompt() {
+    var b = R.brand, n = R.opts.nIdeas, hasRank = [R.you].concat(R.comps).some(function (s) { return s.ranked; });
+    var cap = function (arr, k) { return arr.slice(0, k); };
+    var out = [
+      "You are a senior SEO content strategist. Recommend the " + n + " best NEW content topics for the brand below.",
+      "Use the crawl data to find topics competitors cover that the brand has not covered (or covers weakly), and keep only topics that fit the brand, its offer and audience.",
+      "", "## Brand", "Name: " + (b.name || b.domain), "Domain: " + b.domain, "About: " + (b.about || "(not given — infer from the brand's pages)"),
+      "Audience: " + (b.audience || "(not given)"), "Products / focus areas: " + (b.offer || "(not given)"), "Avoid / notes: " + (b.avoid || "none"),
+      "", "## Brand's existing pages (main keyword | title | url | ranking data)",
+    ].concat(cap(R.you.pages, 500).map(pageLine));
+    R.comps.forEach(function (c) {
+      var ps = c.pages.slice().sort(function (a, b) { return b.ranks.length - a.ranks.length; });
+      out.push("", "## Competitor " + c.domain + " pages"); out = out.concat(cap(ps, 300).map(pageLine));
+    });
+    var tg = R.topicGap.filter(function (r) { return r.coverage !== "covered"; });
+    if (tg.length) { out.push("", "## Computed topic gaps (competitor page topics with no or partial match on the brand's site)"); out = out.concat(cap(tg, 200).map(function (r) { return "- [" + r.coverage + "] " + r.mainKeyword + " — " + r.url; })); }
+    if (hasRank) {
+      var kg = R.kwGap.filter(function (r) { return r.status === "missing" || r.status === "weak"; });
+      out.push("", "## Keyword gaps (keyword | status | monthly volume | difficulty | best competitor position)");
+      out = out.concat(cap(kg, 250).map(function (r) { return "- " + r.keyword + " | " + r.status + " | " + r.volume + " | " + (r.difficulty == null ? "?" : r.difficulty) + " | #" + (r.best ? r.best.position : "?"); }));
+    }
+    out.push("", "## Rules",
+      "- Don't suggest a topic the brand already covers well (check its pages above).",
+      "- primary_keyword: one realistic search query a person would type. " + (hasRank ? "Prefer keywords from the keyword-gap list when they fit." : "No volume data is available; pick the most natural, commonly searched phrasing."),
+      "- Rank by business value for this brand × size of the gap × how winnable it is. Put the single best pick first.",
+      "- competitor_urls: only URLs that appear in the data above.",
+      "", "Reply with JSON only, shaped as:",
+      '{"ideas":[{"topic":"","primary_keyword":"","secondary_keywords":[""],"search_intent":"informational|commercial|transactional|navigational","content_type":"blog post|guide|comparison|landing page|tool|other","suggested_title":"","why":"1-2 sentences: brand fit and the gap","competitor_urls":[""],"brand_closest_url":"","priority":"high|medium|low","fit_score":1,"outline":["H2 ..."]}]}');
+    return out.join("\n");
+  }
+  async function runGemini() {
+    if (!R) return;
+    var key = R.opts.gemKey || $("#gemKey").value.trim();
+    if (!key) { alert("Add a Gemini API key in step 3."); return; }
+    R.ideas = { loading: true }; if (current === "ideas") renderView();
+    status("Asking Gemini for topic ideas…"); log("Asking Gemini (" + R.opts.gemModel + ")…");
+    var res = await fetch("/api/cg/gemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: key, model: R.opts.gemModel, prompt: buildPrompt() }) })
+      .then(function (r) { return r.json(); }).catch(function (e) { return { error: e.message }; });
+    var ideas = null;
+    if (!res.error) { try { var j = JSON.parse(res.text.replace(/^```(json)?|```$/g, "")); ideas = Array.isArray(j) ? j : j.ideas; } catch (e) { res.error = "Could not read Gemini's reply as JSON"; } }
+    if (res.error || !Array.isArray(ideas)) { R.ideas = { error: res.error || "No ideas returned" }; log("Gemini error: " + R.ideas.error); status("Gemini failed — see the AI tab."); }
+    else {
+      // Attach real volume / difficulty when the primary keyword is in the ranking data.
+      var known = new Map(); [R.you].concat(R.comps).forEach(function (s) { (s.ranked || []).forEach(function (k) { known.set(k.keyword.toLowerCase(), k); }); });
+      ideas.forEach(function (it) { var k = known.get(String(it.primary_keyword || "").toLowerCase()); if (k) { it.volume = k.volume; it.difficulty = k.difficulty; } });
+      R.ideas = { list: ideas, usage: res.usage };
+      log("Gemini suggested " + ideas.length + " topics" + (res.usage ? " (" + res.usage.totalTokenCount + " tokens)" : ""));
+      status("Done.");
+    }
+    if (current === "ideas") renderView();
+  }
+  function ideaCsv() {
+    var rows = [["Rank", "Topic", "Primary keyword", "Secondary keywords", "Intent", "Content type", "Suggested title", "Why", "Priority", "Fit score", "Volume", "KD", "Competitor URLs", "Your closest URL", "Outline"]];
+    R.ideas.list.forEach(function (it, i) { rows.push([i + 1, it.topic, it.primary_keyword, (it.secondary_keywords || []).join("; "), it.search_intent, it.content_type, it.suggested_title, it.why, it.priority, it.fit_score, it.volume, it.difficulty, (it.competitor_urls || []).join(" "), it.brand_closest_url, (it.outline || []).join(" / ")]); });
+    var csv = rows.map(function (r) { return r.map(function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })); a.download = "topic-ideas-" + R.you.domain + ".csv"; a.click();
+  }
+  function renderIdeas(v) {
+    var I = R.ideas;
+    var bar = '<div class="tools"><button class="btn sm" id="genIdeas">' + (I && I.list ? "Regenerate" : "Get topic ideas with Gemini") + "</button>" + (I && I.list ? '<button class="btn sm" id="csvIdeas">Export CSV</button>' : "") + "</div>";
+    if (!I) v.innerHTML = bar + '<div class="empty">Add a Gemini API key in step 3, then click the button. Gemini reads your brand profile and every crawled page and picks the topics to write next.</div>';
+    else if (I.loading) v.innerHTML = '<div class="empty">Gemini is reading ' + [R.you].concat(R.comps).reduce(function (a, s) { return a + s.pages.length; }, 0) + " pages…</div>";
+    else if (I.error) v.innerHTML = bar + '<div class="empty">Gemini error: ' + esc(I.error) + "</div>";
+    else {
+      v.innerHTML = bar + I.list.map(function (it, i) {
+        var pr = { high: "missing", medium: "weak", low: "shared" }[it.priority] || "unique";
+        return '<div class="idea' + (i === 0 ? " top" : "") + '">' + (i === 0 ? '<span class="pill p-unique">★ Ideal pick</span> ' : '<span class="pill">#' + (i + 1) + "</span> ") +
+          '<span class="pill p-' + pr + '">' + esc(it.priority || "") + " priority</span>" +
+          "<h3>" + esc(it.topic) + "</h3>" + '<div class="kw">🎯 ' + esc(it.primary_keyword) + "</div>" +
+          '<div class="meta">' + [it.search_intent, it.content_type, it.fit_score != null ? "fit " + it.fit_score + "/10" : "", it.volume != null ? "vol " + Number(it.volume).toLocaleString() : "", it.difficulty != null ? "KD " + it.difficulty : ""].filter(Boolean).map(function (x) { return '<span class="pill">' + esc(x) + "</span>"; }).join("") + "</div>" +
+          (it.suggested_title ? '<div class="lbl">Suggested title</div><div>' + esc(it.suggested_title) + "</div>" : "") +
+          "<p>" + esc(it.why) + "</p>" +
+          ((it.secondary_keywords || []).length ? '<div class="lbl">Secondary keywords</div><div class="muted">' + esc(it.secondary_keywords.join(", ")) + "</div>" : "") +
+          ((it.outline || []).length ? '<div class="lbl">Outline</div><ol>' + it.outline.map(function (o) { return "<li>" + esc(o) + "</li>"; }).join("") + "</ol>" : "") +
+          ((it.competitor_urls || []).length ? '<div class="lbl">Competitors covering it</div>' + it.competitor_urls.map(link).join("") : "") +
+          (it.brand_closest_url ? '<div class="lbl">Your closest page</div>' + link(it.brand_closest_url) : "") + "</div>";
+      }).join("");
+      $("#csvIdeas").onclick = ideaCsv;
+    }
+    var g = $("#genIdeas"); if (g) g.onclick = function () { R.opts.gemKey = $("#gemKey").value.trim(); R.opts.gemModel = $("#gemModel").value.trim() || "gemini-2.5-flash"; R.opts.nIdeas = +$("#nIdeas").value || 15; R.brand = brandProfile(); runGemini(); };
+  }
+
   // ---------- rendering ----------
   var R = null, current = "overview";
-  var TABS = [["overview", "Overview"], ["subdomains", "Subdomains"], ["pages", "Pages & topics"], ["kwgap", "Keyword gap"], ["topicgap", "Topic gap"], ["ranked", "All ranking keywords"]];
+  var TABS = [["ideas", "✨ AI topic ideas"], ["overview", "Overview"], ["subdomains", "Subdomains"], ["pages", "Pages & topics"], ["kwgap", "Keyword gap"], ["topicgap", "Topic gap"], ["ranked", "All ranking keywords"]];
   function renderTabs() {
     $("#tabs").innerHTML = TABS.map(function (t) { return '<button data-t="' + t[0] + '" class="' + (t[0] === current ? "on" : "") + '">' + t[1] + "</button>"; }).join("");
     $("#tabs").querySelectorAll("button").forEach(function (b) { b.onclick = function () { current = b.dataset.t; renderTabs(); renderView(); }; });
@@ -386,6 +551,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   function renderView() {
     var v = $("#view"); v.innerHTML = "";
     var hasRank = allSites().some(function (s) { return s.ranked; });
+    if (current === "ideas") { renderIdeas(v); return; }
     var noRank = "Add a DataForSEO login under “Ranking keywords” and run again to fill this view.";
     if (current === "overview") {
       var kg = R.kwGap, missing = kg.filter(function (r) { return r.status === "missing"; }), weak = kg.filter(function (r) { return r.status === "weak"; });
@@ -488,10 +654,23 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 
   // ---------- run ----------
   $("#run").onclick = async function () {
-    var you = root($("#you").value), comps = $("#comp").value.split(/[\s,]+/).map(root).filter(function (d) { return d && d !== you; }).slice(0, 5);
+    var you = root($("#you").value), comps = $("#comp").value.split(/[\s,]+/).map(root).filter(function (d) { return d && d !== you; });
     if (!you) { alert("Enter your domain."); return; }
+    // Pasted URLs, grouped by the site they belong to.
+    var extra = {}, urlLines = function (id) { return $(id).value.split(/\s+/).filter(function (u) { return /^https?:\/\//i.test(u); }); };
+    var ownRoot = function (u) { var h = root(u), parts = h.split("."); return parts.length > 2 && !/^(co|com|org|net|ac|gov)$/.test(parts[parts.length - 2]) ? parts.slice(-2).join(".") : parts.length > 2 ? parts.slice(-3).join(".") : h; };
+    urlLines("#yourUrls").forEach(function (u) { (extra[you] = extra[you] || []).push(u); });
+    urlLines("#compUrls").forEach(function (u) {
+      var d = comps.filter(function (c) { return root(u) === c || root(u).endsWith("." + c); })[0] || ownRoot(u);
+      if (d === you) return;
+      if (comps.indexOf(d) === -1) comps.push(d);
+      (extra[d] = extra[d] || []).push(u);
+    });
+    comps = comps.slice(0, 8);
     saveSettings();
-    var opts = { maxPages: Math.max(5, Math.min(500, +$("#maxPages").value || 60)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
+    var opts = { extra: extra, full: $("#mode").value === "full", pathFilter: $("#pathFilter").value.split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean),
+      gemKey: $("#gemKey").value.trim(), gemModel: $("#gemModel").value.trim() || "gemini-2.5-flash", nIdeas: Math.max(3, Math.min(40, +$("#nIdeas").value || 15)),
+      maxPages: Math.max(5, Math.min(3000, +$("#maxPages").value || 300)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
       login: $("#dfsLogin").value.trim(), password: $("#dfsPass").value.trim(), loc: $("#loc").value, lang: $("#lang").value.trim() || "en" };
     stopped = false; $("#run").disabled = true; $("#stop").disabled = false; $("#log").textContent = ""; prog(0);
     var domains = [you].concat(comps), sites = [];
@@ -507,7 +686,9 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       R.kwGap = keywordGap(R.you, R.comps);
       R.topicGap = topicGap(R.you, R.comps);
       prog(1); status(stopped ? "Stopped — showing partial results." : "Done.");
-      $("#report").hidden = false; current = "overview"; renderTabs(); renderView();
+      R.opts = opts; R.brand = brandProfile(); R.ideas = null;
+      $("#report").hidden = false; current = opts.gemKey ? "ideas" : "overview"; renderTabs(); renderView();
+      if (opts.gemKey && !stopped) await runGemini();
       $("#report").scrollIntoView({ behavior: "smooth" });
     } catch (e) {
       log("Error: " + (e && e.message || e)); status("Failed — see log.");

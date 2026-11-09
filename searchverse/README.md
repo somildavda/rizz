@@ -35,7 +35,7 @@ pushes to `main` that touch `searchverse/`.
 
 Manual: `cd searchverse && npx wrangler login && npx wrangler deploy`.
 
-## Content Gap Report (`/content-gap/`)
+## Content Gap & Topic Planner (`/content-gap/`)
 Page: `public/content-gap/index.html`. API: `src/content-gap.js`, served by this
 Worker under `/api/cg/*`. The browser drives the crawl in small requests, so no
 single Worker call goes over Cloudflare's subrequest limit.
@@ -57,3 +57,13 @@ For your domain and each competitor it:
 
 Each table filters, sorts and exports to CSV. The DataForSEO login goes from the
 browser through the Worker to api.dataforseo.com and is never stored on the server.
+
+**Brand profile & AI topic ideas.** Save a brand profile (name, domain, what it does,
+audience, products, topics to avoid, competitors) in the browser. Choose "whole site"
+to crawl every sitemap URL (optionally only paths like `/blog/`, up to 3,000 pages per
+site), and paste extra URLs for you or competitors. Those are always crawled, and new
+domains are added as competitors. With a Gemini API key (the free tier works), the
+Worker proxies one `generateContent` call (`/api/cg/gemini`) that reads the brand
+profile, every crawled page and the computed gaps. It returns ranked topic ideas, each
+with a primary keyword, secondary keywords, intent, title, outline and the competitor
+pages covering it. The first one is marked as the ideal pick.

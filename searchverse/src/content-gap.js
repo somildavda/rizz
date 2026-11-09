@@ -6,9 +6,10 @@
 //   GET  /api/cg/sitemap?host=www.example.com     page URLs from robots.txt/sitemaps
 //   GET  /api/cg/page?url=https://...             title, H1, headings, text, links
 //   POST /api/cg/ranked                           DataForSEO ranked keywords (proxy)
+//   POST /api/cg/gemini                           Gemini topic recommendations (proxy)
 
 const UA = "Mozilla/5.0 (compatible; SearchVerseContentGap/1.0; +https://searchverse.app)";
-const MAX_SITEMAP_URLS = 2000;
+const MAX_SITEMAP_URLS = 5000;
 const MAX_TEXT = 6000;
 
 const json = (data, status = 200) =>
@@ -82,7 +83,7 @@ async function sitemap(host) {
 
   const urls = new Set(), seen = new Set(), sitemaps = [];
   let fetches = 0;
-  while (queue.length && fetches < 25 && urls.size < MAX_SITEMAP_URLS) {
+  while (queue.length && fetches < 40 && urls.size < MAX_SITEMAP_URLS) {
     const sm = queue.shift();
     if (seen.has(sm) || !safeUrl(sm)) continue;
     seen.add(sm); fetches++;
@@ -195,6 +196,30 @@ async function ranked(request) {
   });
 }
 
+// Proxies one Gemini generateContent call with the user's own API key, asking
+// for a JSON reply. The key is passed straight through and never stored.
+async function gemini(request) {
+  let body;
+  try { body = await request.json(); } catch (_) { return json({ error: "Bad JSON" }, 400); }
+  const { key, model = "gemini-2.5-flash", prompt } = body || {};
+  if (!key || !prompt) return json({ error: "key and prompt are required" }, 400);
+  if (!/^[\w.-]{3,80}$/.test(model)) return json({ error: "Invalid model name" }, 400);
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: String(prompt).slice(0, 900000) }] }],
+      generationConfig: { responseMimeType: "application/json", temperature: 0.4 },
+    }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) return json({ error: (data.error && data.error.message) || "Gemini HTTP " + r.status }, 502);
+  const cand = (data.candidates || [])[0];
+  const text = ((cand && cand.content && cand.content.parts) || []).map((x) => x.text || "").join("");
+  if (!text) return json({ error: "Gemini returned no text" + (cand && cand.finishReason ? " (" + cand.finishReason + ")" : "") }, 502);
+  return json({ text, usage: data.usageMetadata || null });
+}
+
 export async function handleContentGap(request, url) {
   const p = url.pathname.replace(/^\/api\/cg\/?/, "");
   try {
@@ -202,6 +227,7 @@ export async function handleContentGap(request, url) {
     if (p === "sitemap") return await sitemap(url.searchParams.get("host"));
     if (p === "page") return await page(url.searchParams.get("url"));
     if (p === "ranked" && request.method === "POST") return await ranked(request);
+    if (p === "gemini" && request.method === "POST") return await gemini(request);
     return json({ error: "Not found" }, 404);
   } catch (e) {
     return json({ error: e.message || String(e) }, 500);
