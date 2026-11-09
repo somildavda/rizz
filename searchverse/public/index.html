@@ -376,7 +376,9 @@ window.SV_TOOLS = [
     id: "content-gap", icon: "🧩", name: "Topic Planner", tag: "Content",
     tagline: "See what competitors write that you don't, and what to write next.",
     desc: "Set up a project for your brand and competitors. It reads every website, compares the topics, scores each gap for your brand, and builds a topical map with Koray's framework. Saved per project, so each re-scan shows what changed.",
-    url: "/content-gap/",
+    // Its own Worker now (topic-planner/ in the repo), with its own sign-in and Access Center.
+    url: "https://searchverse-topic-planner.shred-app.workers.dev/",
+    newTab: true, note: "Opens Topic Planner, which has its own sign-in and team access.",
     features: [
       ["Reads whole websites", "Follows every link and sitemap, subdomains included, like a search engine does."],
       ["Scores every topic", "How well it fits your brand, how big the gap is, how many competitors cover it, and your chance to rank."],

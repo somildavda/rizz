@@ -267,6 +267,9 @@ export async function handleDb(request, env, user) {
     const res = await team.fetch("https://db/api/cg/db/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dump) });
     return new Response(res.body, res);
   }
+  // The owner can download every team project, to move them into the standalone
+  // Topic Planner Worker (Dashboard → Restore / import there).
+  if (path === "export" && m === "GET" && user.role === "owner") return team.fetch(request);
   if (path === "export" || path === "import") return json({ error: "Not found" }, 404);
 
   const canChange = m === "GET" ? true
