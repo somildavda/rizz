@@ -146,7 +146,8 @@ export async function crawlSite(domain, opts, part) {
     (keep(e) ? mainQ : transQ).push(e);
   };
   (opts.extra[r] || []).forEach(function (u) { add(u, 0, true); });
-  site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(normUrl(H.home.finalUrl)); e.data = H.home; e.inlinks = 0; });
+  // A home page that robots.txt blocks (or that is otherwise out of scope) is skipped.
+site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(normUrl(H.home.finalUrl)); if (e) { e.data = H.home; e.inlinks = 0; } });
   if (opts.full) {
     site.hosts.forEach(function (H) {
       filt.forEach(function (f) { if (f.charAt(0) === "/") add("https://" + H.host + f, 1); });

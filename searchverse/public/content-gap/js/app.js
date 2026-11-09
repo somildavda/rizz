@@ -352,7 +352,10 @@ async function runScan(project) {
       scan.idx = i; const s = scan.sites[i]; s.state = "busy"; s.note = "Finding subdomains and sitemaps…"; drawScan();
       // A site's own section wins over the shared folder setting.
       const siteOpts = s.folder ? { ...opts, pathFilter: folderList(s.folder) } : opts;
-      const site = await E.crawlSite(s.domain, siteOpts, (f) => { scan.progress = (i + f) / scan.sites.length; drawScan(); });
+      // One site failing must not stop the others.
+      let site;
+      try { site = await E.crawlSite(s.domain, siteOpts, (f) => { scan.progress = (i + f) / scan.sites.length; drawScan(); }); }
+      catch (err) { scan.log.push(`[${s.domain}] skipped: ${err.message}`); site = { domain: E.root(s.domain), hosts: [], pages: [], ranked: null, discovered: 0, queuedLeft: 0 }; }
       site.niche = s.niche || ""; site.isYou = !!s.isYou;
       s.state = site.pages.length ? "done" : "fail"; s.pages = site.pages.length;
       s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "whole site read"}` : "Couldn't read this site (it may block robots)";
