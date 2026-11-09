@@ -1,0 +1,22 @@
+{
+  "name": "searchverse-topic-planner",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  // Its own databases (SQLite Durable Objects, free plan), created on first deploy:
+  // PROJECTS holds projects, scans and topics; APP holds accounts and sessions.
+  "durable_objects": {
+    "bindings": [
+      { "name": "PROJECTS", "class_name": "ProjectStore" },
+      { "name": "APP", "class_name": "AppStore" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ProjectStore", "AppStore"] }
+  ]
+}

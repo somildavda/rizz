@@ -1,0 +1,183 @@
+{
+ "duration": 69.923,
+ "scenes": [
+  {
+   "id": "s0",
+   "start": 0.0,
+   "end": 5.447,
+   "lines": [
+    {
+     "text": "Your team spends hours on search analysis.",
+     "start": 0.3,
+     "end": 3.159
+    },
+    {
+     "text": "What if it took one click?",
+     "start": 3.319,
+     "end": 4.897
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "start": 5.447,
+   "end": 10.66,
+   "lines": [
+    {
+     "text": "Meet SearchVerse.",
+     "start": 5.747,
+     "end": 6.985
+    },
+    {
+     "text": "Smart, AI-powered tools for search teams.",
+     "start": 7.145,
+     "end": 10.11
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "start": 10.66,
+   "end": 20.107,
+   "lines": [
+    {
+     "text": "Where is your traffic really coming from?",
+     "start": 10.96,
+     "end": 13.115
+    },
+    {
+     "text": "Performance Explorer shows your clicks, impressions and rankings,",
+     "start": 13.275,
+     "end": 17.008
+    },
+    {
+     "text": "for every product line, in one view.",
+     "start": 17.168,
+     "end": 19.557
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "start": 20.107,
+   "end": 28.957,
+   "lines": [
+    {
+     "text": "Who's on track, and who needs help?",
+     "start": 20.407,
+     "end": 22.391
+    },
+    {
+     "text": "Search Workspace lets you set deadlines for every task,",
+     "start": 22.551,
+     "end": 26.007
+    },
+    {
+     "text": "and see each person's performance score.",
+     "start": 26.167,
+     "end": 28.407
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "start": 28.957,
+   "end": 37.295,
+   "lines": [
+    {
+     "text": "Is your website too slow?",
+     "start": 29.257,
+     "end": 31.049
+    },
+    {
+     "text": "PageSpeed Lab tests hundreds of pages at once,",
+     "start": 31.209,
+     "end": 34.495
+    },
+    {
+     "text": "and shows which ones need fixing.",
+     "start": 34.655,
+     "end": 36.745
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "start": 37.295,
+   "end": 46.423,
+   "lines": [
+    {
+     "text": "What are competitors writing that you're not?",
+     "start": 37.595,
+     "end": 40.347
+    },
+    {
+     "text": "Topic Planner reads their websites and yours,",
+     "start": 40.507,
+     "end": 43.345
+    },
+    {
+     "text": "and finds every topic you're missing.",
+     "start": 43.505,
+     "end": 45.873
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "start": 46.423,
+   "end": 53.423,
+   "lines": [
+    {
+     "text": "It scores each topic for your brand,",
+     "start": 46.723,
+     "end": 48.963
+    },
+    {
+     "text": "and writes the content brief in one click.",
+     "start": 49.123,
+     "end": 51.725
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "start": 53.423,
+   "end": 60.423,
+   "lines": [
+    {
+     "text": "Are your videos showing up in search?",
+     "start": 53.723,
+     "end": 55.856
+    },
+    {
+     "text": "Video Visibility shows where you rank on YouTube.",
+     "start": 56.016,
+     "end": 59.344
+    }
+   ]
+  },
+  {
+   "id": "s9",
+   "start": 60.423,
+   "end": 69.923,
+   "lines": [
+    {
+     "text": "We're testing these modules right now.",
+     "start": 60.723,
+     "end": 63.155
+    },
+    {
+     "text": "Want early access?",
+     "start": 63.315,
+     "end": 64.744
+    },
+    {
+     "text": "DM me, and I'll send you an invite!",
+     "start": 64.904,
+     "end": 67.827
+    }
+   ]
+  }
+ ]
+}

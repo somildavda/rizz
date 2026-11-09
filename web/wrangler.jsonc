@@ -1,0 +1,27 @@
+{
+  "name": "searchverse-web",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none", "not_found_handling": "none" },
+  // Turn off the *.workers.dev address once searchverse.in is connected.
+  "workers_dev": true,
+  // Uncomment after adding searchverse.in to Cloudflare (Step 3 in README):
+  // "routes": [
+  //   { "pattern": "searchverse.in", "custom_domain": true },
+  //   { "pattern": "www.searchverse.in", "custom_domain": true }
+  // ],
+  "vars": {
+    "SITE_URL": "https://searchverse.in",
+    "MAIL_FROM": "SearchVerse <hello@searchverse.in>"
+    // "CANONICAL_HOST": "searchverse.in"   <- uncomment once the domain is live
+  },
+  // Databases (SQLite on Cloudflare, free plan), created on first deploy.
+  "durable_objects": {
+    "bindings": [
+      { "name": "PROJECTS", "class_name": "ProjectStore" },
+      { "name": "APP", "class_name": "AppStore" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectStore", "AppStore"] }]
+}

@@ -12,8 +12,17 @@ export function status(m) { hooks.status(m); }
 export function prog(p) { hooks.progress(p); }
 export function host(s) { return String(s || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, ""); }
 export function root(s) { return host(s).replace(/^www\./, ""); }
+// Calls the hub Worker. A reply that isn't JSON (e.g. Cloudflare's "Worker exceeded CPU"
+// page) becomes { ok: false, error } with the real status, instead of a bare "error".
 export function api(path) {
-  return fetch("/api/cg/" + path).then(function (r) { return r.json(); });
+  return fetch("/api/cg/" + path).then(function (r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); } catch (_) {
+        var m = t.match(/<title>([^<]*)<\/title>/i) || t.match(/error code:?\s*(\d+)/i);
+        return { ok: false, error: "HTTP " + r.status + (m ? " — " + m[1].trim() : "") };
+      }
+    });
+  }, function (e) { return { ok: false, error: "network: " + e.message }; });
 }
 export async function pool(items, n, fn) {
   var i = 0, out = [];
@@ -104,6 +113,11 @@ export async function crawlSite(domain, opts, part) {
     else live.get(fh).names.push(hosts[i]);
   });
   site.hosts = Array.from(live.values()).slice(0, opts.maxSubs);
+  if (!site.hosts.length) {
+    probes.slice(0, 3).forEach(function (p, i) { log("[" + r + "] " + hosts[i] + ": " + ((p && p.error) || "no answer")); });
+    log("[" + r + "] This site didn't let us in (often bot protection). Paste its article links in step 2 → “Article links to include” and we'll use those.");
+    site.refused = true;
+  }
   log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
   if (!site.hosts.length && !(opts.extra[r] || []).length) return site;
 
@@ -137,16 +151,25 @@ export async function crawlSite(domain, opts, part) {
   // Two FIFO queues (breadth-first): pages that belong in the report, and pages outside the
   // folder that are only visited to discover links to folder pages.
   var mainQ = [], transQ = [], mi = 0, ti = 0;
-  var keep = function (e) { return e.fed || inFolder(e.url); };
-  var add = function (u, depth, fed) {
+  // Category pages like /blog/prepaid/ often list articles that live at /blog/article-name.
+  // Links from a section page that stay under its parent folder (/blog/) belong to the section.
+  var parents = filt.map(function (f) { var x = f.replace(/\/+$/, ""), i = x.lastIndexOf("/"); return i > 0 ? x.slice(0, i + 1) : ""; }).filter(Boolean);
+  var underParent = function (u) { try { var path = new URL(u).pathname.toLowerCase(); return parents.some(function (pp) { return path.indexOf(pp) === 0 && path.length > pp.length; }); } catch (_) { return false; } };
+  var keep = function (e) { return e.fed || e.fromSection || inFolder(e.url); };
+  var add = function (u, depth, fed, fromSection) {
     if (!fed && !inScope(u)) return;
     var n = normUrl(u), e = seen.get(n);
-    if (e) { e.inlinks++; return; }
-    seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed });
+    if (e) {
+      e.inlinks++;
+      if (fromSection && !keep(e)) { e.fromSection = true; mainQ.push(e); }
+      return;
+    }
+    seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed, fromSection: !!fromSection });
     (keep(e) ? mainQ : transQ).push(e);
   };
   (opts.extra[r] || []).forEach(function (u) { add(u, 0, true); });
-  site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(normUrl(H.home.finalUrl)); e.data = H.home; e.inlinks = 0; });
+  // A home page that robots.txt blocks (or that is otherwise out of scope) is skipped.
+site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(normUrl(H.home.finalUrl)); if (e) { e.data = H.home; e.inlinks = 0; } });
   if (opts.full) {
     site.hosts.forEach(function (H) {
       filt.forEach(function (f) { if (f.charAt(0) === "/") add("https://" + H.host + f, 1); });
@@ -164,36 +187,60 @@ export async function crawlSite(domain, opts, part) {
     });
   }
 
-  var visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
+  // Politeness: start at 4 pages at a time, drop to 1 when a site starts refusing, creep back up
+  // when it recovers. Failed pages are retried (up to 2 more times) at the end of the queue.
+  var conc = 4, failedLast = 0, retried = 0, lost = 0, reasons = {};
+  var fails = 0, visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
   while (!state.stopped && kept < budget) {
     var batch = [];
-    while (batch.length < 6 && kept + batch.length < budget) {
-      if (mi < mainQ.length) batch.push(mainQ[mi++]);
-      else if (opts.full && ti < transQ.length && transit < transitBudget) { batch.push(transQ[ti++]); transit++; }
+    while (batch.length < conc && kept + batch.length < budget) {
+      var next = null;
+      if (mi < mainQ.length) next = mainQ[mi++];
+      else if (opts.full && ti < transQ.length && transit < transitBudget) { next = transQ[ti++]; if (keep(next)) next = null; else transit++; }
       else break;
+      if (!next || next.taken) continue;
+      next.taken = true; batch.push(next);
     }
     if (!batch.length) break;
+    failedLast = 0;
     var got = await Promise.all(batch.map(function (e) { return e.data ? Promise.resolve(e.data) : api("page?url=" + encodeURIComponent(e.url)).catch(function () { return { ok: false, url: e.url }; }); }));
     got.forEach(function (p, i) {
       var e = batch[i]; visited++;
-      if (!p || !p.ok) return;
+      if (!p || !p.ok) {
+        // A pasted link we couldn't open still counts: build it from the link and its title.
+        var why = (p && p.error) || "no answer";
+        if (!e.fed) {
+          failedLast++;
+          if ((e.tries || 0) < 2 && !/HTTP 404|HTTP 410|Not HTML|Invalid URL/.test(why)) { e.tries = (e.tries || 0) + 1; e.taken = false; mainQ.push(e); retried++; return; }
+          lost++; var key = why.replace(/https?:\S+/g, "").slice(0, 60); reasons[key] = (reasons[key] || 0) + 1;
+          if (fails++ < 3) log("[" + r + "] couldn't read " + e.url + ": " + why);
+          return;
+        }
+        p = { ok: true, url: e.url, finalUrl: e.url, title: (opts.titles || {})[e.url] || "", description: "", h1: [], h2: [], h3: [], links: [], fromList: true };
+      }
       var fn = normUrl(p.finalUrl);
       if (fn !== normUrl(e.url)) { var o = seen.get(fn); if (o && o !== e && o.done) { o.inlinks += e.inlinks; return; } seen.set(fn, e); }
       e.done = true;
-      if (opts.full) (p.links || []).forEach(function (l) { add(l, e.depth + 1); });
+      if (opts.full) { var fromSec = filt.length && inFolder(e.url); (p.links || []).forEach(function (l) { add(l, e.depth + 1, false, fromSec && underParent(l)); }); }
       if (!keep(e) || (!hostSet.has(new URL(p.finalUrl).host) && !e.fed)) return;
       kept++;
       p.host = new URL(p.finalUrl).host; p.fed = e.fed; p.depth = e.depth; p.entry = e;
       p.type = pageType(p);
+      // The section pages you chose (e.g. /blog/prepaid/) are listings of articles, not topics.
+      if (filt.some(function (f) { try { return new URL(p.finalUrl).pathname.toLowerCase().replace(/\/+$/, "") === f.replace(/\/+$/, ""); } catch (_) { return false; } })) p.type = "listing";
       p.keywords = p.type === "listing" ? [] : mainKeywords(p, brand);
       p.mainKeyword = p.keywords[0] || "";
       p.onPageKeyword = p.mainKeyword; p.keywordSource = p.mainKeyword ? "on-page" : "";
       p.topic = topicOf(p);
       p.indexable = !/noindex/i.test(p.robots || "") && (!p.canonical || (function () { try { return normUrl(new URL(p.canonical, p.finalUrl).toString()) === fn; } catch (_) { return true; } })());
       p.ranks = [];
+      p.h2 = (p.h2 || []).slice(0, 15);
       delete p.text; delete p.links; delete p.h3;
       pages.push(p);
     });
+    // Adjust speed: many failures -> slow down and pause; clean batch -> speed up again.
+    if (failedLast >= Math.max(1, Math.ceil(batch.length / 3))) { conc = Math.max(1, conc - 1); await new Promise(function (ok) { setTimeout(ok, 1500 * (5 - conc)); }); }
+    else if (!failedLast && conc < 4) conc++;
     var left = mainQ.length - mi, rate = kept / Math.max(1, (Date.now() - t0) / 1000);
     part(Math.min(1, kept / Math.max(1, Math.min(budget, kept + left))));
     status("Crawling " + r + ": " + kept.toLocaleString() + " kept · " + visited.toLocaleString() + " visited · " + left.toLocaleString() + " queued · " + rate.toFixed(1) + " pages/s" +
@@ -201,7 +248,9 @@ export async function crawlSite(domain, opts, part) {
   }
   pages.forEach(function (p) { p.inlinks = p.entry.inlinks; delete p.entry; });
   site.pages = pages;
-  site.discovered = mainQ.length; site.queuedLeft = mainQ.length - mi;
+  if (retried || lost) log("[" + r + "] retried " + retried + " page(s); " + lost + " still failed" + (lost ? " — reasons: " + Object.keys(reasons).map(function (k) { return k + " ×" + reasons[k]; }).join("; ") : ""));
+  site.failed = lost; site.failReasons = reasons;
+  site.discovered = mainQ.length; site.queuedLeft = mainQ.slice(mi).filter(function (x) { return !x.taken; }).length;
   log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget && mainQ.length > mi ? ", state.stopped at the page limit — " + (mainQ.length - mi).toLocaleString() + " more found but not crawled" : "") + ")");
   return site;
 }

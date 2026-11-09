@@ -54,6 +54,10 @@ export class ProjectStore extends DurableObject {
         covered_at INTEGER, covered_url TEXT, notes TEXT, status_changed_at INTEGER,
         PRIMARY KEY (project_id, key));
     `);
+    // Added later: each page's H2 headings and word count, used for content briefs.
+    const cols = this.sql.exec("PRAGMA table_info(pages)").toArray().map((c) => c.name);
+    if (!cols.includes("h2")) this.sql.exec("ALTER TABLE pages ADD COLUMN h2 TEXT");
+    if (!cols.includes("words")) this.sql.exec("ALTER TABLE pages ADD COLUMN words INTEGER");
   }
 
   rows(query, ...args) { return this.sql.exec(query, ...args).toArray(); }
@@ -66,6 +70,35 @@ export class ProjectStore extends DurableObject {
     const body = ["POST", "PUT", "PATCH"].includes(m) ? await request.json().catch(() => null) : null;
     if (["POST", "PUT", "PATCH"].includes(m) && !body) return json({ error: "Bad JSON" }, 400);
     const now = Date.now();
+
+    // Whole-workspace copy (used to move a browser's personal projects into the team workspace).
+    if (parts[0] === "export" && m === "GET") {
+      return json({ projects: this.rows("SELECT * FROM projects"), crawls: this.rows("SELECT * FROM crawls"), pages: this.rows("SELECT * FROM pages"), topics: this.rows("SELECT * FROM topics") });
+    }
+    if (parts[0] === "import" && m === "POST") {
+      const have = new Set(this.rows("SELECT id FROM projects").map((r) => r.id)), moved = [];
+      this.ctx.storage.transactionSync(() => {
+        for (const p of body.projects || []) {
+          if (have.has(p.id)) continue;
+          this.sql.exec("INSERT INTO projects (id, name, domain, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", p.id, p.name, p.domain, p.data, p.created_at, p.updated_at);
+          moved.push(p.id);
+          for (const c of (body.crawls || []).filter((c) => c.project_id === p.id)) {
+            const nc = this.one("INSERT INTO crawls (project_id, started_at, finished_at, summary) VALUES (?, ?, ?, ?) RETURNING id", p.id, c.started_at, c.finished_at, c.summary);
+            let sum = c.summary; try { const o = JSON.parse(c.summary || "null"); if (o) { o.crawlId = nc.id; sum = JSON.stringify(o); } } catch (_) {}
+            this.sql.exec("UPDATE crawls SET summary = ? WHERE id = ?", sum, nc.id);
+            for (const g of (body.pages || []).filter((g) => g.crawl_id === c.id)) {
+              this.sql.exec(`INSERT OR REPLACE INTO pages (crawl_id, site, url, type, title, h1, main_keyword, keywords, cluster, depth, inlinks, h2, words)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, nc.id, g.site, g.url, g.type, g.title, g.h1, g.main_keyword, g.keywords, g.cluster, g.depth, g.inlinks, g.h2 || null, g.words || 0);
+            }
+          }
+          for (const t of (body.topics || []).filter((t) => t.project_id === p.id)) {
+            this.sql.exec(`INSERT OR REPLACE INTO topics (project_id, key, label, section, status, score, data, first_seen, last_seen, covered_at, covered_url, notes, status_changed_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, p.id, t.key, t.label, t.section, t.status, t.score, t.data, t.first_seen, t.last_seen, t.covered_at, t.covered_url, t.notes, t.status_changed_at);
+          }
+        }
+      });
+      return json({ moved: moved.length, skipped: (body.projects || []).length - moved.length });
+    }
 
     if (parts[0] === "projects" && parts.length === 1 && m === "GET") {
       const list = this.rows(`SELECT p.id, p.name, p.domain, p.data, p.updated_at,
@@ -118,10 +151,11 @@ export class ProjectStore extends DurableObject {
       if (!this.one("SELECT id FROM crawls WHERE id = ?", cid)) return json({ error: "Unknown scan" }, 404);
       this.ctx.storage.transactionSync(() => {
         for (const p of pages) {
-          this.sql.exec(`INSERT OR REPLACE INTO pages (crawl_id, site, url, type, title, h1, main_keyword, keywords, cluster, depth, inlinks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, cid, String(p.site || ""), String(p.url || ""), p.type || null,
+          this.sql.exec(`INSERT OR REPLACE INTO pages (crawl_id, site, url, type, title, h1, main_keyword, keywords, cluster, depth, inlinks, h2, words)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, cid, String(p.site || ""), String(p.url || ""), p.type || null,
             String(p.title || "").slice(0, 300), String(p.h1 || "").slice(0, 300), p.mainKeyword || null,
-            JSON.stringify((p.keywords || []).slice(0, 6)), p.cluster || null, Number(p.depth) || 0, Number(p.inlinks) || 0);
+            JSON.stringify((p.keywords || []).slice(0, 6)), p.cluster || null, Number(p.depth) || 0, Number(p.inlinks) || 0,
+            JSON.stringify((p.h2 || []).slice(0, 15).map((x) => String(x).slice(0, 120))), Number(p.words) || 0);
         }
       });
       return json({ ok: true, saved: pages.length });
@@ -130,7 +164,7 @@ export class ProjectStore extends DurableObject {
       const site = url.searchParams.get("site"), offset = Number(url.searchParams.get("offset")) || 0, limit = Math.min(5000, Number(url.searchParams.get("limit")) || 5000);
       const q = site ? this.rows("SELECT * FROM pages WHERE crawl_id = ? AND site = ? LIMIT ? OFFSET ?", cid, site, limit, offset)
         : this.rows("SELECT * FROM pages WHERE crawl_id = ? LIMIT ? OFFSET ?", cid, limit, offset);
-      return json(q.map((r) => ({ ...r, keywords: JSON.parse(r.keywords || "[]") })));
+      return json(q.map((r) => ({ ...r, keywords: JSON.parse(r.keywords || "[]"), h2: JSON.parse(r.h2 || "[]") })));
     }
     if (cid && parts[2] === "finish" && m === "POST") {
       this.sql.exec("UPDATE crawls SET finished_at = ?, summary = ? WHERE id = ?", now, JSON.stringify(body.summary || {}), cid);
@@ -201,12 +235,46 @@ export class ProjectStore extends DurableObject {
   }
 }
 
-// Routes /api/cg/db/* to the caller's workspace database.
-export async function handleDb(request, env) {
-  const key = request.headers.get("X-Workspace-Key") || "";
-  if (key.length < 16) return json({ error: "A workspace key of at least 16 characters is required" }, 401);
-  if (!env.PROJECTS) return json({ error: "The PROJECTS database is not configured on this Worker" }, 500);
+async function personalStore(env, key) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("searchverse-cg:" + key));
   const name = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return env.PROJECTS.get(env.PROJECTS.idFromName(name)).fetch(request);
+  return env.PROJECTS.get(env.PROJECTS.idFromName(name));
+}
+const RANK = { viewer: 1, member: 2, manager: 3, admin: 4, owner: 5 };
+
+// Routes /api/cg/db/* to the project database.
+// Signed in: everyone shares one team workspace, and the role decides what they can change:
+//   viewer  — look only
+//   member  — also update topic statuses/notes and add topics to the plan
+//   manager — also create, edit, scan and delete projects (team admins and the owner too)
+// Without sign-in configured, each browser keeps its own workspace (X-Workspace-Key).
+export async function handleDb(request, env, user) {
+  if (!env.PROJECTS) return json({ error: "The PROJECTS database is not configured on this Worker" }, 500);
+  const key = request.headers.get("X-Workspace-Key") || "";
+  if (!user) {
+    if (key.length < 16) return json({ error: "A workspace key of at least 16 characters is required" }, 401);
+    return (await personalStore(env, key)).fetch(request);
+  }
+  const url = new URL(request.url), path = url.pathname.replace(/^\/api\/cg\/db\/?/, ""), m = request.method, rank = RANK[user.role] || 0;
+  const team = env.PROJECTS.get(env.PROJECTS.idFromName("team:main"));
+
+  // Copy the projects saved in this browser's old personal workspace into the team workspace.
+  if (path === "import-personal") {
+    if (rank < RANK.manager) return json({ error: "Only project managers and admins can move projects." }, 403);
+    if (key.length < 16) return json({ moved: 0, note: "No personal workspace in this browser." });
+    const dump = await (await personalStore(env, key)).fetch("https://db/api/cg/db/export").then((r) => r.json());
+    if (m !== "POST") return json({ projects: (dump.projects || []).map((p) => ({ id: p.id, name: p.name })) });
+    const res = await team.fetch("https://db/api/cg/db/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(dump) });
+    return new Response(res.body, res);
+  }
+  // The owner can download every team project, to move them into the standalone
+  // Topic Planner Worker (Dashboard → Restore / import there).
+  if (path === "export" && m === "GET" && user.role === "owner") return team.fetch(request);
+  if (path === "export" || path === "import") return json({ error: "Not found" }, 404);
+
+  const canChange = m === "GET" ? true
+    : rank >= RANK.manager ? true
+    : rank >= RANK.member && /^projects\/[^/]+\/topics(\/.+)?$/.test(path) && (m === "PATCH" || m === "PUT");
+  if (!canChange) return json({ error: rank >= RANK.member ? "Only project managers can change projects and run scans." : "You have view-only access." }, 403);
+  return team.fetch(request);
 }

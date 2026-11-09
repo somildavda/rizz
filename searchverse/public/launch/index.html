@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SearchVerse Launch</title>
+<meta name="description" content="Your team spends hours on search analysis. What if it took one click? SearchVerse is a set of AI-powered tools for search teams, now in testing.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="SearchVerse: hours of search analysis, in one click">
+<meta property="og:description" content="AI-powered tools for search teams: performance, team deadlines and scores, page speed, topic gaps and YouTube rankings. Testing now. DM for early access.">
+<meta property="og:url" content="https://searchverse-hub.shred-app.workers.dev/launch">
+<meta property="og:image" content="https://searchverse-hub.shred-app.workers.dev/launch/og.jpg">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="628">
+<meta property="og:video" content="https://searchverse-hub.shred-app.workers.dev/launch/searchverse-launch.mp4">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#06070D;--panel:rgba(18,21,38,.72);--line:rgba(140,150,220,.18);--text:#EDEFFA;--muted:#9097B5;--a:#7C5CFF;--b:#22D3EE;--good:#34D399}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(800px 600px at 50% 10%,rgba(124,92,255,.25),transparent 70%),radial-gradient(600px 500px at 80% 90%,rgba(34,211,238,.10),transparent 70%);pointer-events:none}
+.wrap{position:relative;max-width:1100px;margin:0 auto;padding:28px 16px 60px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:40px}
+.logo{font-weight:800;font-size:20px;text-decoration:none;color:var(--text)}
+.grad{background:linear-gradient(90deg,#A78BFA,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:12px;font:inherit;font-weight:700;text-decoration:none;color:var(--text);border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff;box-shadow:0 14px 34px -12px rgba(124,92,255,.9)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.pill{display:inline-block;padding:7px 14px;border-radius:999px;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.14);font-weight:700;font-size:14px;color:#C9BDFF}
+h1{font-size:clamp(36px,5vw,58px);font-weight:900;letter-spacing:-.035em;line-height:1.04;margin:18px 0 16px}
+.lead{color:var(--muted);font-size:18px;line-height:1.6}
+video{width:100%;aspect-ratio:1;border-radius:24px;border:1px solid var(--line);background:#000;box-shadow:0 40px 100px -40px rgba(124,92,255,.7);display:block}
+.share{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:60px}
+.f{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px}
+.f b{display:block;font-size:17px;margin:10px 0 6px}.f p{color:var(--muted);font-size:15px;line-height:1.55}.f i{font-style:normal;font-size:28px}
+footer{margin-top:56px;color:var(--muted);font-size:14px;text-align:center}
+footer a{color:var(--text)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--good);color:#04110B;font-weight:700;padding:10px 18px;border-radius:10px;opacity:0;transition:.3s}
+.toast.on{opacity:1}
+@media(max-width:820px){.grid{grid-template-columns:1fr;gap:28px}.feats{grid-template-columns:1fr}nav .btn{padding:9px 14px;font-size:14px}}
+</style></head>
+<body><div class="wrap">
+<nav><a class="logo" href="/launch">🔭 <span class="grad">SearchVerse</span></a><a class="btn primary" href="https://www.linkedin.com/in/somil-m-p-davda-a4a8b8156/" target="_blank" rel="noopener">💬 DM me</a></nav>
+<div class="grid">
+  <div>
+    <span class="pill">✦ AI-powered tools for search teams</span> <span class="pill" style="border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.12);color:#FBBF24">● Testing new modules</span>
+    <h1>Hours of search analysis? <span class="grad">One click.</span></h1>
+    <p class="lead">Your team spends hours on search analysis. SearchVerse is a set of AI-powered tools for search teams that does it in one click. We're testing the modules right now. Want early access? DM me and I'll send you an invite.</p>
+    <div class="share">
+      <a class="btn primary" href="https://www.linkedin.com/in/somil-m-p-davda-a4a8b8156/" target="_blank" rel="noopener">💬 DM me for early access</a>
+      <a class="btn" href="/login?next=/">Request beta access →</a>
+      <button class="btn" data-share="linkedin">in Share on LinkedIn</button>
+      <button class="btn" data-share="whatsapp">💬 WhatsApp</button>
+      <button class="btn" data-share="x">𝕏 Post</button>
+      <button class="btn" data-share="copy">🔗 Copy link</button>
+    </div>
+  </div>
+  <video src="/launch/searchverse-launch.mp4" poster="/launch/poster.jpg" controls playsinline muted autoplay loop preload="metadata"></video>
+</div>
+<div class="feats">
+  <div class="f"><i>📊</i><b>Performance Explorer</b><p>Where is your traffic really coming from? Clicks, impressions and rankings for every product line, in one view.</p></div>
+  <div class="f"><i>🗂️</i><b>Search Workspace</b><p>Who's on track, and who needs help? Set deadlines for every task and see each person's performance score.</p></div>
+  <div class="f"><i>🚀</i><b>PageSpeed Lab</b><p>Is your website too slow? Test hundreds of pages at once and see which ones need fixing.</p></div>
+  <div class="f"><i>🧩</i><b>Topic Planner</b><p>What are competitors writing that you're not? Find every topic you're missing, scored for your brand, with the brief in one click.</p></div>
+  <div class="f"><i>▶️</i><b>Video Visibility</b><p>Are your videos showing up in search? See where you rank on YouTube.</p></div>
+  <div class="f" style="border-color:rgba(251,191,36,.45)"><i>🧪</i><b>Testing now</b><p>We're testing these modules right now. Want early access? DM me and I'll send you an invite.</p></div>
+</div>
+<footer>Built by <a href="https://www.linkedin.com/in/somil-m-p-davda-a4a8b8156/" target="_blank" rel="noopener">Somil Davda</a> · Digital marketing expert · <a href="/launch/searchverse-launch.mp4" download>Download the video</a></footer>
+</div>
+<div class="toast" id="toast">Link copied</div>
+<script>
+var URL_ = "https://searchverse-hub.shred-app.workers.dev/launch", TEXT = "Hours of search analysis? One click. SearchVerse: AI-powered tools for search teams, now in testing.";
+document.querySelectorAll("[data-share]").forEach(function (b) {
+  b.onclick = function () {
+    var k = b.dataset.share, u = encodeURIComponent(URL_), t = encodeURIComponent(TEXT);
+    fetch("/api/launch-share", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ via: k }) }).catch(function () {});
+    if (k === "copy") { navigator.clipboard.writeText(URL_).then(function () { var e = document.getElementById("toast"); e.classList.add("on"); setTimeout(function () { e.classList.remove("on"); }, 1600); }); return; }
+    var link = { linkedin: "https://www.linkedin.com/sharing/share-offsite/?url=" + u, whatsapp: "https://wa.me/?text=" + t + "%20" + u, x: "https://twitter.com/intent/tweet?text=" + t + "&url=" + u }[k];
+    window.open(link, "_blank", "noopener,width=640,height=640");
+  };
+});
+</script>
+</body></html>

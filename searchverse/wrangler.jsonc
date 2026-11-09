@@ -11,7 +11,14 @@
   // Project database for the Content Gap tool (SQLite Durable Object, free plan).
   // Created automatically on deploy; nothing to set up in the dashboard.
   "durable_objects": {
-    "bindings": [{ "name": "PROJECTS", "class_name": "ProjectStore" }]
+    "bindings": [
+      { "name": "PROJECTS", "class_name": "ProjectStore" },
+      // Accounts, sign-in and usage analytics (the admin dashboard at /admin).
+      { "name": "APP", "class_name": "AppStore" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectStore"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ProjectStore"] },
+    { "tag": "v2", "new_sqlite_classes": ["AppStore"] }
+  ]
 }

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>SearchVerse Trailer</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#05060C;--panel:rgba(17,20,38,.78);--line:rgba(140,150,220,.18);--text:#EEF0FB;--muted:#8E95B4;--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--good:#34D399;--warn:#FBBF24;--bad:#FB7185}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#000;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;width:1080px;height:1080px;margin:-540px 0 0 -540px;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+.abs{position:absolute}
+#stars{inset:0}
+#glow{width:1000px;height:1000px;border-radius:50%;left:40px;top:-40px;background:radial-gradient(circle,rgba(124,92,255,.30),rgba(34,211,238,.08) 45%,transparent 70%)}
+#floor{left:-200px;right:-200px;bottom:-120px;height:420px;background:linear-gradient(rgba(124,92,255,.22) 1px,transparent 1px) 0 0/60px 60px,linear-gradient(90deg,rgba(124,92,255,.22) 1px,transparent 1px) 0 0/60px 60px;transform:perspective(500px) rotateX(62deg);-webkit-mask-image:linear-gradient(transparent,#000 60%);mask-image:linear-gradient(transparent,#000 60%);opacity:.5}
+#sweep{inset:0;z-index:8;pointer-events:none;background:linear-gradient(105deg,transparent 35%,rgba(167,139,250,.20) 47%,rgba(34,211,238,.28) 50%,rgba(167,139,250,.20) 53%,transparent 65%);background-size:300% 100%;opacity:0}
+.planet{border-radius:50%;background:radial-gradient(circle at 32% 30%,#C4B5FD,#7C5CFF 38%,#2A1B7A 72%,#120A3A);box-shadow:0 0 140px rgba(124,92,255,.75),inset -30px -40px 80px rgba(0,0,0,.55)}
+.ring{border-radius:50%;border:2px solid rgba(140,150,220,.22)}
+.mod{width:178px;height:60px;border-radius:18px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 16px;font-weight:700;font-size:19px;white-space:nowrap;box-shadow:0 14px 40px -12px rgba(124,92,255,.6)}
+.mod i{font-style:normal;font-size:24px}
+.scene{inset:0;opacity:0;will-change:transform,opacity,filter}
+.big{font-weight:900;letter-spacing:-.035em;line-height:1.05}
+.c{text-align:center;width:100%}
+.grad{background:linear-gradient(90deg,#B4A3FF,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:11px 22px;border-radius:999px;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.14);font-weight:700;font-size:22px;color:#CFC4FF}
+/* glass card with a soft gradient edge */
+.card{position:relative;background:var(--panel);border-radius:26px;padding:24px 30px;box-shadow:0 30px 80px -30px rgba(0,0,0,.85)}
+.card:before{content:"";position:absolute;inset:0;border-radius:26px;padding:1px;background:linear-gradient(135deg,rgba(167,139,250,.55),rgba(34,211,238,.18) 40%,rgba(140,150,220,.12));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+.card.abs{position:absolute}
+.head{left:84px;right:84px;top:118px}
+.kick{font-size:21px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--b);display:flex;align-items:center;gap:12px}
+.kick em{font-style:normal;font-size:30px;letter-spacing:0}
+.kick span.n{margin-left:auto;color:var(--muted);letter-spacing:.08em;font-size:19px}
+.hook{font-size:60px;margin-top:16px}
+.body{left:84px;right:84px;top:400px}
+.row{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);font-size:25px;font-weight:600}
+.row:last-child{border:0}
+.th{font-size:17px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;padding-top:0}
+.bar{flex:0 0 200px;height:12px;border-radius:9px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b))}
+.num{font-weight:800;color:var(--good);text-align:right;white-space:nowrap}
+.mut{color:var(--muted);font-weight:500}
+.chip{display:inline-block;padding:5px 13px;border-radius:999px;font-size:18px;font-weight:800;white-space:nowrap}
+.ok{background:rgba(52,211,153,.14);color:var(--good)}
+.wa{background:rgba(251,191,36,.14);color:var(--warn)}
+.no{background:rgba(251,113,133,.14);color:var(--bad)}
+.tag{display:inline-block;padding:7px 16px;border-radius:999px;font-size:20px;font-weight:700;background:rgba(34,211,238,.12);color:var(--b);margin:0 8px 10px 0}
+.av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-size:18px;font-weight:800;color:#fff;flex:0 0 44px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.kpi{padding:20px 22px}
+.kpi b{display:block;font-size:42px;font-weight:900;letter-spacing:-.02em}
+.kpi span{font-size:18px;color:var(--muted);font-weight:600}
+.kpi i{font-style:normal;font-size:17px;font-weight:800;color:var(--good);margin-left:6px}
+.role{padding:15px 22px;border-radius:18px;background:var(--panel);border:1px solid var(--line);font-size:28px;font-weight:700;display:flex;align-items:center;gap:14px}
+.role small{font-size:20px;color:var(--muted);font-weight:500;margin-left:auto}
+/* always on */
+#beta{top:34px;right:38px;z-index:9;display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:999px;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.45);color:var(--warn);font-weight:800;font-size:16px;letter-spacing:.1em}
+#beta i{width:9px;height:9px;border-radius:50%;background:var(--warn);box-shadow:0 0 12px var(--warn)}
+#logo{top:36px;left:40px;z-index:9;font-weight:800;font-size:22px;opacity:0}
+#prog{left:0;bottom:0;height:5px;width:0;background:linear-gradient(90deg,var(--a),var(--b));z-index:9}
+#sub{left:70px;right:70px;bottom:40px;z-index:9;text-align:center;opacity:0}
+#sub span.box{display:inline-block;background:rgba(5,6,12,.86);border:1px solid var(--line);border-radius:16px;padding:12px 24px;font-size:29px;font-weight:700;line-height:1.35;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#sub w{color:rgba(238,240,251,.42);transition:none}
+#sub w.on{color:#fff}
+.cursor{width:46px;height:46px;z-index:5}
+.ripple{width:40px;height:40px;border-radius:50%;border:3px solid var(--b);opacity:0}
+</style></head>
+<body>
+<div id="stage">
+  <canvas id="stars" class="abs" width="1080" height="1080"></canvas>
+  <div id="glow" class="abs"></div>
+  <div id="floor" class="abs"></div>
+  <div id="logo" class="abs">🔭 <span class="grad">SearchVerse</span></div>
+  <div id="beta" class="abs"><i></i>LIVE FOR TESTING</div>
+
+  <!-- s0 · hook -->
+  <div class="scene abs" id="s0">
+    <div class="c abs" id="h0i" style="top:200px;font-size:90px">⏳</div>
+    <div class="big c abs" id="h0a" style="top:330px;font-size:78px">Hours of search<br>analysis…</div>
+    <div class="big c abs" id="h0b" style="top:590px;font-size:124px"><span class="grad">One click.</span></div>
+    <div class="ripple abs" id="rip" style="left:740px;top:690px"></div>
+    <div class="cursor abs" id="cur" style="font-size:44px">👆</div>
+  </div>
+
+  <!-- s1 · planet -->
+  <div class="scene abs" id="s1">
+    <div class="ring abs" id="ring" style="width:620px;height:620px;left:230px;top:150px"></div>
+    <div class="planet abs" id="planet" style="width:220px;height:220px;left:430px;top:350px"></div>
+    <div id="mods"></div>
+    <div class="big c abs" id="h1" style="top:800px;font-size:84px">Meet <span class="grad">SearchVerse</span></div>
+  </div>
+
+  <!-- s2 · Performance Explorer -->
+  <div class="scene abs" id="s2">
+    <div class="head abs"><div class="kick"><em>📊</em>Performance Explorer<span class="n">01 / 05</span></div><div class="big hook" id="k2">Where is your traffic<br><span class="grad">really coming from?</span></div></div>
+    <div class="body abs">
+      <div class="kpis" id="pk"></div>
+      <div class="card" style="margin-top:16px;padding:20px 26px">
+        <div id="lob" style="margin-bottom:4px"></div>
+        <svg viewBox="0 0 860 200" width="100%" height="200"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient><linearGradient id="fg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="rgba(124,92,255,.35)"/><stop offset="1" stop-color="rgba(124,92,255,0)"/></linearGradient></defs>
+          <path id="area" fill="url(#fg)"/><path id="line" fill="none" stroke="url(#lg)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle id="dot" r="9" fill="#22D3EE" opacity="0"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- s3 · Search Workspace -->
+  <div class="scene abs" id="s3">
+    <div class="head abs"><div class="kick"><em>🗂️</em>Search Workspace<span class="n">02 / 05</span></div><div class="big hook" id="k3">Who's on track,<br><span class="grad">and who needs help?</span></div></div>
+    <div class="card body abs" id="ws"></div>
+  </div>
+
+  <!-- s4 · PageSpeed Lab -->
+  <div class="scene abs" id="s4">
+    <div class="head abs"><div class="kick"><em>🚀</em>PageSpeed Lab<span class="n">03 / 05</span></div><div class="big hook" id="k4">Is your website<br><span class="grad">too slow?</span></div></div>
+    <div class="body abs">
+      <div class="card" style="display:flex;align-items:center;gap:18px;padding:18px 26px;margin-bottom:16px"><span style="font-size:26px;font-weight:700;flex:1">Testing <span id="psn" class="grad">0</span> pages</span><span class="bar" style="flex:0 0 360px"><b id="psb"></b></span></div>
+      <div class="card" id="ps"></div>
+    </div>
+  </div>
+
+  <!-- s5 · Topic Planner -->
+  <div class="scene abs" id="s5">
+    <div class="head abs"><div class="kick"><em>🧩</em>Topic Planner<span class="n">04 / 05</span></div><div class="big hook" id="k5">What are competitors<br><span class="grad">writing that you're not?</span></div></div>
+    <div class="body abs"><div class="card" id="crawl"></div>
+      <div class="card" id="found" style="margin-top:16px;display:flex;align-items:center;gap:18px;font-size:30px;font-weight:800"><span style="font-size:42px">🎯</span><span><span id="gapn" class="grad" style="font-size:46px">0</span> missing topics found</span></div></div>
+  </div>
+
+  <!-- s6 · scores and brief -->
+  <div class="scene abs" id="s6">
+    <div class="head abs"><div class="kick"><em>📝</em>Topic Planner · AI brief<span class="n">04 / 05</span></div><div class="big hook" id="k6">Scored for your brand.<br><span class="grad">Brief in one click.</span></div></div>
+    <div class="body abs" style="display:grid;grid-template-columns:1fr 1.05fr;gap:16px">
+      <div class="card" id="gaps" style="padding:20px 24px"></div>
+      <div class="card" id="brief" style="padding:20px 24px">
+        <div class="th" style="font-size:16px;margin-bottom:8px">CONTENT BRIEF</div>
+        <div id="btitle" style="font-size:24px;font-weight:800;margin-bottom:12px;min-height:62px"></div>
+        <div><span class="tag">Keywords</span><span class="tag">H2 outline</span><span class="tag">FAQs</span></div>
+        <div class="row" style="font-size:21px;padding:8px 0">✅ Experience</div><div class="row" style="font-size:21px;padding:8px 0">✅ Expertise</div><div class="row" style="font-size:21px;padding:8px 0">✅ Authority</div><div class="row" style="font-size:21px;padding:8px 0">✅ Trust</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- s7 · Video Visibility -->
+  <div class="scene abs" id="s7">
+    <div class="head abs"><div class="kick"><em>▶️</em>Video Visibility<span class="n">05 / 05</span></div><div class="big hook" id="k7">Are your videos<br><span class="grad">showing up in search?</span></div></div>
+    <div class="card body abs" id="yt"></div>
+  </div>
+
+  <!-- s9 · end card -->
+  <div class="scene abs" id="s9">
+    <div class="planet abs" id="p9" style="width:120px;height:120px;left:480px;top:150px"></div>
+    <div class="c abs" style="top:306px"><span class="pill" id="e1" style="border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.10);color:var(--warn)"><i style="width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 10px var(--warn)"></i>Testing new modules</span></div>
+    <div class="big c abs" id="e2" style="top:380px;font-size:104px"><span class="grad">SearchVerse</span></div>
+    <div class="c abs" id="e3" style="top:516px;font-size:32px;color:var(--muted);font-weight:600">Every search answer, one click away.</div>
+    <div class="abs" id="e4" style="top:596px;left:0;right:0;display:flex;justify-content:center;gap:12px">
+      <span class="chip wa" style="font-size:20px;padding:9px 16px">● Topic Planner</span><span class="chip wa" style="font-size:20px;padding:9px 16px">● PageSpeed Lab</span><span class="chip wa" style="font-size:20px;padding:9px 16px">● Video Visibility</span>
+    </div>
+    <div class="c abs" id="e5" style="top:690px"><span class="pill" id="cta" style="font-size:32px;padding:20px 42px;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;border:0;box-shadow:0 20px 50px -14px rgba(124,92,255,.9)">💬 DM me for early access</span></div>
+    <div class="c abs" id="e6" style="top:806px;font-size:24px;font-weight:700">I'll send you an invite 🙌</div>
+    <div class="c abs" id="e7" style="top:852px;font-size:20px;color:var(--muted)">Built by <b style="color:var(--text)">Somil Davda</b> · Digital marketing expert</div>
+  </div>
+
+  <div id="sweep" class="abs"></div>
+  <div id="sub" class="abs"><span class="box" id="subt"></span></div>
+  <div id="prog" class="abs"></div>
+</div>
+
+<script>
+// Every frame is drawn from the time t (seconds), following the voice-over timeline.
+var $ = function (s) { return document.getElementById(s); };
+var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
+var ease = function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
+var easeIO = function (x) { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+var span = function (t, a, b) { return ease((t - a) / (b - a)); };
+var fmt = function (n) { return Math.round(n).toLocaleString("en-US"); };
+
+var x = new XMLHttpRequest(); x.open("GET", "timeline.json", false); x.send();
+var TL = JSON.parse(x.responseText), D = TL.duration, SC = TL.scenes;
+window.TRAILER = TL;
+
+function fit() { var k = Math.min(innerWidth, innerHeight) / 1080; $("stage").style.transform = "scale(" + k + ")"; }
+if (!/render=1/.test(location.search)) { addEventListener("resize", fit); fit(); }
+
+var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+var STARS = []; for (var i = 0; i < 240; i++) STARS.push([rnd() * 1080, rnd() * 1080, rnd() * 1.6 + .3, rnd() * 6.28]);
+function stars(t) {
+  var c = $("stars").getContext("2d"); c.clearRect(0, 0, 1080, 1080);
+  STARS.forEach(function (s) { c.globalAlpha = .3 + .35 * Math.sin(t * 2 + s[3]); c.fillStyle = "#fff"; c.beginPath(); c.arc((s[0] - t * 4 * s[2] + 1080) % 1080, s[1], s[2], 0, 7); c.fill(); });
+}
+function rise(el, u, a, d) { var k = span(u, a, a + (d || .55)); el.style.opacity = k; el.style.transform = "translateY(" + (1 - k) * 34 + "px)"; el.style.filter = k < 1 ? "blur(" + (1 - k) * 6 + "px)" : ""; return k; }
+function kids(id) { return [].slice.call($(id).children); }
+
+// ---- mock screens (neutral example names only) ----
+var MODS = [["📊", "Performance"], ["🗂️", "Workspace"], ["🚀", "PageSpeed"], ["🧩", "Topic Planner"], ["▶️", "Video"]];
+$("mods").innerHTML = MODS.map(function (m, i) { return '<div class="mod abs" id="m' + i + '"><i>' + m[0] + "</i>" + m[1] + "</div>"; }).join("");
+
+var PK = [["Clicks", 48210, "+18%"], ["Impressions", 1920400, "+32%"], ["Avg. position", 8.4, "↑ 2.1"]];
+$("pk").innerHTML = PK.map(function (k, i) { return '<div class="card kpi"><b id="pk' + i + '">0</b><span>' + k[0] + '<i id="pd' + i + '"></i></span></div>'; }).join("");
+var LOB = ["All products", "Product A", "Product B", "Support"];
+$("lob").innerHTML = LOB.map(function (x, i) { return '<span class="tag" id="lob' + i + '">' + x + "</span>"; }).join("");
+var PTS = []; for (var i = 0; i <= 30; i++) PTS.push(165 - i * 3.6 - 20 * Math.sin(i * .7) - (i > 18 ? (i - 18) * 2.2 : 0));
+
+var WS = [["AS", "#7C5CFF", "Aarav", "Refresh 10 blog posts", "Done", "ok", 92], ["PR", "#22D3EE", "Priya", "Fix speed on product pages", "Due Fri", "wa", 84], ["RK", "#F472B6", "Rohan", "Monthly client report", "Due today", "wa", 76], ["NM", "#34D399", "Neha", "New topic cluster briefs", "Overdue", "no", 58]];
+$("ws").innerHTML = '<div class="row th"><span style="flex:1">Person · task</span><span style="width:150px;text-align:center">Deadline</span><span style="width:210px;text-align:right">Score</span></div>' +
+  WS.map(function (w, i) { return '<div class="row" id="w' + i + '"><span class="av" style="background:' + w[1] + '">' + w[0] + '</span><span style="flex:1;line-height:1.25">' + w[2] + '<br><span class="mut" style="font-size:20px">' + w[3] + '</span></span><span style="width:150px;text-align:center"><span class="chip ' + w[5] + '" id="wd' + i + '">' + w[4] + '</span></span><span style="width:210px;display:flex;align-items:center;gap:12px;justify-content:flex-end"><span class="bar" style="flex:0 0 120px"><b id="wb' + i + '"></b></span><span class="num" id="wn' + i + '" style="width:48px;color:' + (w[6] >= 80 ? "var(--good)" : w[6] >= 70 ? "var(--warn)" : "var(--bad)") + '">0</span></span></div>'; }).join("");
+
+var PS = [["/", "1.8s", 1], ["/pricing", "2.1s", 1], ["/blog/guide", "4.6s", 0], ["/contact", "1.6s", 1], ["/products", "3.9s", 0]];
+$("ps").innerHTML = '<div class="row th"><span style="flex:1">yourbrand.com</span><span style="width:120px;text-align:right">Load time</span><span style="width:160px;text-align:right">Result</span></div>' +
+  PS.map(function (p, i) { return '<div class="row" id="ps' + i + '"><span style="flex:1">' + p[0] + '</span><span style="width:120px;text-align:right">' + p[1] + '</span><span style="width:160px;text-align:right"><span class="chip ' + (p[2] ? "ok" : "no") + '" id="pc' + i + '">' + (p[2] ? "✓ Fast" : "⚠ Fix this") + "</span></span></div>"; }).join("");
+
+var SITES = [["⭐ yourbrand.com", 1240], ["competitor-a.com", 1910], ["competitor-b.com", 860]];
+$("crawl").innerHTML = SITES.map(function (s, i) { return '<div class="row"><span style="flex:1">' + (i ? "🌐 " : "") + s[0] + '</span><span class="bar"><b id="cb' + i + '"></b></span><span id="cn' + i + '" class="mut" style="width:190px;text-align:right;white-space:nowrap"></span></div>'; }).join("");
+
+var GAPS = [["Beginner's guide", 94], ["Pricing explained", 89], ["Setup checklist", 83], ["X vs Y compared", 77], ["Common mistakes", 71]];
+$("gaps").innerHTML = '<div class="th" style="font-size:16px;margin-bottom:6px">MISSING TOPICS · SCORE</div>' + GAPS.map(function (g, i) { return '<div class="row" id="g' + i + '" style="font-size:21px;gap:10px;padding:10px 0"><span style="flex:1">' + g[0] + '</span><span class="num" id="gs' + i + '" style="width:44px">0</span></div>'; }).join("");
+var BT = "The beginner's guide: everything you need to know";
+
+var YT = [["“how to get started”", "#2", "ok"], ["“beginner tutorial”", "#4", "ok"], ["“best tools 2026”", "Not found", "no"], ["“step by step guide”", "#7", "ok"]];
+$("yt").innerHTML = '<div class="row th"><span style="flex:1">YouTube search</span><span style="width:170px;text-align:right">Your video</span><span style="width:190px;text-align:right">Other channels</span></div>' +
+  YT.map(function (y, i) { return '<div class="row" id="yt' + i + '"><span style="flex:1">' + y[0] + '</span><span style="width:170px;text-align:right"><span class="chip ' + y[2] + '">' + y[1] + '</span></span><span class="mut" style="width:190px;text-align:right">' + (3 + i * 2) + " videos</span></div>"; }).join("");
+
+// subtitle words, split once per line
+SC.forEach(function (s) { s.lines.forEach(function (l) { l.words = l.text.split(" "); }); });
+function subtitle(t) {
+  var line = null;
+  SC.forEach(function (s) { s.lines.forEach(function (l) { if (t >= l.start - .15 && t <= l.end + .25) line = l; }); });
+  $("sub").style.opacity = line ? 1 : 0;
+  if (!line) return;
+  // words light up in step with the voice (spread by length)
+  var tot = line.text.length, p = (t - line.start) / (line.end - line.start) * tot, acc = 0;
+  $("subt").innerHTML = line.words.map(function (w) { var on = acc <= p; acc += w.length + 1; return "<w" + (on ? ' class="on"' : "") + ">" + w + "</w>"; }).join(" ");
+}
+
+// each scene draws itself from local time u; L[i] = start of its i-th spoken line (local)
+var DRAW = {
+  s0: function (u, d, L) {
+    rise($("h0i"), u, .1); $("h0i").style.transform += " rotate(" + span(u, .2, 2.2) * 180 + "deg)";
+    rise($("h0a"), u, .3, .7);
+    var c = L[1] - .2;
+    var k = span(u, c, c + .5); $("h0b").style.opacity = k; $("h0b").style.transform = "scale(" + (.7 + .3 * k + .04 * span(u, c + .5, d)) + ")"; $("h0b").style.filter = k < 1 ? "blur(" + (1 - k) * 10 + "px)" : "";
+    var mv = span(u, c - .9, c - .1); $("cur").style.opacity = span(u, c - 1.1, c - .8); $("cur").style.left = (900 - 140 * mv) + "px"; $("cur").style.top = (900 - 190 * mv) + "px";
+    $("cur").style.transform = "scale(" + (u > c - .1 && u < c + .15 ? .82 : 1) + ")";
+    var r = clamp((u - c) / .8); $("rip").style.opacity = r > 0 && r < 1 ? 1 - r : 0; $("rip").style.transform = "scale(" + (1 + r * 5) + ")";
+  },
+  s1: function (u, d) {
+    var g = span(u, 0, 1.2);
+    $("planet").style.transform = "scale(" + (.3 + .7 * g) + ") rotate(" + u * 8 + "deg)"; $("ring").style.transform = "scale(" + g + ")"; $("ring").style.opacity = g;
+    MODS.forEach(function (m, i) {
+      var a = u * .5 + i / MODS.length * 6.283, k = span(u, .4 + i * .18, 1.4 + i * .18);
+      var e = $("m" + i); e.style.left = (540 + Math.cos(a) * 310 * k - 89) + "px"; e.style.top = (460 + Math.sin(a) * 250 * k - 30) + "px";
+      e.style.opacity = k; e.style.transform = "scale(" + (.82 + .22 * (Math.sin(a) + 1) / 2) + ")"; e.style.zIndex = Math.sin(a) > 0 ? 3 : 1;
+    });
+    var k = rise($("h1"), u, .2, .7); $("h1").style.transform += " scale(" + (.94 + .06 * k) + ")";
+  },
+  s2: function (u, d, L) {
+    rise($("k2"), u, .05);
+    kids("pk").forEach(function (e, i) { rise(e, u, E(L) + i * .15); });
+    PK.forEach(function (k, i) { var p = span(u, L[1] + i * .25, L[1] + 2.2 + i * .25); $("pk" + i).textContent = i === 2 ? (20 - (20 - k[1]) * p).toFixed(1) : fmt(k[1] * p); $("pd" + i).textContent = p > .95 ? k[2] : ""; });
+    var p = span(u, L[1] + .3, L[2] + 1.5) * 30, n = Math.floor(p), d2 = "M0 " + PTS[0], lx = 0, ly = PTS[0];
+    for (var i = 1; i <= n; i++) d2 += " L" + (i * 860 / 30) + " " + PTS[i];
+    if (n < 30 && p > 0) { var f = p - n; lx = (n + f) * 860 / 30; ly = PTS[n] + (PTS[n + 1] - PTS[n]) * f; d2 += " L" + lx + " " + ly; } else { lx = n * 860 / 30; ly = PTS[n]; }
+    $("line").setAttribute("d", p > 0 ? d2 : ""); $("area").setAttribute("d", p > 0 ? d2 + " L" + lx + " 200 L0 200 Z" : "");
+    $("dot").setAttribute("cx", lx); $("dot").setAttribute("cy", ly); $("dot").setAttribute("opacity", p > 0 ? 1 : 0);
+    var sel = u < L[2] ? 0 : 1 + Math.floor((u - L[2]) / 1.1) % 3;
+    LOB.forEach(function (x, i) { var e = $("lob" + i); e.style.background = i === sel ? "linear-gradient(90deg,#7C5CFF,#22D3EE)" : ""; e.style.color = i === sel ? "#fff" : ""; });
+    rise($("lob").parentNode, u, E(L) + .4);
+  },
+  s3: function (u, d, L) {
+    rise($("k3"), u, .05); rise($("ws"), u, E(L));
+    WS.forEach(function (w, i) {
+      rise($("w" + i), u, E(L) + .2 + i * .15);
+      var dk = span(u, L[1] + .8 + i * .35, L[1] + 1.1 + i * .35); $("wd" + i).style.opacity = dk; $("wd" + i).style.transform = "scale(" + (.6 + .4 * dk) + ")";
+      var p = span(u, L[2] + .2 + i * .25, L[2] + 1.8 + i * .25); $("wb" + i).style.width = p * w[6] + "%"; $("wn" + i).textContent = Math.round(p * w[6]);
+    });
+  },
+  s4: function (u, d, L) {
+    rise($("k4"), u, .05);
+    rise($("psb").parentNode.parentNode, u, E(L));
+    var p = span(u, L[1], L[2] + .4); $("psn").textContent = fmt(p * 248); $("psb").style.width = p * 100 + "%";
+    rise($("ps"), u, E(L) + .3);
+    PS.forEach(function (x, i) {
+      rise($("ps" + i), u, E(L) + .5 + i * .15);
+      var k = span(u, L[2] + .2 + i * .3, L[2] + .5 + i * .3); $("pc" + i).style.opacity = k; $("pc" + i).style.transform = "scale(" + (.6 + .4 * k) + ")";
+      $("ps" + i).style.background = !x[2] && k > .5 ? "rgba(251,113,133,.07)" : "";
+    });
+  },
+  s5: function (u, d, L) {
+    rise($("k5"), u, .05); rise($("crawl"), u, E(L));
+    SITES.forEach(function (s, i) { var k = span(u, L[1] + i * .35, L[2] + .6 + i * .2); $("cb" + i).style.width = k * 100 + "%"; $("cn" + i).textContent = (k >= 1 ? "✓ " : "") + fmt(k * s[1]) + " pages"; });
+    rise($("found"), u, L[2] + .2); $("gapn").textContent = fmt(span(u, L[2] + .4, L[2] + 2) * 312);
+  },
+  s6: function (u, d, L) {
+    rise($("k6"), u, .05); rise($("gaps"), u, .3);
+    GAPS.forEach(function (g, i) { rise($("g" + i), u, .5 + i * .2); $("gs" + i).textContent = Math.round(span(u, .8 + i * .25, 2 + i * .25) * g[1]); $("g" + i).style.color = i === 0 && u > L[1] ? "#fff" : ""; $("g" + i).style.background = i === 0 && u > L[1] ? "rgba(124,92,255,.16)" : ""; });
+    rise($("brief"), u, L[1] - .1);
+    $("btitle").textContent = BT.slice(0, Math.round(span(u, L[1] + .3, L[1] + 1.8) * BT.length));
+    [].forEach.call($("brief").querySelectorAll(".tag,.row"), function (e, i) { e.style.opacity = span(u, L[1] + 1.2 + i * .28, L[1] + 1.5 + i * .28); });
+  },
+  s7: function (u, d, L) { rise($("k7"), u, .05); rise($("yt"), u, E(L)); kids("yt").forEach(function (r, i) { rise(r, u, E(L) + .2 + i * .3); }); },
+  s9: function (u, d, L) {
+    $("p9").style.transform = "scale(" + span(u, 0, 1) + ")";
+    rise($("e1"), u, .1); var k = rise($("e2"), u, .25, .7); $("e2").style.transform += " scale(" + (.92 + .08 * k) + ")"; rise($("e3"), u, .6);
+    kids("e4").forEach(function (e, i) { rise(e, u, L[1] + i * .25); e.style.opacity = Math.min(e.style.opacity, .75 + .25 * Math.sin(u * 4 + i)); });
+    rise($("e5"), u, L[2] - .2); $("cta").style.transform = "scale(" + (1 + .035 * Math.sin(u * 4)) + ")";
+    rise($("e6"), u, L[2] + .6); rise($("e7"), u, L[2] + 1);
+  }
+};
+
+function E(L) { return Math.min(L[1] - .4, .9); }
+var TR = .55; // transition length (seconds)
+window.renderAt = function (t) {
+  stars(t);
+  $("glow").style.transform = "scale(" + (1 + .06 * Math.sin(t * .8)) + ")";
+  $("floor").style.backgroundPosition = "0 " + (t * 30) + "px, 0 " + (t * 30) + "px";
+  $("prog").style.width = (t / D * 100) + "%";
+  $("logo").style.opacity = span(t, SC[1].end - .3, SC[1].end + .4);
+  $("beta").style.opacity = .78 + .22 * Math.sin(t * 3);
+
+  var sw = 0;
+  SC.forEach(function (s, i) {
+    var inK = i === 0 ? span(t, 0, .6) : easeIO((t - (s.start - TR / 2)) / TR);
+    var outK = i === SC.length - 1 ? 0 : easeIO((t - (s.end - TR / 2)) / TR);
+    var o = Math.min(inK, 1 - outK), el = $(s.id);
+    el.style.opacity = o; el.style.display = o > 0 ? "" : "none";
+    if (o > 0) {
+      var sc = outK > 0 ? 1 + .06 * outK : 1 - .05 * (1 - inK), bl = outK > 0 ? outK * 10 : (1 - inK) * 10;
+      el.style.transform = "scale(" + sc + ")"; el.style.filter = bl > .05 ? "blur(" + bl + "px)" : "";
+      DRAW[s.id](t - s.start, s.end - s.start, s.lines.map(function (l) { return l.start - s.start; }));
+    }
+    if (i > 0) { var q = (t - (s.start - .45)) / .9; if (q > 0 && q < 1) sw = q; }
+  });
+  $("sweep").style.opacity = sw ? Math.sin(sw * Math.PI) : 0; $("sweep").style.backgroundPosition = (100 - sw * 100) + "% 0";
+  subtitle(t);
+};
+
+if (!/render=1/.test(location.search)) { var t0 = performance.now(); (function loop() { renderAt(((performance.now() - t0) / 1000) % D); requestAnimationFrame(loop); })(); }
+else renderAt(0);
+</script>
+</body></html>

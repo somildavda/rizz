@@ -1,7 +1,9 @@
 import { handleContentGap } from "./content-gap.js";
 import { handleDb } from "./db.js";
+import { gate, withTracking } from "./auth.js";
 
 export { ProjectStore } from "./db.js";
+export { AppStore } from "./app-store.js";
 
 // Serves the hub page and proxies each module under the same address,
 // e.g. /speed/... -> https://searchverse-psi.shred-app.workers.dev/...
@@ -71,10 +73,14 @@ async function proxy(request, url, mod) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/cg/db/")) return handleDb(request, env);
+    // Sign-in for everything: login/admin/tracking routes are answered here; any other
+    // page, tool or API needs a signed-in, approved user.
+    const g = await gate(request, env, url);
+    if (g instanceof Response) return g;
+    if (url.pathname.startsWith("/api/cg/db/")) return handleDb(request, env, g && g.user);
     if (url.pathname.startsWith("/api/cg/")) return handleContentGap(request, url);
     const mod = resolve(url, request);
-    if (mod) return proxy(request, url, mod);
-    return env.ASSETS.fetch(request);
+    if (mod) return withTracking(await proxy(request, url, mod));
+    return withTracking(await env.ASSETS.fetch(request));
   },
 };
