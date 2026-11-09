@@ -446,7 +446,7 @@ async function runScan(project) {
       catch (err) { scan.log.push(`[${s.domain}] skipped: ${err.message}`); site = { domain: E.root(s.domain), hosts: [], pages: [], ranked: null, discovered: 0, queuedLeft: 0 }; }
       site.niche = s.niche || ""; site.isYou = !!s.isYou;
       s.state = site.pages.length ? "done" : "fail"; s.pages = site.pages.length;
-      s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "whole site read"}` : (site.refused ? "This site doesn't allow automated visits — paste its article links in step 2 (see the log)" : "Nothing found in this section — check the section link");
+      s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "all pages in scope read"}${site.failed ? ` · ⚠️ ${site.failed} couldn't be read (see log)` : ""}` : (site.refused ? "This site doesn't allow automated visits — paste its article links in step 2 (see the log)" : "Nothing found in this section — check the section link");
       sites.push(site); drawScan();
     }
     if (!sites.length) throw new Error("Stopped before any site was read.");

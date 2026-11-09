@@ -12,8 +12,17 @@ export function status(m) { hooks.status(m); }
 export function prog(p) { hooks.progress(p); }
 export function host(s) { return String(s || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, ""); }
 export function root(s) { return host(s).replace(/^www\./, ""); }
+// Calls the hub Worker. A reply that isn't JSON (e.g. Cloudflare's "Worker exceeded CPU"
+// page) becomes { ok: false, error } with the real status, instead of a bare "error".
 export function api(path) {
-  return fetch("/api/cg/" + path).then(function (r) { return r.json(); });
+  return fetch("/api/cg/" + path).then(function (r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); } catch (_) {
+        var m = t.match(/<title>([^<]*)<\/title>/i) || t.match(/error code:?\s*(\d+)/i);
+        return { ok: false, error: "HTTP " + r.status + (m ? " — " + m[1].trim() : "") };
+      }
+    });
+  }, function (e) { return { ok: false, error: "network: " + e.message }; });
 }
 export async function pool(items, n, fn) {
   var i = 0, out = [];
@@ -178,10 +187,13 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
     });
   }
 
+  // Politeness: start at 4 pages at a time, drop to 1 when a site starts refusing, creep back up
+  // when it recovers. Failed pages are retried (up to 2 more times) at the end of the queue.
+  var conc = 4, failedLast = 0, retried = 0, lost = 0, reasons = {};
   var fails = 0, visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
   while (!state.stopped && kept < budget) {
     var batch = [];
-    while (batch.length < 6 && kept + batch.length < budget) {
+    while (batch.length < conc && kept + batch.length < budget) {
       var next = null;
       if (mi < mainQ.length) next = mainQ[mi++];
       else if (opts.full && ti < transQ.length && transit < transitBudget) { next = transQ[ti++]; if (keep(next)) next = null; else transit++; }
@@ -190,12 +202,20 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
       next.taken = true; batch.push(next);
     }
     if (!batch.length) break;
+    failedLast = 0;
     var got = await Promise.all(batch.map(function (e) { return e.data ? Promise.resolve(e.data) : api("page?url=" + encodeURIComponent(e.url)).catch(function () { return { ok: false, url: e.url }; }); }));
     got.forEach(function (p, i) {
       var e = batch[i]; visited++;
       if (!p || !p.ok) {
         // A pasted link we couldn't open still counts: build it from the link and its title.
-        if (!e.fed) { if (fails++ < 3) log("[" + r + "] couldn't read " + e.url + ": " + ((p && p.error) || "error")); return; }
+        var why = (p && p.error) || "no answer";
+        if (!e.fed) {
+          failedLast++;
+          if ((e.tries || 0) < 2 && !/HTTP 404|HTTP 410|Not HTML|Invalid URL/.test(why)) { e.tries = (e.tries || 0) + 1; e.taken = false; mainQ.push(e); retried++; return; }
+          lost++; var key = why.replace(/https?:\S+/g, "").slice(0, 60); reasons[key] = (reasons[key] || 0) + 1;
+          if (fails++ < 3) log("[" + r + "] couldn't read " + e.url + ": " + why);
+          return;
+        }
         p = { ok: true, url: e.url, finalUrl: e.url, title: (opts.titles || {})[e.url] || "", description: "", h1: [], h2: [], h3: [], links: [], fromList: true };
       }
       var fn = normUrl(p.finalUrl);
@@ -218,6 +238,9 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
       delete p.text; delete p.links; delete p.h3;
       pages.push(p);
     });
+    // Adjust speed: many failures -> slow down and pause; clean batch -> speed up again.
+    if (failedLast >= Math.max(1, Math.ceil(batch.length / 3))) { conc = Math.max(1, conc - 1); await new Promise(function (ok) { setTimeout(ok, 1500 * (5 - conc)); }); }
+    else if (!failedLast && conc < 4) conc++;
     var left = mainQ.length - mi, rate = kept / Math.max(1, (Date.now() - t0) / 1000);
     part(Math.min(1, kept / Math.max(1, Math.min(budget, kept + left))));
     status("Crawling " + r + ": " + kept.toLocaleString() + " kept · " + visited.toLocaleString() + " visited · " + left.toLocaleString() + " queued · " + rate.toFixed(1) + " pages/s" +
@@ -225,6 +248,8 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
   }
   pages.forEach(function (p) { p.inlinks = p.entry.inlinks; delete p.entry; });
   site.pages = pages;
+  if (retried || lost) log("[" + r + "] retried " + retried + " page(s); " + lost + " still failed" + (lost ? " — reasons: " + Object.keys(reasons).map(function (k) { return k + " ×" + reasons[k]; }).join("; ") : ""));
+  site.failed = lost; site.failReasons = reasons;
   site.discovered = mainQ.length; site.queuedLeft = mainQ.slice(mi).filter(function (x) { return !x.taken; }).length;
   log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget && mainQ.length > mi ? ", state.stopped at the page limit — " + (mainQ.length - mi).toLocaleString() + " more found but not crawled" : "") + ")");
   return site;
