@@ -7,5 +7,11 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": true
-  }
+  },
+  // Project database for the Content Gap tool (SQLite Durable Object, free plan).
+  // Created automatically on deploy; nothing to set up in the dashboard.
+  "durable_objects": {
+    "bindings": [{ "name": "PROJECTS", "class_name": "ProjectStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectStore"] }]
 }

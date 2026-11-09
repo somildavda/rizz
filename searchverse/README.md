@@ -35,38 +35,52 @@ pushes to `main` that touch `searchverse/`.
 
 Manual: `cd searchverse && npx wrangler login && npx wrangler deploy`.
 
-## Content Gap & Topic Planner (`/content-gap/`)
-Page: `public/content-gap/index.html`. API: `src/content-gap.js`, served by this
-Worker under `/api/cg/*`. The browser drives the crawl in small requests, so no
-single Worker call goes over Cloudflare's subrequest limit. Everything uses free
-sources. There are no paid APIs.
+## Topic Planner (`/content-gap/`)
+A step-by-step tool. Make a project for your brand, add your competitors (each with a
+niche), and it reads every site, compares topics, and tells you what to write next.
+Everything uses free sources.
 
-1. **Brand profile & knowledge base.** Name, domain, what it does, audience, products,
-   topics to avoid, a pasted knowledge base and competitors. Profiles are saved in the browser.
-2. **Whole-site crawl (Semrush-style).** For each site: subdomains from certificate logs
-   (crt.sh) are checked to see which are live. The crawl starts from each home page, the
-   folder you give (for example `/blog/`) and every sitemap URL, then follows internal
-   links level by level until it finds no new pages or reaches the page limit. It
-   respects robots.txt and records depth, inlinks and indexability. Pasted URLs are
-   always crawled. Pages are fetched as HTML (no browser), which covers almost every
-   blog. Sites that build their content with JavaScript in the browser would need
-   Crawl4AI later.
-3. **Topic and main keyword per page,** from the title, H1, slug, H2s and meta.
-4. **Rankings (free, optional).**
-   - Your site: a Google Search Console CSV export.
-   - All sites: your own [SearXNG](https://github.com/searxng/searxng) instance
-     (open source, `json` format enabled). It searches each main keyword and records
-     each site's position in the top 20. Positions are approximate and there is no volume.
-5. **Topic map & Topic score.** Pages from every site are clustered into topics, showing
-   which topics competitors share and where you have none. Each topic gets a score from
-   0 to 100: 40% brand relevance (against the profile and knowledge base), 25% gap,
-   20% competitor demand and 15% rankability.
-6. **AI topic ideas** (Gemini free tier, `/api/cg/gemini`). Gemini reads the profile,
-   knowledge base, pages and scored gaps. It returns ranked topics with a primary
-   keyword, topic, relevance and rank-potential scores, a title and an outline. Each
-   primary keyword is checked against free Google Autocomplete (`/api/cg/suggest`).
-7. **Supabase (optional, free tier).** Saves and reopens full reports. The table SQL is
-   shown in the page.
+```
+public/content-gap/
+  index.html        page shell
+  css/app.css       styles
+  js/app.js         projects, 5-step setup, scan screen, results dashboard
+  js/engine.js      crawler, keyword extraction, rankings, gaps, topic scores
+  js/ai.js          Gemini plan (Koray's framework), Autocomplete, SERP snapshot
+  js/ui.js          table, score bars, toasts, database client
+src/content-gap.js  /api/cg/*: subdomains, robots, sitemaps, page fetch, suggest, serp, gemini
+src/db.js           /api/cg/db/*: project database (SQLite Durable Object)
+```
 
-Each table filters, sorts and exports to CSV. Keys go from the browser through the
-Worker to Google, or straight to your Supabase project. They are never stored on a server.
+**Flow:** Projects → 1 Your brand (incl. knowledge base) → 2 Competitors (one per row,
+with a niche) → 3 What to scan (whole site / one folder / quick look, up to 50,000 pages
+per site) → 4 Power-ups → 5 Review → Scan → Results.
+
+**Crawling.** For each site, subdomains come from certificate logs (crt.sh). Each is
+checked to see whether it's live, its robots.txt and the full sitemap tree are read,
+and then the crawl follows internal links level by level from the home page, folder and
+sitemaps. It respects robots.txt and records depth and inlinks. Listing pages (blog
+index, pagination, tags) are used to find articles but aren't topics. Pages are
+fetched as HTML, so sites that build their content with JavaScript in the browser
+aren't fully read.
+
+**Topic score (0–100).** Pages from every site are clustered into topics:
+40% brand relevance (topic words vs. the profile and knowledge base), 25% gap,
+20% competitor interest and 15% chance to rank.
+
+**Koray's framework.** The topical map shows the source context, the central entity and
+the central search intent. Topics are split into a core section (about what you sell)
+and an outer section (supporting topics that link back to the core). With a free
+Gemini key, the AI builds the map: a primary keyword, title, outline and link target
+for each topic, with keywords checked against Google Autocomplete. Without a key,
+topics that share words with your products list count as core.
+
+**Rankings (optional, free).** Search Console CSV for your own site. A self-hosted
+SearXNG for everyone's approximate top-20 positions and live SERP snapshots.
+
+**Database.** A SQLite Durable Object is declared in `wrangler.jsonc` and created on
+deploy (it works on the free plan). It stores projects, every scan's pages, and the topic
+backlog with statuses (to write / planned / writing / published / covered / not for us).
+Each re-scan marks gaps you've covered (with date and URL), keeps statuses you set by
+hand, and lists new competitor articles. Access uses a workspace key generated in the
+browser (Settings → copy it to other devices). API keys stay in the browser.
