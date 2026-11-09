@@ -17,7 +17,7 @@ let scan = null;           // the scan in progress, if any
 const cache = {};          // project id -> { project, report, backlog, changes, summary }
 
 const STEP_NAMES = ["Your brand", "Competitors", "What to scan", "Power-ups", "Ready!"];
-const DEFAULT_SCAN = { mode: "full", folder: "/blog/", maxPages: 2000, maxSubs: 15, useSubs: true, yourUrls: "", compUrls: "" };
+const DEFAULT_SCAN = { mode: "full", folder: "/blog/", maxPages: 2000, maxSubs: 15, useSubs: false, yourUrls: "", compUrls: "" };
 const DEFAULT_POWER = { searx: "", engines: "google", serpLimit: 80, lang: "en", gl: "us", nIdeas: 15, model: "gemini-2.5-flash" };
 
 // "https://www.att.com/blog/" -> { domain: "att.com", folder: "/blog/" }
@@ -164,12 +164,57 @@ const compRow = (c, i) => `<div class="comp-row"><span class="no">${i + 1}</span
   <input class="cNiche" value="${esc(c.niche || "")}" placeholder="e.g. CRM for startups" aria-label="Competitor niche">
   <button type="button" class="cDel" title="Remove">✕</button></div>`;
 
+// The websites in this project, with the section (folders) each one reads.
+function sectionSites() {
+  return [{ domain: draft.domain, folder: draft.scan.yourFolder, isYou: true }].concat(draft.competitors.filter((c) => c.domain).map((c) => ({ domain: c.domain, folder: c.folder })));
+}
+function setSiteFolder(x, folder) {
+  if (x.isYou) draft.scan.yourFolder = folder;
+  else { const c = draft.competitors.find((c) => c.domain === x.domain); if (c) c.folder = folder; }
+}
+
+// Reads a site's sitemaps and home-page links and groups the URLs into folders.
+async function detectSections(domain) {
+  const urls = new Set(), host = "www." + domain;
+  const home = await E.api("page?url=" + encodeURIComponent("https://" + host + "/")).catch(() => ({}));
+  if (!home.ok) {
+    const bare = await E.api("page?url=" + encodeURIComponent("https://" + domain + "/")).catch(() => ({}));
+    if (!bare.ok) throw new Error("This site didn't let us in (" + (home.error || bare.error || "no answer") + "). Type its sections by hand, or paste article links in step 2.");
+    Object.assign(home, bare);
+  }
+  (home.links || []).forEach((u) => urls.add(u));
+  const realHost = new URL(home.finalUrl).host;
+  const rb = await E.api("robots?host=" + encodeURIComponent(realHost)).catch(() => ({ sitemaps: [] }));
+  const queue = (rb.sitemaps || []).slice(), seen = new Set(); let files = 0;
+  while (queue.length && files < 25 && urls.size < 40000) {
+    const sm = queue.shift(); if (seen.has(sm)) continue; seen.add(sm); files++;
+    const f = await E.api("sitemapfile?url=" + encodeURIComponent(sm)).catch(() => ({}));
+    (f.sitemaps || []).forEach((x) => queue.push(x)); (f.urls || []).forEach((u) => urls.add(u));
+  }
+  // Count pages per folder (1 and 2 levels deep). A URL ending in "/" is itself a folder page.
+  const groups = new Map(), bump = (k, isPage) => { const g = groups.get(k) || { path: k, pages: 0, listing: false }; if (isPage) g.pages++; else g.listing = true; groups.set(k, g); };
+  urls.forEach((u) => {
+    let x; try { x = new URL(u); } catch (_) { return; }
+    if (x.host.replace(/^www\./, "") !== domain.replace(/^www\./, "")) return;
+    const seg = x.pathname.toLowerCase().split("/").filter(Boolean);
+    if (seg.length >= 2) bump("/" + seg[0] + "/", true);
+    if (seg.length >= 3) bump("/" + seg[0] + "/" + seg[1] + "/", true);
+    if (x.pathname.endsWith("/") && seg.length >= 1 && seg.length <= 2) bump("/" + seg.join("/") + "/", false);
+  });
+  const list = Array.from(groups.values()).filter((g) => g.pages >= 2 || g.listing)
+    .sort((a, b) => a.path.split("/")[1].localeCompare(b.path.split("/")[1]) || a.path.length - b.path.length || b.pages - a.pages);
+  return { files, total: urls.size, groups: list.slice(0, 120) };
+}
+
 function stepScope() {
   const s = draft.scan;
   const minutes = (n) => Math.max(1, Math.round(n / 3 / 60));
   return `<h2>🔍 What should we read?</h2>
-    ${explain("We start on each home page and follow every link (and every sitemap), just like Google does, until we've seen the whole site or hit your page limit. Sections you set per site in steps 1 and 2 always win — here they are:")}
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 18px">${[{ domain: draft.domain, folder: draft.scan.yourFolder }].concat(draft.competitors.filter((c) => c.domain)).map((c) => pill(c.domain + (c.folder ? " → " + c.folder : " → whole site"), c.folder ? "blue" : "")).join("")}</div>
+    ${explain("We start on each home page and follow every link (and every sitemap), just like Google does, until we've seen the whole site or hit your page limit. Below: which part of each website we'll read. Click <b>🔎 Find sections</b> to see a site's folders and tick the ones you want.")}
+    <div class="secbox">${sectionSites().map((x, i) => `<div class="secsite" data-i="${i}">
+      <div class="sechead"><b>${esc(x.domain)}</b>${x.isYou ? " " + pill("you", "blue") : ""}<span class="secnow muted">${x.folder ? esc(x.folder) : "whole website"}</span>
+        <span class="grow"></span><button type="button" class="btn sm" data-find="${i}">🔎 Find sections</button></div>
+      <div class="secfound"></div></div>`).join("")}</div>
     <div class="choice">
       <label><input type="radio" name="mode" value="full" ${s.mode === "full" ? "checked" : ""}><span class="em">🌍</span><b>The whole website</b><small>Every page we can find. Best for a full picture.</small></label>
       <label><input type="radio" name="mode" value="folder" ${s.mode === "folder" ? "checked" : ""}><span class="em">📂</span><b>Same folder on every site</b><small>e.g. /blog on all of them. Sites with their own section (steps 1–2) keep theirs.</small></label>
@@ -234,6 +279,25 @@ function wireStep(step) {
     $("#addComp").onclick = () => { read(); if (draft.competitors.length >= 8) return toast("Up to 8 competitors.", true); draft.competitors.push({ domain: "", niche: "" }); redraw(); $$(".cDomain").pop().focus(); };
   }
   if (step === 3) {
+    const sites = sectionSites();
+    $$("[data-find]").forEach((btn) => { btn.onclick = async () => {
+      const i = +btn.dataset.find, x = sites[i], box = $(`.secsite[data-i="${i}"] .secfound`), now = $(`.secsite[data-i="${i}"] .secnow`);
+      btn.disabled = true; btn.textContent = "Looking…"; box.innerHTML = `<p class="muted">Reading ${esc(x.domain)}'s sitemaps and links…</p>`;
+      try {
+        const r = await detectSections(x.domain);
+        const chosen = new Set(String(x.folder || "").split(",").map((f) => f.trim()).filter(Boolean));
+        if (!r.groups.length) { box.innerHTML = `<p class="muted">No folders found (${r.total} links seen). This site will be read as a whole, or type a section in step ${x.isYou ? 1 : 2}.</p>`; return; }
+        box.innerHTML = `<p class="muted" style="margin:8px 0">Found ${r.total.toLocaleString()} links in ${r.files} sitemap file(s). Tick the folders to read — none ticked means the whole website.</p>
+          <div class="secgrid">${r.groups.map((g) => `<label class="seci ${g.path.split("/").length > 3 ? "sub" : ""}"><input type="checkbox" value="${esc(g.path)}" ${chosen.has(g.path) ? "checked" : ""}> <code>${esc(g.path)}</code> <span class="muted">${g.pages ? g.pages.toLocaleString() + " pages" : "category page"}</span></label>`).join("")}</div>`;
+        $$("input[type=checkbox]", box).forEach((cb) => { cb.onchange = () => {
+          const picked = $$("input:checked", box).map((c) => c.value);
+          const keep = Array.from(chosen).filter((f) => !r.groups.some((g) => g.path === f)); // sections typed by hand stay
+          x.folder = keep.concat(picked).join(", ");
+          setSiteFolder(x, x.folder); now.textContent = x.folder || "whole website";
+        }; });
+      } catch (e) { box.innerHTML = `<p class="muted">⚠ ${esc(e.message)}</p>`; }
+      finally { btn.disabled = false; btn.textContent = "🔎 Find again"; }
+    }; });
     $$("input[name=mode]").forEach((r) => { r.onchange = () => { $("#folderBox").hidden = r.value !== "folder" || !r.checked; }; });
     $("#maxPages").oninput = (e) => { $("#mins").textContent = Math.max(1, Math.round((+e.target.value || 0) / 3 / 60)); };
   }

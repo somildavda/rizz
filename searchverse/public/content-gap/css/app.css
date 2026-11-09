@@ -91,6 +91,16 @@ code{background:var(--panel3);padding:1px 6px;border-radius:6px;font-size:13px}
 .recap{display:grid;grid-template-columns:160px 1fr;gap:8px 16px;font-size:14px}
 .recap dt{color:var(--muted)}
 
+/* sections (step 3) */
+.secbox{display:grid;gap:10px;margin:-4px 0 22px}
+.secsite{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.sechead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.secnow{font-size:13px;font-family:ui-monospace,monospace}
+.secgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 14px;max-height:320px;overflow:auto;padding-right:4px}
+.seci{display:flex;gap:8px;align-items:center;font-size:13px;padding:5px 6px;border-radius:8px;cursor:pointer}
+.seci:hover{background:var(--panel3)}
+.seci.sub{padding-left:22px}
+
 /* scan */
 .scan-sites{display:grid;gap:12px;margin-top:18px}
 .scan-site{display:grid;grid-template-columns:34px 1fr auto;gap:12px;align-items:center;padding:14px 16px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
