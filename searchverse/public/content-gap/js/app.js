@@ -6,7 +6,7 @@
 //   #/p/:id[/:tab]         results dashboard
 //   #/settings             workspace key and API keys
 import * as E from "./engine.js";
-import { buildPlanPrompt, askGemini, checkAutocomplete, serpSnapshot } from "./ai.js";
+import { buildPlanPrompt, askGemini, checkAutocomplete, serpSnapshot, briefInputs, buildBriefPrompt, localBrief, similarPages, wordSet, overlap } from "./ai.js";
 import { $, $$, esc, link, pill, num, scoreBar, scoreRing, toast, table, db, workspaceKey, setWorkspaceKey, local, download, toCsv } from "./ui.js";
 
 const view = $("#view");
@@ -48,6 +48,7 @@ async function route() {
     if (h === "#/new") return wizard(null, 1);
     if ((m = h.match(/^#\/p\/([\w-]+)\/edit(?:\/(\d))?$/))) return await wizard(m[1], +(m[2] || 1));
     if ((m = h.match(/^#\/p\/([\w-]+)\/scan$/))) return await scanView(m[1]);
+    if ((m = h.match(/^#\/p\/([\w-]+)\/brief\/(.+)$/))) return await briefView(m[1], decodeURIComponent(m[2]));
     if ((m = h.match(/^#\/p\/([\w-]+)(?:\/([\w-]+))?$/))) return await dashboard(m[1], m[2] || "next");
     location.hash = "#/";
   } catch (e) {
@@ -503,7 +504,7 @@ async function saveScan(project, report, gsc) {
   const all = [report.you].concat(report.comps);
   const { id: cid } = await db(`projects/${project.id}/crawls`, "POST", {});
   const rows = [];
-  all.forEach((s) => s.pages.forEach((p) => rows.push({ site: s.domain, url: p.finalUrl, type: p.type, title: p.title, h1: (p.h1 || [])[0] || "", mainKeyword: p.mainKeyword, keywords: p.keywords, cluster: p.cluster, depth: p.depth, inlinks: p.inlinks })));
+  all.forEach((s) => s.pages.forEach((p) => rows.push({ site: s.domain, url: p.finalUrl, type: p.type, title: p.title, h1: (p.h1 || [])[0] || "", mainKeyword: p.mainKeyword, keywords: p.keywords, cluster: p.cluster, depth: p.depth, inlinks: p.inlinks, h2: p.h2 || [], words: p.words || 0 })));
   for (let i = 0; i < rows.length; i += 1000) {
     if (scan) { scan.now = `Saving pages… ${Math.min(rows.length, i + 1000).toLocaleString()} / ${rows.length.toLocaleString()}`; drawScan(); }
     await db(`crawls/${cid}/pages`, "POST", { pages: rows.slice(i, i + 1000) });
@@ -550,7 +551,7 @@ async function loadProject(id) {
       for (let off = 0; ; off += 5000) { const batch = await db(`crawls/${last.id}/pages?offset=${off}&limit=5000`); pages.push(...batch); if (batch.length < 5000) break; }
       const bySite = {};
       pages.forEach((r) => {
-        const p = { finalUrl: r.url, url: r.url, type: r.type, title: r.title, h1: r.h1 ? [r.h1] : [], h2: [], mainKeyword: r.main_keyword || "", keywords: r.keywords || [], cluster: r.cluster,
+        const p = { finalUrl: r.url, url: r.url, type: r.type, title: r.title, h1: r.h1 ? [r.h1] : [], h2: r.h2 || [], words: r.words || 0, mainKeyword: r.main_keyword || "", keywords: r.keywords || [], cluster: r.cluster,
           depth: r.depth, inlinks: r.inlinks, ranks: [], indexable: true };
         try { p.host = new URL(r.url).host; } catch (_) {}
         p.onPageKeyword = p.keywords[0] || p.mainKeyword; p.keywordSource = p.mainKeyword ? "on-page" : ""; p.topic = E.topicOf(p);
@@ -620,6 +621,7 @@ function tabNext(T, c) {
     key: topicKey(t.topic), topic: t.topic, primary_keyword: t.topic, section: t.section, score: t.score, relevance: t.relevance, gap: t.gap, demand: t.demand, rankability: t.rankability,
     why: `${t.compsWith} of your ${R.comps.length} competitors write about this (${plural(t.total - t.you, "page")}), and you have no page on it yet.`,
     competitor_urls: Object.keys(t.by).filter((d) => d !== R.you.domain).flatMap((d) => t.by[d].slice(0, 2).map((x) => x.finalUrl)).slice(0, 4), secondary_keywords: t.keywords.split(", ").slice(1) }));
+  markSameTopics(items, R);
   T.innerHTML = explain(plan
     ? "These are the topics the AI picked for you, best first. The <b>score</b> mixes how well it fits your brand, how big the gap is, and how likely you are to rank. Click <b>Add to my plan</b> to keep it."
     : `These are the best gaps we found, best first. ${local("gemKey") ? "" : `For keywords, titles and outlines written for you, <a href="#/settings">add a free Gemini key</a> and click the button below.`}`) +
@@ -638,6 +640,8 @@ function tabNext(T, c) {
 
 function ideaCard(it, i, saved, p) {
   const status = saved ? saved.status : null;
+  const dup = it.sameAs ? `<div class="warnbox">⚠️ Looks like the same topic as your page ${link(it.sameAs.url, it.sameAs.title || it.sameAs.url)} (${it.sameAs.score}% match). Updating that page may be better than writing a new one.</div>` : "";
+  const twin = it.twinOf != null ? `<div class="warnbox">🔁 Same topic as idea #${it.twinOf + 1} — write them as one article.</div>` : "";
   const ac = { exact: ["✓ people search this on Google", "good"], prefix: ["✓ people search longer versions", "good"], related: ["~ only similar searches", "mid"], none: ["✗ not seen in Google suggestions", "low"] }[it.autocomplete];
   return `<article class="idea ${i === 0 ? "top" : ""}" data-i="${i}">
     <div>${scoreRing(it.score)}</div>
@@ -645,12 +649,13 @@ function ideaCard(it, i, saved, p) {
       <div class="chips" style="margin:0">${i === 0 ? pill("★ Best pick", "star") : pill("#" + (i + 1))}${pill(it.section === "core" ? "🎯 Core topic" : "🌱 Supporting topic", it.section === "core" ? "blue" : "")}${status && status !== "gap" ? pill("In your list: " + status, "good") : ""}</div>
       <h3>${esc(it.suggested_title || it.topic)}</h3>
       <div class="kw">🔑 ${esc(it.primary_keyword)}</div>
-      <p class="why">${esc(it.why || "")}</p>
+      <p class="why">${esc(it.why || "")}</p>${dup}${twin}
       <div class="bars">${scoreBar(it.relevance, "Fits your brand")}${scoreBar(it.rank_potential != null ? it.rank_potential : it.rankability, "Chance to rank")}${it.gap != null ? scoreBar(it.gap, "Size of the gap") : ""}${it.demand != null ? scoreBar(it.demand, "Competitor interest") : ""}</div>
       <div class="chips">${[it.search_intent, it.content_type].filter(Boolean).map((x) => pill(x)).join("")}${ac ? pill(ac[0], ac[1]) : ""}</div>
       <div class="acts">
         <button class="btn sm ${status === "planned" ? "" : "primary"}" data-act="plan">${status && status !== "gap" ? "✓ In my plan" : "📌 Add to my plan"}</button>
-        <button class="btn sm" data-act="brief">📝 Show the brief</button>
+        <a class="btn sm" href="#/p/${esc(p.id)}/brief/${encodeURIComponent(it.key)}">📝 Full brief &amp; keywords</a>
+        <button class="btn sm ghost" data-act="brief">Quick look</button>
         <button class="btn sm ghost" data-act="serp">🔎 Who ranks today?</button>
       </div>
       <div class="more" hidden>
@@ -669,7 +674,7 @@ function wireIdeas(T, c, items) {
   const p = c.project, pw = { ...DEFAULT_POWER, ...(p.power || {}) };
   $$(".idea", T).forEach((card) => {
     const it = items[+card.dataset.i];
-    $("[data-act=brief]", card).onclick = (e) => { const m = $(".more", card); m.hidden = !m.hidden; e.target.textContent = m.hidden ? "📝 Show the brief" : "📝 Hide the brief"; };
+    $("[data-act=brief]", card).onclick = (e) => { const m = $(".more", card); m.hidden = !m.hidden; e.target.textContent = m.hidden ? "Quick look" : "Hide"; };
     $("[data-act=plan]", card).onclick = async (e) => {
       try {
         await db(`projects/${p.id}/topics`, "PUT", { topics: [{ key: it.key, label: it.topic, section: it.section === "core" ? "core" : "outer", score: it.score, coveredUrl: null, data: { source: c.summary.plan ? "ai" : "scan", ...it } }] });
@@ -689,6 +694,116 @@ function wireIdeas(T, c, items) {
       } catch (err) { box.innerHTML = `<div class="serp muted">${esc(err.message)}</div>`; }
     };
   });
+}
+
+// Flags ideas that match one of your pages, or another idea in the list.
+function markSameTopics(items, R) {
+  items.forEach((it, i) => {
+    const hit = similarPages(R.you.pages, it.primary_keyword || it.topic, 0.67)[0];
+    if (hit) it.sameAs = { url: hit.p.finalUrl, title: hit.p.title, score: Math.round(hit.score * 100) };
+    const ws = wordSet(it.primary_keyword || it.topic);
+    for (let j = 0; j < i; j++) { if (items[j].twinOf == null && overlap(ws, wordSet(items[j].primary_keyword || items[j].topic)) >= 0.8) { it.twinOf = j; break; } }
+  });
+}
+
+// ---------------- 📝 content brief ----------------
+async function briefView(id, key) {
+  view.innerHTML = `<div class="card muted">Loading the brief…</div>`;
+  const c = await loadProject(id), p = c.project, R = c.report;
+  if (!R) { location.hash = `#/p/${id}`; return; }
+  const plan = c.summary.plan;
+  const idea = plan && plan.ideas.find((it) => topicKey(it.topic) === key || topicKey(it.primary_keyword) === key);
+  const cluster = R.topics.find((t) => topicKey(t.topic) === key);
+  const saved = c.backlog.find((t) => t.key === key);
+  const topic = (idea && idea.topic) || (cluster && cluster.topic) || (saved && saved.label) || key;
+  const primary = (idea && idea.primary_keyword) || (saved && saved.data && saved.data.primary_keyword) || topic;
+  setCrumbs(`/ <a href="#/">Projects</a> / <a href="#/p/${esc(id)}">${esc(p.name)}</a> / Brief`);
+  const inputs = briefInputs(R, cluster ? cluster.topic : topic, primary);
+  let brief = saved && saved.data && saved.data.brief;
+
+  const draw = () => {
+    const b = brief;
+    view.innerHTML = `<div class="dhead"><div><p class="muted" style="font-size:13px">📝 Content brief</p><h1>${esc(topic)}</h1>
+        <p class="lead">🔑 Primary keyword: <b class="grad">${esc(b ? b.primary_keyword : primary)}</b>${b && b.search_intent ? " · " + esc(b.search_intent) + " intent" : ""}</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn ghost" href="#/p/${esc(id)}/next">‹ Back</a>
+        <button class="btn" id="bCopy" ${b ? "" : "disabled"}>📋 Copy</button><button class="btn" id="bDl" ${b ? "" : "disabled"}>⬇ .md</button>
+        <button class="btn primary" id="bAi">✨ ${b && !b.local ? "Rewrite with AI" : "Write the brief with AI"}</button></div></div>
+      ${b ? "" : explain("Click <b>Write the brief with AI</b> for the full brief (needs your free Gemini key in Settings). Below is what we already know from the scan.")}
+      ${b && b.local ? explain("This quick brief was built without AI, from competitor headings and Google suggestions. Click <b>Write the brief with AI</b> for titles, a full structure and keyword placement.") : ""}
+      ${sameBox(b, inputs)}
+      ${b ? briefBody(b) : ""}
+      <h2 style="margin:26px 0 6px">🥊 Competitor pages on this topic</h2><p class="muted">What we read from competitors — the brief is built to beat these.</p>
+      <div class="cards" style="margin-top:12px">${inputs.comps.map((x) => `<div class="card"><div class="muted" style="font-size:12px">${esc(x.site)} · ${x.words ? x.words.toLocaleString() + " words" : "word count unknown"}</div>
+        <h3 style="margin:4px 0 8px">${link(x.url, x.title || x.url)}</h3>${x.h2.length ? `<ol class="h2list">${x.h2.slice(0, 10).map((h) => `<li>${esc(h)}</li>`).join("")}</ol>` : `<p class="muted" style="font-size:13px">Headings not captured — scan again to collect them.</p>`}</div>`).join("") || `<div class="card muted">No competitor pages matched this topic.</div>`}</div>`;
+    if ($("#bCopy")) $("#bCopy").onclick = () => navigator.clipboard.writeText(briefText(topic, brief)).then(() => toast("Brief copied — paste it into Docs or Word"));
+    if ($("#bDl")) $("#bDl").onclick = () => download(topicKey(topic).replace(/[^a-z0-9]+/g, "-") + "-brief.md", briefText(topic, brief), "text/markdown");
+    $("#bAi").onclick = async () => {
+      const keyG = local("gemKey"); if (!keyG) { toast("Add your free Gemini key in Settings first.", true); return; }
+      const btn = $("#bAi"); btn.disabled = true; btn.textContent = "✨ Writing… (about 30 seconds)";
+      try {
+        const pw = { ...DEFAULT_POWER, ...(p.power || {}) };
+        const sug = await suggestFor(primary, pw);
+        const res = await fetch("/api/cg/gemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: keyG, model: pw.model, prompt: buildBriefPrompt(p, topic, primary, inputs, sug) }) }).then((r) => r.json());
+        if (res.error) throw new Error(res.error);
+        brief = JSON.parse(String(res.text).replace(/^\s*```(json)?|```\s*$/g, "")); brief.at = Date.now();
+        await saveBrief(c, key, topic, brief, cluster, idea); draw(); toast("Brief ready");
+      } catch (e) { toast("AI brief: " + e.message, true); btn.disabled = false; btn.textContent = "✨ Try again"; }
+    };
+  };
+  if (!brief) { const pw = { ...DEFAULT_POWER, ...(p.power || {}) }; brief = localBrief(p, topic, primary, inputs, await suggestFor(primary, pw), cluster ? cluster.keywords.split(", ") : (idea && idea.secondary_keywords) || []); }
+  draw();
+}
+
+async function suggestFor(q, pw) {
+  const r = await E.api("suggest?q=" + encodeURIComponent(q) + "&hl=" + encodeURIComponent(pw.lang || "en") + "&gl=" + encodeURIComponent(pw.gl || "us")).catch(() => ({}));
+  return (r.suggestions || []).map((x) => String(x).toLowerCase()).filter((x) => x !== String(q).toLowerCase()).slice(0, 10);
+}
+
+async function saveBrief(c, key, topic, brief, cluster, idea) {
+  const old = c.backlog.find((t) => t.key === key);
+  const data = { ...((old && old.data) || { source: idea ? "ai" : "scan" }), brief, primary_keyword: brief.primary_keyword };
+  await db(`projects/${c.project.id}/topics`, "PUT", { topics: [{ key, label: topic, section: (old && old.section) || (idea && idea.section === "core" ? "core" : cluster ? cluster.section : "outer"), score: (old && old.score) || (cluster && cluster.score) || (idea && idea.topic_score) || 0, coveredUrl: null, data }] });
+  c.backlog = await db(`projects/${c.project.id}/topics`);
+}
+
+function sameBox(b, inputs) {
+  const s = b && b.same_as_existing;
+  if (s && s.is_duplicate) return `<div class="warnbox big">⚠️ <b>This is the same topic as a page you already have:</b> ${link(s.url)}<br>${esc(s.note || "Update that page instead of writing a new one.")}</div>`;
+  if (inputs.same.length) return `<div class="warnbox">ℹ️ Close to your page ${link(inputs.same[0].url, inputs.same[0].title)} (${inputs.same[0].score}% match). Make sure the new article has a clearly different angle, or update that page.</div>`;
+  return `<div class="okbox">✅ New topic — none of your pages covers it yet.</div>`;
+}
+
+function briefBody(b) {
+  const where = { title: "Title", h1: "H1", h2: "H2", body: "Body", faq: "FAQ", meta: "Meta", slug: "URL" };
+  return `<div class="briefgrid">
+    <div class="card"><h3>🎯 On-page targets</h3><dl class="recap" style="margin-top:12px">
+      <dt>Title tag</dt><dd>${esc(b.title_tag || "—")} ${b.title_tag ? `<span class="muted">(${b.title_tag.length} chars)</span>` : ""}</dd>
+      <dt>Meta description</dt><dd>${esc(b.meta_description || "—")} ${b.meta_description ? `<span class="muted">(${b.meta_description.length} chars)</span>` : ""}</dd>
+      <dt>H1</dt><dd>${esc(b.h1 || "—")}</dd><dt>URL</dt><dd><code>${esc(b.url_slug || "—")}</code></dd>
+      <dt>Length</dt><dd>${b.word_count_target ? "about " + Number(b.word_count_target).toLocaleString() + " words" : "—"}</dd>
+      ${b.audience_angle ? `<dt>Angle</dt><dd>${esc(b.audience_angle)}</dd>` : ""}${b.cta ? `<dt>Call to action</dt><dd>${esc(b.cta)}</dd>` : ""}</dl></div>
+    <div class="card"><h3>🔑 Keywords to target</h3><p class="muted" style="font-size:13px;margin:4px 0 10px">Use each keyword in the places ticked. Don't force them — write naturally.</p>
+      <div class="tbl" style="max-height:none"><table><thead><tr><th>Keyword</th><th>Role</th>${Object.values(where).map((w) => `<th>${w}</th>`).join("")}</tr></thead><tbody>
+      ${(b.keywords || []).map((k) => `<tr><td><b>${esc(k.keyword)}</b>${k.why ? `<br><span class="muted" style="font-size:12px">${esc(k.why)}</span>` : ""}</td><td>${pill(k.role || "", k.role === "primary" ? "star" : k.role === "secondary" ? "blue" : "")}</td>${Object.keys(where).map((w) => `<td class="n">${(k.use_in || []).includes(w) ? "✓" : ""}</td>`).join("")}</tr>`).join("")}
+      </tbody></table></div></div></div>
+    <div class="card" style="margin-top:16px"><h3>🧱 Article structure</h3><ol class="outline">${(b.structure || []).map((s) => `<li><b>H2: ${esc(s.h2)}</b>${s.note ? `<div class="muted" style="font-size:13px">${esc(s.note)}</div>` : ""}${(s.h3 || []).filter(Boolean).length ? `<ul>${s.h3.filter(Boolean).map((h) => `<li>H3: ${esc(h)}</li>`).join("")}</ul>` : ""}</li>`).join("") || "<li class=muted>No structure yet.</li>"}</ol></div>
+    <div class="briefgrid" style="margin-top:16px">
+      <div class="card"><h3>❓ FAQs to answer</h3><ul class="outline">${(b.faqs || []).map((q) => `<li>${esc(q)}</li>`).join("") || "<li class=muted>—</li>"}</ul>
+        ${(b.must_cover || []).length ? `<h3 style="margin-top:14px">✅ Must cover</h3><ul class="outline">${b.must_cover.map((q) => `<li>${esc(q)}</li>`).join("")}</ul>` : ""}</div>
+      <div class="card"><h3>🔗 Internal links</h3><ul class="outline">${(b.internal_links || []).map((l) => `<li>“${esc(l.anchor)}” → ${link(l.url)}</li>`).join("") || "<li class=muted>—</li>"}</ul>
+        ${b.beat_competitors ? `<h3 style="margin-top:14px">🏆 How to beat competitors</h3><p>${esc(b.beat_competitors)}</p>` : ""}</div></div>`;
+}
+
+function briefText(topic, b) {
+  const L = [`# Brief: ${topic}`, "", `Primary keyword: ${b.primary_keyword}`, `Intent: ${b.search_intent || ""}`, ""];
+  if (b.same_as_existing && b.same_as_existing.is_duplicate) L.push(`WARNING: same topic as ${b.same_as_existing.url} — ${b.same_as_existing.note || ""}`, "");
+  L.push(`Title tag: ${b.title_tag || ""}`, `Meta description: ${b.meta_description || ""}`, `H1: ${b.h1 || ""}`, `URL: ${b.url_slug || ""}`, `Length: ${b.word_count_target || ""} words`, "");
+  L.push("## Keywords", ...(b.keywords || []).map((k) => `- ${k.keyword} (${k.role}) — use in: ${(k.use_in || []).join(", ")}`), "");
+  L.push("## Structure", ...(b.structure || []).flatMap((s) => [`## ${s.h2}`].concat(s.note ? [`  ${s.note}`] : [], (s.h3 || []).filter(Boolean).map((h) => `  ### ${h}`))), "");
+  if ((b.faqs || []).length) L.push("## FAQs", ...b.faqs.map((q) => `- ${q}`), "");
+  if ((b.internal_links || []).length) L.push("## Internal links", ...b.internal_links.map((l) => `- "${l.anchor}" -> ${l.url}`), "");
+  if (b.beat_competitors) L.push("## Beat competitors", b.beat_competitors);
+  return L.join("\n");
 }
 
 // 🗺️ Topical map (Koray's framework)
@@ -721,7 +836,7 @@ function tabList(T, c) {
   const names = { gap: "💡 To write", planned: "📌 Planned", writing: "✍️ Writing", published: "🚀 Published", covered: "✅ You have it", dismissed: "🙈 Not for us" };
   T.innerHTML = explain("Every topic we've found, saved in your project. Change the status as you work. After each scan we tick off topics you've published, and remember when.");
   T.appendChild(table([
-    { h: "Topic", v: (t) => t.label, html: (t) => `<b>${esc(t.label)}</b>${t.data && t.data.primary_keyword && t.data.primary_keyword !== t.label ? `<br><span class="muted">🔑 ${esc(t.data.primary_keyword)}</span>` : ""}` },
+    { h: "Topic", v: (t) => t.label, html: (t) => `<a href="#/p/${esc(p.id)}/brief/${encodeURIComponent(t.key)}"><b>${esc(t.label)}</b></a>${t.data && t.data.brief ? " 📝" : ""}${t.data && t.data.primary_keyword && t.data.primary_keyword !== t.label ? `<br><span class="muted">🔑 ${esc(t.data.primary_keyword)}</span>` : ""}` },
     { h: "Status", v: (t) => t.status, html: (t) => `<select data-k="${esc(t.key)}">${statuses.map((s) => `<option value="${s}" ${s === t.status ? "selected" : ""}>${names[s]}</option>`).join("")}</select>` },
     { h: "Section", v: (t) => t.section === "core" ? "🎯 Core" : "🌱 Supporting" },
     { h: "Score", n: 1, v: (t) => t.score },
@@ -763,7 +878,7 @@ function tabCompare(T, c) {
   const verdicts = { "write next": "good", "worth it": "mid", covered: "blue", "off-brand": "", "low priority": "" };
   T.innerHTML = explain("Every topic on every site, side by side. The numbers show how many pages each website has on that topic. <b>0</b> under “You” means it's a gap. The <b>score</b> is 40% fits your brand + 25% size of the gap + 20% competitor interest + 15% chance to rank.");
   T.appendChild(table([
-    { h: "Topic", v: (r) => r.topic, html: (r) => `<b>${esc(r.topic)}</b>` },
+    { h: "Topic", v: (r) => r.topic, html: (r) => `<a href="#/p/${esc(c.project.id)}/brief/${encodeURIComponent(topicKey(r.topic))}"><b>${esc(r.topic)}</b></a>` },
     { h: "Score", n: 1, v: (r) => r.score, html: (r) => `<b>${r.score}</b>` },
     { h: "Verdict", v: (r) => r.verdict, html: (r) => pill(r.verdict, verdicts[r.verdict]) },
     { h: "Section", v: (r) => r.section === "core" ? "🎯 Core" : r.section === "outer" ? "🌱 Supporting" : "—" },

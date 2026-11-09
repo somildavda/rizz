@@ -127,7 +127,7 @@ async function page(raw) {
   }
 
   const d = { title: "", description: "", canonical: "", robots: "", lang: "", h1: [], h2: [], h3: [], links: [] };
-  let text = "", cur = null, skip = 0;
+  let text = "", cur = null, skip = 0, words = 0;
   const grab = (key) => ({
     element(el) { cur = { key, buf: "" }; el.onEndTag(() => { const t = cur && cur.buf.replace(/\s+/g, " ").trim(); if (t) d[key].push(t.slice(0, 200)); cur = null; }); },
   });
@@ -145,7 +145,7 @@ async function page(raw) {
     .on("*", {
       text(t) {
         if (cur) cur.buf += t.text;
-        if (!skip && text.length < MAX_TEXT) text += t.text + " ";
+        if (!skip) { words += (t.text.match(/\S+/g) || []).length; if (text.length < MAX_TEXT) text += t.text + " "; }
       },
     })
     .transform(new Response(r.body, { headers: { "Content-Type": "text/html" } }));
@@ -164,7 +164,7 @@ async function page(raw) {
     url: u.toString(), finalUrl, ok: true, status: r.status,
     title: decode(d.title), description: decode(d.description), canonical: d.canonical,
     robots: d.robots, lang: d.lang, h1: d.h1.map(decode), h2: d.h2.slice(0, 30).map(decode), h3: d.h3.slice(0, 30).map(decode),
-    text: decode(text).slice(0, MAX_TEXT), links: [...links],
+    text: decode(text).slice(0, MAX_TEXT), words, links: [...links],
   });
 }
 

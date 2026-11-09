@@ -54,6 +54,10 @@ export class ProjectStore extends DurableObject {
         covered_at INTEGER, covered_url TEXT, notes TEXT, status_changed_at INTEGER,
         PRIMARY KEY (project_id, key));
     `);
+    // Added later: each page's H2 headings and word count, used for content briefs.
+    const cols = this.sql.exec("PRAGMA table_info(pages)").toArray().map((c) => c.name);
+    if (!cols.includes("h2")) this.sql.exec("ALTER TABLE pages ADD COLUMN h2 TEXT");
+    if (!cols.includes("words")) this.sql.exec("ALTER TABLE pages ADD COLUMN words INTEGER");
   }
 
   rows(query, ...args) { return this.sql.exec(query, ...args).toArray(); }
@@ -118,10 +122,11 @@ export class ProjectStore extends DurableObject {
       if (!this.one("SELECT id FROM crawls WHERE id = ?", cid)) return json({ error: "Unknown scan" }, 404);
       this.ctx.storage.transactionSync(() => {
         for (const p of pages) {
-          this.sql.exec(`INSERT OR REPLACE INTO pages (crawl_id, site, url, type, title, h1, main_keyword, keywords, cluster, depth, inlinks)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, cid, String(p.site || ""), String(p.url || ""), p.type || null,
+          this.sql.exec(`INSERT OR REPLACE INTO pages (crawl_id, site, url, type, title, h1, main_keyword, keywords, cluster, depth, inlinks, h2, words)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, cid, String(p.site || ""), String(p.url || ""), p.type || null,
             String(p.title || "").slice(0, 300), String(p.h1 || "").slice(0, 300), p.mainKeyword || null,
-            JSON.stringify((p.keywords || []).slice(0, 6)), p.cluster || null, Number(p.depth) || 0, Number(p.inlinks) || 0);
+            JSON.stringify((p.keywords || []).slice(0, 6)), p.cluster || null, Number(p.depth) || 0, Number(p.inlinks) || 0,
+            JSON.stringify((p.h2 || []).slice(0, 15).map((x) => String(x).slice(0, 120))), Number(p.words) || 0);
         }
       });
       return json({ ok: true, saved: pages.length });
@@ -130,7 +135,7 @@ export class ProjectStore extends DurableObject {
       const site = url.searchParams.get("site"), offset = Number(url.searchParams.get("offset")) || 0, limit = Math.min(5000, Number(url.searchParams.get("limit")) || 5000);
       const q = site ? this.rows("SELECT * FROM pages WHERE crawl_id = ? AND site = ? LIMIT ? OFFSET ?", cid, site, limit, offset)
         : this.rows("SELECT * FROM pages WHERE crawl_id = ? LIMIT ? OFFSET ?", cid, limit, offset);
-      return json(q.map((r) => ({ ...r, keywords: JSON.parse(r.keywords || "[]") })));
+      return json(q.map((r) => ({ ...r, keywords: JSON.parse(r.keywords || "[]"), h2: JSON.parse(r.h2 || "[]") })));
     }
     if (cid && parts[2] === "finish" && m === "POST") {
       this.sql.exec("UPDATE crawls SET finished_at = ?, summary = ? WHERE id = ?", now, JSON.stringify(body.summary || {}), cid);

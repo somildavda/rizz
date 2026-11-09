@@ -214,6 +214,7 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
       p.topic = topicOf(p);
       p.indexable = !/noindex/i.test(p.robots || "") && (!p.canonical || (function () { try { return normUrl(new URL(p.canonical, p.finalUrl).toString()) === fn; } catch (_) { return true; } })());
       p.ranks = [];
+      p.h2 = (p.h2 || []).slice(0, 15);
       delete p.text; delete p.links; delete p.h3;
       pages.push(p);
     });
