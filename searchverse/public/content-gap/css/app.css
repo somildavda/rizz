@@ -60,6 +60,9 @@ code{background:var(--panel3);padding:1px 6px;border-radius:6px;font-size:13px}
 .proj:hover{transform:translateY(-3px);border-color:rgba(124,92,255,.6);text-decoration:none}
 .proj .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.2));margin-bottom:14px}
 .proj .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.pdel{position:absolute;top:14px;right:14px;background:transparent;border:1px solid transparent;color:var(--muted);font-size:12px;padding:5px 9px;border-radius:9px;cursor:pointer;opacity:.6}
+.proj:hover .pdel{opacity:1;border-color:var(--line)}
+.pdel:hover{color:var(--low);border-color:var(--low)!important}
 .newproj{display:grid;place-items:center;text-align:center;border-style:dashed;min-height:180px;cursor:pointer;color:var(--muted)}
 .newproj b{display:block;font-size:34px;color:var(--text)}
 

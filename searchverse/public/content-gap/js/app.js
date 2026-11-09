@@ -72,7 +72,24 @@ async function home() {
     list.map((p) => `<a class="card proj" href="#/p/${esc(p.id)}">
       <div class="ic">📁</div><h3>${esc(p.name)}</h3><div class="muted">${esc(p.domain)}</div>
       <div class="meta">${pill(plural((p.competitors || []).length, "competitor"))}${pill(p.scans ? plural(p.scans, "scan") : "not scanned yet", p.scans ? "" : "mid")}${p.gaps ? pill(plural(p.gaps, "topic") + " to write", "low") : ""}</div>
-      <div class="muted" style="font-size:12px;margin-top:10px">${p.last_scan ? "Last scan " + when(p.last_scan) : "Created " + when(p.updated_at)}</div></a>`).join("");
+      <div class="muted" style="font-size:12px;margin-top:10px">${p.last_scan ? "Last scan " + when(p.last_scan) : "Created " + when(p.updated_at)}</div>
+      <button type="button" class="pdel" data-del="${esc(p.id)}" title="Delete this project">🗑️ Delete</button></a>`).join("");
+  $$("[data-del]").forEach((b) => {
+    b.onclick = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const p = list.find((x) => x.id === b.dataset.del);
+      deleteProject(p, () => home());
+    };
+  });
+}
+
+// Asks for confirmation (typing the project name), then deletes the project and all its scans.
+async function deleteProject(p, after) {
+  const typed = prompt(`Delete “${p.name}”?\n\nThis removes the project, every scan and your topic list. It can't be undone.\n\nType the project name to confirm:`);
+  if (typed == null) return;
+  if (typed.trim().toLowerCase() !== String(p.name).trim().toLowerCase()) { toast("The name didn't match — nothing was deleted.", true); return; }
+  try { await db("projects/" + encodeURIComponent(p.id), "DELETE"); delete cache[p.id]; if (draft && draft.id === p.id) draft = null; toast(`“${p.name}” deleted`); after(); }
+  catch (err) { toast("Couldn't delete: " + err.message, true); }
 }
 
 // ---------------- settings ----------------
@@ -564,7 +581,7 @@ async function dashboard(id, tab) {
   if (scan && scan.running && scan.id === id) { location.hash = `#/p/${id}/scan`; return; }
   const head = `<div class="dhead"><div><h1>${esc(p.name)}</h1><p class="lead">${esc(p.domain)} vs ${(p.competitors || []).map((x) => esc(x.domain)).join(", ") || "no competitors yet"}</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn ghost" href="#/p/${esc(id)}/edit/1">✏️ Edit project</a>
-    <button class="btn danger ghost" id="delProj">🗑️</button><a class="btn primary" href="#/p/${esc(id)}/scan">🔄 ${R ? "Scan again" : "Start the first scan"}</a></div></div>`;
+    <button class="btn danger ghost" id="delProj">🗑️ Delete</button><a class="btn primary" href="#/p/${esc(id)}/scan">🔄 ${R ? "Scan again" : "Start the first scan"}</a></div></div>`;
   if (!R) {
     view.innerHTML = head + `<div class="card emptybig" style="margin-top:20px"><b>🚀</b><h2>No scan yet</h2><p style="margin:8px 0 20px">Start a scan and we'll read your site and your competitors' sites.</p><a class="btn primary" href="#/p/${esc(id)}/scan">Start the first scan</a></div>`;
     wireDelete(p); return;
@@ -590,10 +607,7 @@ async function dashboard(id, tab) {
 }
 
 function wireDelete(p) {
-  $("#delProj").onclick = async () => {
-    if (!confirm(`Delete the project “${p.name}” and all its scans? This can't be undone.`)) return;
-    await db("projects/" + p.id, "DELETE"); delete cache[p.id]; toast("Project deleted"); location.hash = "#/";
-  };
+  $("#delProj").onclick = () => deleteProject(p, () => { location.hash = "#/"; });
 }
 
 // ⭐ Write next
