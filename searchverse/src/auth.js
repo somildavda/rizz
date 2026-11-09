@@ -49,6 +49,8 @@ export async function gate(request, env, url) {
   if (!env.APP) return null; // not configured: leave the site open
 
   if (p === "/login") return page(LOGIN_HTML);
+  // Shared theme files are needed before sign-in (by the sign-in page itself).
+  if (p.startsWith("/sv/") && p !== "/sv/track.js") return null;
   if (p === "/sv/track.js") return new Response(TRACK_JS, { headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" } });
 
   if (p === "/api/auth/signup" && request.method === "POST") {

@@ -16,7 +16,7 @@ input:focus,textarea:focus{outline:0;border-color:var(--a);box-shadow:0 0 0 3px 
 label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
 .muted{color:var(--muted)}
 `;
-const FONT = `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`;
+const FONT = `<link rel="stylesheet" href="/sv/theme.css"><script src="/sv/theme.js"></script><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">`;
 
 export const LOGIN_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sign in — SearchVerse</title><meta name="robots" content="noindex, nofollow">${FONT}
@@ -34,7 +34,7 @@ export const LOGIN_HTML = `<!DOCTYPE html><html lang="en"><head><meta charset="U
 form .btn{width:100%;margin-top:20px}
 .foot{text-align:center;color:var(--muted);font-size:13px;margin-top:18px}
 </style></head><body><div class="wrap"><div class="box">
-<div class="logo">🔭 <span class="grad">SearchVerse</span></div>
+<div style="display:flex;justify-content:flex-end;margin:-12px -12px 4px 0" data-theme-slot></div><div class="logo">🔭 <span class="grad">SearchVerse</span></div>
 <p class="sub">Search tools for your team.<br>Sign in, or ask for access.</p>
 <div class="tabs"><button id="tIn" class="on" type="button">Sign in</button><button id="tUp" type="button">Request access</button></div>
 <form id="fIn"><label for="e1">Email</label><input id="e1" type="email" autocomplete="email" required>
@@ -126,7 +126,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </style></head><body><div class="app">
 <div class="top"><span class="logo">🔭 <span class="grad">SearchVerse</span> · Dashboard</span><span class="grow"></span>
 <div class="seg" id="range"><button data-d="7">7 days</button><button data-d="30" class="on">30 days</button><button data-d="90">90 days</button></div>
-<a class="btn sm" href="/">← Back to tools</a><a class="btn sm" href="/logout">Sign out</a></div>
+<a class="btn sm" href="/">← Back to tools</a><a class="btn sm" href="/logout">Sign out</a><span data-theme-slot></span></div>
 <h1>Who's using <span class="grad">SearchVerse</span></h1><p class="muted" style="margin-top:6px">Only you can see this page.</p>
 <div class="kpis" id="kpis"></div>
 <div class="card" id="pendBox"></div>

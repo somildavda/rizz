@@ -7,6 +7,7 @@
 <meta name="description" content="SearchVerse: simple tools for search teams — performance, page speed, content planning and video visibility in one place.">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+">
+<link rel="stylesheet" href="/sv/theme.css"><script src="/sv/theme.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -219,7 +220,8 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
   .flow{grid-template-columns:1fr}.flow::before{display:none}
   .cube{width:200px;height:200px}.cube div{font-size:84px}
 }
-@media(max-width:640px){nav .links a:not(#navAdmin):not(#navOut){display:none}section{padding:60px 0}.scene{transform:scale(.6);margin:-70px -40px}}
+@media(max-width:640px){nav .links a:not(#navAdmin):not(#navOut){display:none}nav .links{align-items:center}section{padding:60px 0}.scene{transform:scale(.6);margin:-70px -40px}}
+@media(max-width:480px){.brand span{display:none}nav .links{gap:0}nav .links a{padding:8px 7px;font-size:13px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}}
 </style>
 </head>
@@ -231,7 +233,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 <nav>
   <a class="brand" href="#"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""><span class="grad">SearchVerse</span></a>
   <div class="links"><a href="#tools">Tools</a><a href="#how">How it works</a><a href="#about">Why SearchVerse</a>
-    <a href="/admin" id="navAdmin" hidden>📊 Dashboard</a><a href="/logout" id="navOut" hidden>Sign out</a></div>
+    <a href="/admin" id="navAdmin" hidden>📊 Dashboard</a><a href="/logout" id="navOut" hidden>Sign out</a><span data-theme-slot style="display:inline-flex;align-items:center;margin-left:6px"></span></div>
 </nav>
 
 <main id="view-home">
