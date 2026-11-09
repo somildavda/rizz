@@ -4,98 +4,128 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#06070D;--panel:rgba(18,21,38,.82);--line:rgba(140,150,220,.2);--text:#EDEFFA;--muted:#9097B5;--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--good:#34D399}
+:root{--bg:#06070D;--panel:rgba(18,21,38,.86);--line:rgba(140,150,220,.2);--text:#EDEFFA;--muted:#9097B5;--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--good:#34D399;--warn:#FBBF24}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:#000;overflow:hidden}
-/* 1080 × 1080 stage, scaled to fit the window when previewed */
 #stage{position:absolute;left:50%;top:50%;width:1080px;height:1080px;margin:-540px 0 0 -540px;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
 .abs{position:absolute}
 #stars{inset:0}
-.glow{width:900px;height:900px;border-radius:50%;left:90px;top:90px;background:radial-gradient(circle,rgba(124,92,255,.35),rgba(34,211,238,.10) 45%,transparent 70%);filter:blur(10px)}
-.planet{width:260px;height:260px;border-radius:50%;left:410px;top:410px;background:radial-gradient(circle at 32% 30%,#B9A6FF,#7C5CFF 38%,#2A1B7A 72%,#120A3A);box-shadow:0 0 120px rgba(124,92,255,.75),inset -30px -40px 80px rgba(0,0,0,.55)}
-.ring{width:620px;height:620px;left:230px;top:230px;border-radius:50%;border:2px solid rgba(140,150,220,.22)}
-.mod{width:150px;height:56px;border-radius:16px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 14px;font-weight:700;font-size:17px;white-space:nowrap;box-shadow:0 14px 40px -12px rgba(124,92,255,.6)}
+.glow{width:900px;height:900px;border-radius:50%;left:90px;top:60px;background:radial-gradient(circle,rgba(124,92,255,.33),rgba(34,211,238,.09) 45%,transparent 70%)}
+.planet{border-radius:50%;background:radial-gradient(circle at 32% 30%,#B9A6FF,#7C5CFF 38%,#2A1B7A 72%,#120A3A);box-shadow:0 0 120px rgba(124,92,255,.75),inset -30px -40px 80px rgba(0,0,0,.55)}
+.ring{border-radius:50%;border:2px solid rgba(140,150,220,.22)}
+.mod{width:170px;height:58px;border-radius:16px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 14px;font-weight:700;font-size:18px;white-space:nowrap;box-shadow:0 14px 40px -12px rgba(124,92,255,.6)}
 .mod i{font-style:normal;font-size:24px}
 .scene{inset:0;opacity:0}
-.big{font-weight:900;letter-spacing:-.035em;line-height:1.02;text-align:center;width:100%}
+.big{font-weight:900;letter-spacing:-.035em;line-height:1.04}
+.c{text-align:center;width:100%}
 .grad{background:linear-gradient(90deg,#A78BFA,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
 .pill{display:inline-block;padding:10px 20px;border-radius:999px;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.14);font-weight:700;font-size:22px;color:#C9BDFF}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:34px;box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
-.kick{font-size:20px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--b)}
-.row{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:29px;font-weight:600}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:28px 32px;box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
+.head{left:80px;right:80px;top:96px}
+.kick{font-size:22px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--b);display:flex;align-items:center;gap:12px}
+.kick em{font-style:normal;font-size:34px;letter-spacing:0}
+.hook{font-size:62px;margin-top:14px}
+.body{left:80px;right:80px;top:390px}
+.row{display:flex;align-items:center;gap:16px;padding:13px 0;border-bottom:1px solid var(--line);font-size:27px;font-weight:600}
 .row:last-child{border:0}
 .bar{flex:0 0 220px;height:12px;border-radius:9px;background:rgba(255,255,255,.07);overflow:hidden}
 .bar b{display:block;height:100%;background:linear-gradient(90deg,var(--a),var(--b))}
-.sc{width:58px;text-align:right;font-weight:800;color:var(--good)}
+.num{font-weight:800;color:var(--good);text-align:right;white-space:nowrap}
+.mut{color:var(--muted);font-weight:500}
+.ok{display:inline-block;padding:5px 12px;border-radius:999px;font-size:19px;font-weight:800;background:rgba(52,211,153,.14);color:var(--good)}
+.bad{background:rgba(251,191,36,.14);color:var(--warn)}
 .tag{display:inline-block;padding:7px 16px;border-radius:999px;font-size:21px;font-weight:700;background:rgba(34,211,238,.12);color:var(--b);margin:0 8px 10px 0}
-.chk{font-size:27px;padding:9px 0;font-weight:600}
-.chk span{color:var(--good);margin-right:12px}
-.role{padding:18px 22px;border-radius:18px;border:1px solid var(--line);background:var(--panel);font-size:30px;font-weight:700;display:flex;align-items:center;gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px 22px}
+.kpi b{display:block;font-size:44px;font-weight:900;letter-spacing:-.02em}
+.kpi span{font-size:19px;color:var(--muted);font-weight:600}
+.kpi i{font-style:normal;font-size:18px;font-weight:800;color:var(--good);margin-left:6px}
+.role{padding:16px 22px;border-radius:18px;border:1px solid var(--line);background:var(--panel);font-size:29px;font-weight:700;display:flex;align-items:center;gap:14px}
 .role small{font-size:21px;color:var(--muted);font-weight:500;margin-left:auto}
+/* always on: beta badge, progress, subtitles */
+#beta{top:30px;right:34px;z-index:9;display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:999px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.45);color:var(--warn);font-weight:800;font-size:17px;letter-spacing:.08em}
+#beta i{width:10px;height:10px;border-radius:50%;background:var(--warn);box-shadow:0 0 12px var(--warn)}
+#logo{top:30px;left:34px;z-index:9;font-weight:800;font-size:22px;padding-top:6px}
+#prog{left:0;bottom:0;height:5px;background:linear-gradient(90deg,var(--a),var(--b));z-index:9}
+#sub{left:60px;right:60px;bottom:38px;z-index:9;text-align:center}
+#sub span{display:inline-block;background:rgba(6,7,13,.82);border:1px solid var(--line);border-radius:14px;padding:12px 22px;font-size:29px;font-weight:600;line-height:1.35}
 </style></head>
 <body>
 <div id="stage">
   <canvas id="stars" class="abs" width="1080" height="1080"></canvas>
   <div class="glow abs" id="glow"></div>
+  <div id="logo" class="abs" style="opacity:0">🔭 <span class="grad">SearchVerse</span></div>
+  <div id="beta" class="abs"><i></i>LIVE FOR TESTING</div>
 
-  <!-- 1 · the hook -->
+  <!-- 0 · hook -->
+  <div class="scene abs" id="s0">
+    <div class="big c abs" id="h0a" style="top:300px;font-size:80px">Hours of search<br>analysis?</div>
+    <div class="big c abs" id="h0b" style="top:560px;font-size:120px"><span class="grad">One click.</span></div>
+  </div>
+
+  <!-- 1 · planet -->
   <div class="scene abs" id="s1">
-    <div class="big abs" id="h1a" style="top:340px;font-size:76px">Hours of search<br>analysis…</div>
-    <div class="big abs" id="h1b" style="top:600px;font-size:110px"><span class="grad">One click.</span></div>
-  </div>
-
-  <!-- 2 · the planet and its tools -->
-  <div class="scene abs" id="s2">
-    <div class="ring abs" id="ring"></div>
-    <div class="planet abs" id="planet"></div>
+    <div class="ring abs" id="ring" style="width:640px;height:640px;left:220px;top:180px"></div>
+    <div class="planet abs" id="planet" style="width:240px;height:240px;left:420px;top:380px"></div>
     <div id="mods"></div>
-    <div class="abs" style="top:80px;width:100%;text-align:center"><span class="pill">✦ AI-driven search solutions</span></div>
-    <div class="big abs" id="h2" style="top:880px;font-size:84px">Meet <span class="grad">SearchVerse</span></div>
+    <div class="big c abs" id="h1" style="top:860px;font-size:80px">Meet <span class="grad">SearchVerse</span></div>
   </div>
 
-  <!-- 3 · crawl competitors -->
-  <div class="scene abs" id="s3">
-    <div class="abs" style="top:110px;left:90px;right:90px">
-      <div class="kick">🧩 Topic Planner</div>
-      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">Reads your site<br>and your <span class="grad">competitors'</span></div>
-    </div>
-    <div class="card abs" style="left:90px;right:90px;top:470px" id="crawl"></div>
-  </div>
-
-  <!-- 4 · scored gaps -->
-  <div class="scene abs" id="s4">
-    <div class="abs" style="top:110px;left:90px;right:90px">
-      <div class="kick">Topic gaps</div>
-      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">What they rank for.<br><span class="grad">What you're missing.</span></div>
-    </div>
-    <div class="card abs" style="left:90px;right:90px;top:450px" id="gaps"></div>
-  </div>
-
-  <!-- 5 · the brief -->
-  <div class="scene abs" id="s5">
-    <div class="abs" style="top:110px;left:90px;right:90px">
-      <div class="kick">AI content brief</div>
-      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">From gap to brief<br><span class="grad">in one click</span></div>
-    </div>
-    <div class="card abs" style="left:90px;right:90px;top:450px" id="brief">
-      <div style="font-size:30px;font-weight:800;margin-bottom:18px">5G vs 4G: what really changes</div>
-      <div><span class="tag">5g vs 4g speed</span><span class="tag">5g coverage</span><span class="tag">5g phones</span><span class="tag">is 5g worth it</span></div>
-      <div style="margin-top:14px">
-        <div class="chk"><span>✓</span>H2 and H3 outline</div>
-        <div class="chk"><span>✓</span>Keywords mapped to title, H1 and FAQs</div>
-        <div class="chk"><span>✓</span>E-E-A-T: experience, expertise, trust</div>
-        <div class="chk"><span>✓</span>Topical map built on Koray's framework</div>
+  <!-- 2 · Performance Explorer -->
+  <div class="scene abs" id="s2">
+    <div class="head abs"><div class="kick"><em>📊</em>Performance Explorer</div><div class="big hook">Where does your<br><span class="grad">visibility come from?</span></div></div>
+    <div class="body abs">
+      <div class="kpis" id="pk"></div>
+      <div class="card" style="margin-top:18px;padding:22px 26px">
+        <div id="lob" style="margin-bottom:8px"></div>
+        <svg viewBox="0 0 860 210" width="100%" height="210"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient><linearGradient id="fg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="rgba(124,92,255,.35)"/><stop offset="1" stop-color="rgba(124,92,255,0)"/></linearGradient></defs>
+          <path id="area" fill="url(#fg)"/><path id="line" fill="none" stroke="url(#lg)" stroke-width="6" stroke-linecap="round"/></svg>
       </div>
     </div>
   </div>
 
-  <!-- 6 · teams -->
+  <!-- 3 · Search Workspace -->
+  <div class="scene abs" id="s3">
+    <div class="head abs"><div class="kick"><em>🗂️</em>Search Workspace</div><div class="big hook">Reports that<br><span class="grad">run themselves</span></div></div>
+    <div class="card body abs" id="ws"></div>
+  </div>
+
+  <!-- 4 · PageSpeed Lab -->
+  <div class="scene abs" id="s4">
+    <div class="head abs"><div class="kick"><em>🚀</em>PageSpeed Lab</div><div class="big hook">Test every page<br><span class="grad">at once</span></div></div>
+    <div class="card body abs" id="ps"></div>
+  </div>
+
+  <!-- 5 · Topic Planner: crawl -->
+  <div class="scene abs" id="s5">
+    <div class="head abs"><div class="kick"><em>🧩</em>Topic Planner</div><div class="big hook">What are competitors<br><span class="grad">writing that you aren't?</span></div></div>
+    <div class="body abs"><div class="card" id="crawl"></div>
+      <div class="card" id="found" style="margin-top:18px;display:flex;align-items:center;gap:18px;font-size:30px;font-weight:800"><span style="font-size:44px">🎯</span><span><span id="gapn" class="grad" style="font-size:44px">0</span> topic gaps found</span></div></div>
+  </div>
+
+  <!-- 6 · Topic Planner: scores and brief -->
   <div class="scene abs" id="s6">
-    <div class="abs" style="top:110px;left:90px;right:90px">
-      <div class="kick">Built for teams</div>
-      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">The right access<br>for <span class="grad">every role</span></div>
+    <div class="head abs"><div class="kick"><em>📝</em>Gap → brief</div><div class="big hook">Scored for your brand.<br><span class="grad">Brief in one click.</span></div></div>
+    <div class="body abs" style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div class="card" id="gaps" style="padding:20px 24px"></div>
+      <div class="card" id="brief" style="padding:22px 24px">
+        <div style="font-size:25px;font-weight:800;margin-bottom:14px">How to choose a plan that fits</div>
+        <div><span class="tag">primary keyword</span><span class="tag">H2 outline</span><span class="tag">FAQs</span></div>
+        <div class="row" style="font-size:22px">✅ Experience</div><div class="row" style="font-size:22px">✅ Expertise</div><div class="row" style="font-size:22px">✅ Authority</div><div class="row" style="font-size:22px">✅ Trust</div>
+      </div>
     </div>
-    <div class="abs" style="left:90px;right:90px;top:450px;display:grid;gap:16px" id="roles">
+  </div>
+
+  <!-- 7 · Video Visibility -->
+  <div class="scene abs" id="s7">
+    <div class="head abs"><div class="kick"><em>▶️</em>Video Visibility</div><div class="big hook">Do your videos<br><span class="grad">show up in search?</span></div></div>
+    <div class="card body abs" id="yt"></div>
+  </div>
+
+  <!-- 8 · teams -->
+  <div class="scene abs" id="s8">
+    <div class="head abs"><div class="kick"><em>👥</em>Built for teams</div><div class="big hook">The right access<br>for <span class="grad">every role</span></div></div>
+    <div class="body abs" style="display:grid;gap:13px" id="roles">
       <div class="role">👑 Owner<small>runs the show</small></div>
       <div class="role">🛡️ Team admin<small>approves people</small></div>
       <div class="role">📋 Project manager<small>runs scans and briefs</small></div>
@@ -104,89 +134,146 @@ html,body{background:#000;overflow:hidden}
     </div>
   </div>
 
-  <!-- 7 · end card -->
-  <div class="scene abs" id="s7">
-    <div class="planet abs" style="width:150px;height:150px;left:465px;top:200px"></div>
-    <div class="big abs" style="top:400px;font-size:104px"><span class="grad">SearchVerse</span></div>
-    <div class="abs" style="top:540px;width:100%;text-align:center;font-size:34px;color:var(--muted);font-weight:600">Every search answer, one click away.</div>
-    <div class="abs" style="top:650px;width:100%;text-align:center"><span class="pill" style="font-size:28px;padding:16px 34px;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;border:0">Request access →</span></div>
-    <div class="abs" style="top:950px;width:100%;text-align:center;font-size:22px;color:var(--muted)">Built by <b style="color:var(--text)">Somil Davda</b> · SEO at Infidigit</div>
+  <!-- 9 · end card -->
+  <div class="scene abs" id="s9">
+    <div class="planet abs" style="width:130px;height:130px;left:475px;top:150px"></div>
+    <div class="c abs" style="top:320px"><span class="pill" style="border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.12);color:var(--warn)">🚧 Still building · Live for testing</span></div>
+    <div class="big c abs" style="top:400px;font-size:100px"><span class="grad">SearchVerse</span></div>
+    <div class="c abs" style="top:530px;font-size:34px;color:var(--muted);font-weight:600">Every search answer, one click away.</div>
+    <div class="c abs" style="top:620px"><span class="pill" id="cta" style="font-size:30px;padding:18px 38px;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;border:0">Request beta access →</span></div>
+    <div class="c abs" style="top:740px;font-size:22px;color:var(--muted)">Built by <b style="color:var(--text)">Somil Davda</b> · Digital marketing expert</div>
   </div>
+
+  <div id="sub" class="abs"><span id="subt"></span></div>
+  <div id="prog" class="abs"></div>
 </div>
 
 <script>
 // Every frame is drawn from the time t (seconds), so the video renders the same every time.
-var D = 30, $ = function (s) { return document.getElementById(s); };
+var $ = function (s) { return document.getElementById(s); };
 var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
 var ease = function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
 var span = function (t, a, b) { return ease((t - a) / (b - a)); };
+var fmt = function (n) { return Math.round(n).toLocaleString("en-US"); };
 
-// fit the 1080 stage in any preview window
+// Scenes: [id, start, end, voice-over line]. The voice-over starts 0.4 s into each scene.
+var SC = [
+  ["s0", 0, 5, "Your team spends hours on search analysis. What if it took one click?"],
+  ["s1", 5, 10, "Meet SearchVerse. A set of AI-driven search tools, built for SEO teams. Here's what's inside."],
+  ["s2", 10, 20, "Performance Explorer. See exactly where your search visibility comes from. Clicks, impressions and rankings, split by line of business."],
+  ["s3", 20, 30, "Search Workspace. Your team's reporting hub. Recurring reports run on their own, and land right in Google Sheets."],
+  ["s4", 30, 40, "PageSpeed Lab. Paste a list of pages and test them all at once. Core Web Vitals for mobile and desktop, pass or fail."],
+  ["s5", 40, 50, "Topic Planner. It reads your website and your competitors' websites, and finds every topic they cover that you don't."],
+  ["s6", 50, 60, "Then it scores each gap for your brand, and writes the brief. Keywords, outline, and E-E-A-T guidance, in one click."],
+  ["s7", 60, 70, "Video Visibility. Know which searches surface your videos, and how you stack up against other channels."],
+  ["s8", 70, 80, "Built for teams. Shared projects, five roles, and access only by approval. Everyone sees what they need."],
+  ["s9", 80, 90, "We're still building, and SearchVerse is now live for testing. Request beta access, and help shape the next tool."]
+];
+var D = 90;
+window.TRAILER = { duration: D, scenes: SC };
+
 function fit() { var k = Math.min(innerWidth, innerHeight) / 1080; $("stage").style.transform = "scale(" + k + ")"; }
 if (!/render=1/.test(location.search)) { addEventListener("resize", fit); fit(); }
 
-// stars (fixed seed)
 var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 var STARS = []; for (var i = 0; i < 220; i++) STARS.push([rnd() * 1080, rnd() * 1080, rnd() * 1.6 + .3, rnd() * 6.28]);
 function stars(t) {
   var c = $("stars").getContext("2d"); c.clearRect(0, 0, 1080, 1080);
   STARS.forEach(function (s) { c.globalAlpha = .35 + .35 * Math.sin(t * 2 + s[3]); c.fillStyle = "#fff"; c.beginPath(); c.arc(s[0], (s[1] + t * 6 * s[2]) % 1080, s[2], 0, 7); c.fill(); });
 }
+function rise(el, t, a) { var k = span(t, a, a + .6); el.style.opacity = k; el.style.transform = "translateY(" + (1 - k) * 36 + "px)"; return k; }
+function kids(id) { return [].slice.call($(id).children); }
 
-// orbiting modules
+// ---- build the mock screens (neutral example names only) ----
 var MODS = [["📊", "Performance"], ["🗂️", "Workspace"], ["🚀", "PageSpeed"], ["🧩", "Topic Planner"], ["▶️", "Video"]];
 $("mods").innerHTML = MODS.map(function (m, i) { return '<div class="mod abs" id="m' + i + '"><i>' + m[0] + "</i>" + m[1] + "</div>"; }).join("");
 
-// crawl card
-var SITES = [["airtel.in", 1284], ["jio.com", 1906], ["myvi.in", 842]];
-$("crawl").innerHTML = SITES.map(function (s, i) { return '<div class="row"><span style="flex:1">🌐 ' + s[0] + '</span><span class="bar"><b id="cb' + i + '"></b></span><span id="cn' + i + '" style="width:230px;text-align:right;color:var(--muted);white-space:nowrap"></span></div>'; }).join("");
+var PK = [["Clicks", 48210, "+18%"], ["Impressions", 1920400, "+32%"], ["Avg. position", 8.4, "↑ 2.1"]];
+$("pk").innerHTML = PK.map(function (k, i) { return '<div class="kpi"><b id="pk' + i + '">0</b><span>' + k[0] + '<i id="pd' + i + '"></i></span></div>'; }).join("");
+$("lob").innerHTML = ["All", "Product A", "Product B", "Support"].map(function (x, i) { return '<span class="tag"' + (i === 1 ? ' style="background:linear-gradient(90deg,#7C5CFF,#22D3EE);color:#fff"' : "") + ">" + x + "</span>"; }).join("");
+var PTS = []; for (var i = 0; i <= 30; i++) PTS.push(170 - i * 4 - 22 * Math.sin(i * .7) - (i > 18 ? (i - 18) * 2 : 0));
 
-// gap list
-var GAPS = [["5G vs 4G explained", 94], ["Best prepaid plans", 89], ["eSIM setup guide", 83], ["International roaming", 77], ["Wi-Fi calling", 71]];
-$("gaps").innerHTML = GAPS.map(function (g, i) { return '<div class="row" id="g' + i + '"><span style="flex:1">' + g[0] + '</span><span class="bar"><b id="gb' + i + '"></b></span><span class="sc" id="gs' + i + '"></span></div>'; }).join("");
+var WS = [["📈 Weekly performance report", "Every Monday 9:00"], ["🔎 Ranking movers", "Daily"], ["🧾 Monthly client summary", "1st of the month"], ["📉 Pages losing clicks", "Weekly"]];
+$("ws").innerHTML = WS.map(function (w, i) { return '<div class="row"><span style="flex:1">' + w[0] + '<br><span class="mut" style="font-size:21px">' + w[1] + '</span></span><span class="ok" id="ws' + i + '">✓ Sent to Sheets</span></div>'; }).join("");
 
-// scene windows [start, end]
-var SC = { s1: [0, 4.2], s2: [4, 10], s3: [9.8, 14.6], s4: [14.4, 19.4], s5: [19.2, 23.6], s6: [23.4, 26.8], s7: [26.6, 30.5] };
-function vis(id, t) { var w = SC[id], o = Math.min(span(t, w[0], w[0] + .5), 1 - span(t, w[1] - .4, w[1])); $(id).style.opacity = o; return o; }
-function rise(el, t, a) { var k = span(t, a, a + .7); el.style.opacity = k; el.style.transform = "translateY(" + (1 - k) * 40 + "px)"; }
+var PS = [["/", 1.8, 120, .02, 1], ["/pricing", 2.1, 160, .05, 1], ["/blog/guide", 3.9, 310, .21, 0], ["/contact", 1.6, 90, .01, 1], ["/products", 2.4, 180, .08, 1]];
+$("ps").innerHTML = '<div class="row mut" style="font-size:20px;padding-top:0"><span style="flex:1">yourbrand.com</span><span style="width:110px;text-align:right">LCP</span><span style="width:110px;text-align:right">INP</span><span style="width:90px;text-align:right">CLS</span><span style="width:110px"></span></div>' +
+  PS.map(function (p, i) { return '<div class="row" id="ps' + i + '"><span style="flex:1">' + p[0] + '</span><span style="width:110px;text-align:right">' + p[1] + 's</span><span style="width:110px;text-align:right">' + p[2] + 'ms</span><span style="width:90px;text-align:right">' + p[3] + '</span><span style="width:110px;text-align:right"><span class="ok' + (p[4] ? "" : " bad") + '">' + (p[4] ? "PASS" : "FIX") + "</span></span></div>"; }).join("");
+
+var SITES = [["⭐ yourbrand.com", 1240], ["competitor-a.com", 1910], ["competitor-b.com", 860]];
+$("crawl").innerHTML = SITES.map(function (s, i) { return '<div class="row"><span style="flex:1">🌐 ' + s[0] + '</span><span class="bar"><b id="cb' + i + '"></b></span><span id="cn' + i + '" class="mut" style="width:200px;text-align:right;white-space:nowrap"></span></div>'; }).join("");
+
+var GAPS = [["Beginner's guide", 94], ["Pricing explained", 89], ["Setup checklist", 83], ["X vs Y compared", 77], ["Common mistakes", 71]];
+$("gaps").innerHTML = '<div class="mut" style="font-size:19px;font-weight:700;margin-bottom:4px">FIT FOR YOUR BRAND</div>' + GAPS.map(function (g, i) { return '<div class="row" id="g' + i + '" style="font-size:22px;gap:10px"><span style="flex:1">' + g[0] + '</span><span class="num" id="gs' + i + '" style="width:44px">0</span></div>'; }).join("");
+
+var YT = [["“how to get started”", 2, 1], ["“beginner tutorial”", 4, 1], ["“best tools 2026”", 0, 0], ["“step by step guide”", 7, 1]];
+$("yt").innerHTML = '<div class="row mut" style="font-size:20px;padding-top:0"><span style="flex:1">Search on YouTube</span><span style="width:210px;text-align:right">Your video</span><span style="width:200px;text-align:right">Other channels</span></div>' +
+  YT.map(function (y, i) { return '<div class="row" id="yt' + i + '"><span style="flex:1">' + y[0] + '</span><span style="width:210px;text-align:right">' + (y[2] ? '<span class="ok">#' + y[1] + "</span>" : '<span class="ok bad">not found</span>') + '</span><span class="mut" style="width:200px;text-align:right">' + (3 + i * 2) + " videos</span></div>"; }).join("");
 
 window.renderAt = function (t) {
   stars(t);
   $("glow").style.transform = "scale(" + (1 + .06 * Math.sin(t * .8)) + ")";
+  $("prog").style.width = (t / D * 100) + "%";
+  $("logo").style.opacity = span(t, 9.5, 10.5);
+  $("beta").style.opacity = .75 + .25 * Math.sin(t * 3);
 
-  if (vis("s1", t) > 0) { rise($("h1a"), t, .3); rise($("h1b"), t, 1.8); $("h1b").style.transform += " scale(" + (1 + .04 * span(t, 1.8, 4)) + ")"; }
+  var sub = "";
+  SC.forEach(function (s) {
+    var o = Math.min(span(t, s[1], s[1] + .45), 1 - span(t, s[2] - .35, s[2]));
+    if (s[0] === "s9") o = span(t, s[1], s[1] + .45);
+    $(s[0]).style.opacity = o;
+    if (t >= s[1] + .3 && t < s[2] - .2) sub = s[3];
+  });
+  // subtitles: show the current sentence of the line
+  if (sub) {
+    var cur = SC.filter(function (s) { return t >= s[1] && t < s[2]; })[0];
+    var parts = sub.match(/[^.?!]+[.?!]+/g) || [sub], total = sub.length, at = (t - cur[1] - .4) / ((cur[2] - cur[1]) * .82) * total, acc = 0, line = parts[0];
+    for (var i = 0; i < parts.length; i++) { acc += parts[i].length; line = parts[i]; if (acc >= at) break; }
+    $("subt").textContent = line.trim();
+  }
+  $("sub").style.opacity = sub ? 1 : 0;
 
-  if (vis("s2", t) > 0) {
-    var g = span(t, 4, 5.4);
+  if (t < 5.2) { rise($("h0a"), t, .2); rise($("h0b"), t, 2.2); $("h0b").style.transform += " scale(" + (1 + .05 * span(t, 2.2, 5)) + ")"; }
+
+  if (t >= 4.8 && t < 10.3) {
+    var g = span(t, 5, 6.2);
     $("planet").style.transform = "scale(" + (.3 + .7 * g) + ")"; $("ring").style.transform = "scale(" + g + ")"; $("ring").style.opacity = g;
     MODS.forEach(function (m, i) {
-      var a = (t - 4) * .55 + i / MODS.length * 6.283, k = span(t, 4.6 + i * .25, 5.6 + i * .25);
-      var x = 540 + Math.cos(a) * 310 * k - 75, y = 540 + Math.sin(a) * 310 * k - 28;
-      var e = $("m" + i); e.style.left = x + "px"; e.style.top = y + "px"; e.style.opacity = k; e.style.transform = "scale(" + (.85 + .2 * (Math.sin(a) + 1) / 2) + ")"; e.style.zIndex = Math.sin(a) > 0 ? 3 : 1;
+      var a = (t - 5) * .55 + i / MODS.length * 6.283, k = span(t, 5.4 + i * .2, 6.4 + i * .2);
+      var e = $("m" + i); e.style.left = (540 + Math.cos(a) * 320 * k - 85) + "px"; e.style.top = (500 + Math.sin(a) * 320 * k - 29) + "px";
+      e.style.opacity = k; e.style.transform = "scale(" + (.85 + .2 * (Math.sin(a) + 1) / 2) + ")"; e.style.zIndex = Math.sin(a) > 0 ? 3 : 1;
     });
-    rise($("h2"), t, 6.2);
+    rise($("h1"), t, 6.6);
   }
 
-  if (vis("s3", t) > 0) SITES.forEach(function (s, i) {
-    var k = span(t, 10.6 + i * .35, 13.4 + i * .2);
-    $("cb" + i).style.width = k * 100 + "%";
-    $("cn" + i).textContent = k >= 1 ? "✓ " + s[1].toLocaleString() + " pages" : Math.round(k * s[1]).toLocaleString() + " pages";
-  });
+  if (t >= 9.8 && t < 20.3) {
+    PK.forEach(function (k, i) { var p = span(t, 11 + i * .3, 13.5 + i * .3); $("pk" + i).textContent = i === 2 ? (20 - (20 - k[1]) * p).toFixed(1) : fmt(k[1] * p); $("pd" + i).textContent = p > .9 ? k[2] : ""; });
+    var n = Math.round(span(t, 11.5, 16) * 30), d = "M0 " + PTS[0];
+    for (var i = 1; i <= n; i++) d += " L" + (i * 860 / 30) + " " + PTS[i];
+    $("line").setAttribute("d", d); $("area").setAttribute("d", n ? d + " L" + (n * 860 / 30) + " 210 L0 210 Z" : "");
+  }
 
-  if (vis("s4", t) > 0) GAPS.forEach(function (g, i) {
-    var k = span(t, 15.2 + i * .3, 16.6 + i * .3);
-    rise($("g" + i), t, 15 + i * .3);
-    $("gb" + i).style.width = k * g[1] + "%"; $("gs" + i).textContent = Math.round(k * g[1]);
-  });
+  if (t >= 19.8 && t < 30.3) kids("ws").forEach(function (r, i) { rise(r, t, 20.8 + i * .5); $("ws" + i).style.opacity = span(t, 22.6 + i * .8, 23 + i * .8); });
 
-  if (vis("s5", t) > 0) { rise($("brief"), t, 19.6); [].forEach.call($("brief").querySelectorAll(".tag,.chk"), function (e, i) { e.style.opacity = span(t, 20.2 + i * .22, 20.6 + i * .22); }); }
+  if (t >= 29.8 && t < 40.3) kids("ps").forEach(function (r, i) { rise(r, t, 30.8 + i * .55); });
 
-  if (vis("s6", t) > 0) [].forEach.call($("roles").children, function (e, i) { rise(e, t, 23.8 + i * .22); });
+  if (t >= 39.8 && t < 50.3) {
+    SITES.forEach(function (s, i) { var k = span(t, 41 + i * .5, 45 + i * .3); $("cb" + i).style.width = k * 100 + "%"; $("cn" + i).textContent = (k >= 1 ? "✓ " : "") + fmt(k * s[1]) + " pages"; });
+    rise($("found"), t, 46); $("gapn").textContent = fmt(span(t, 46.2, 48.5) * 312);
+  }
 
-  if (vis("s7", t) > 0) { var e = $("s7"); e.style.transform = "scale(" + (1.06 - .06 * span(t, 26.6, 28)) + ")"; }
+  if (t >= 49.8 && t < 60.3) {
+    GAPS.forEach(function (g, i) { rise($("g" + i), t, 50.8 + i * .3); $("gs" + i).textContent = Math.round(span(t, 51 + i * .3, 52.4 + i * .3) * g[1]); });
+    rise($("brief"), t, 54.5); [].forEach.call($("brief").querySelectorAll(".tag,.row"), function (e, i) { e.style.opacity = span(t, 55 + i * .3, 55.4 + i * .3); });
+  }
+
+  if (t >= 59.8 && t < 70.3) kids("yt").forEach(function (r, i) { rise(r, t, 60.8 + i * .6); });
+
+  if (t >= 69.8 && t < 80.3) kids("roles").forEach(function (e, i) { rise(e, t, 70.8 + i * .35); });
+
+  if (t >= 79.8) { $("s9").style.transform = "scale(" + (1.06 - .06 * span(t, 80, 81.6)) + ")"; $("cta").style.transform = "scale(" + (1 + .04 * Math.sin(t * 4)) + ")"; }
 };
 
-// live preview loops the video
 if (!/render=1/.test(location.search)) { var t0 = performance.now(); (function loop() { renderAt(((performance.now() - t0) / 1000) % D); requestAnimationFrame(loop); })(); }
 else renderAt(0);
 </script>
