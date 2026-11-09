@@ -219,7 +219,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
   .flow{grid-template-columns:1fr}.flow::before{display:none}
   .cube{width:200px;height:200px}.cube div{font-size:84px}
 }
-@media(max-width:640px){nav .links{display:none}section{padding:60px 0}.scene{transform:scale(.6);margin:-70px -40px}}
+@media(max-width:640px){nav .links a:not(#navAdmin):not(#navOut){display:none}section{padding:60px 0}.scene{transform:scale(.6);margin:-70px -40px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}}
 </style>
 </head>
@@ -230,7 +230,8 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 
 <nav>
   <a class="brand" href="#"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""><span class="grad">SearchVerse</span></a>
-  <div class="links"><a href="#tools">Tools</a><a href="#how">How it works</a><a href="#about">Why SearchVerse</a></div>
+  <div class="links"><a href="#tools">Tools</a><a href="#how">How it works</a><a href="#about">Why SearchVerse</a>
+    <a href="/admin" id="navAdmin" hidden>📊 Dashboard</a><a href="/logout" id="navOut" hidden>Sign out</a></div>
 </nav>
 
 <main id="view-home">
@@ -423,6 +424,13 @@ window.SV_CREATOR = {
   function set(sel, v) { document.querySelectorAll(sel).forEach(function (e) { e.textContent = v; }); }
   set("[data-year]", new Date().getFullYear());
 
+  // ---- signed-in user: admin link and sign out ----
+  fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : {}; }).then(function (d) {
+    if (!d.user) return;
+    $("#navOut").hidden = false; $("#navOut").title = "Signed in as " + d.user.name;
+    if (d.user.role === "admin") $("#navAdmin").hidden = false;
+  }).catch(function () {});
+
   // ---- creator card ----
   (function () {
     var c = window.SV_CREATOR || {};
@@ -522,7 +530,7 @@ window.SV_CREATOR = {
   });
 
   var prog = $("#prog"), heroTxt = $(".hero > div"), story = $("#how"), icons = document.querySelectorAll(".sbig .ico"),
-      items = document.querySelectorAll(".sitem"), fill = $(".slist .fill"), finale = $("#finale"), blobs = document.querySelectorAll(".blob");
+      items = document.querySelectorAll(".sitem"), storyFill = $(".slist .fill"), finale = $("#finale"), blobs = document.querySelectorAll(".blob");
   var ticking = false;
   function onScroll() {
     ticking = false;
@@ -544,7 +552,7 @@ window.SV_CREATOR = {
     var step = Math.floor(sp * 3);
     icons.forEach(function (ic, i) { ic.classList.toggle("on", i === step); ic.classList.toggle("past", i < step); });
     items.forEach(function (it, i) { it.classList.toggle("on", i === step); it.classList.toggle("done", i < step); });
-    fill.style.height = "calc(" + Math.round(sp * 100) + "% - 16px)";
+    storyFill.style.height = "calc(" + Math.round(sp * 100) + "% - 16px)";
     // finale zooms in as it reaches the middle of the screen
     var fr = finale.getBoundingClientRect(), fp = Math.max(0, Math.min(1, (vh - fr.top) / (vh * .7)));
     finale.style.setProperty("--z", (.86 + fp * .14).toFixed(3)); finale.style.setProperty("--o", (.4 + fp * .6).toFixed(3));
