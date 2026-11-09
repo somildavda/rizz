@@ -50,6 +50,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 .p-missing{color:var(--bad);border-color:rgba(248,113,113,.4)}
 .p-weak{color:var(--warn);border-color:rgba(251,191,36,.4)}
 .p-shared{color:var(--ok);border-color:rgba(52,211,153,.4)}
+.p-low{color:var(--muted)}
 .p-unique{color:var(--b);border-color:rgba(34,211,238,.4)}
 .muted{color:var(--muted)}
 .empty{padding:30px;text-align:center;color:var(--muted)}
@@ -89,13 +90,14 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       <div><label for="avoid">Topics to avoid / notes (optional)</label><textarea id="avoid" placeholder="e.g. no medical advice; we don't serve enterprise"></textarea></div>
     </div>
     <div class="row" style="margin-top:14px">
-      <div><label for="comp">Competitor domains (comma or new line, up to 5)</label><textarea id="comp" placeholder="competitor1.com&#10;competitor2.com"></textarea></div>
+      <div style="grid-column:1/-1"><label for="kb">Knowledge base — paste anything about the brand: product docs, USPs, FAQs, case studies, service pages, ICP notes (used to score how relevant each topic is)</label><textarea id="kb" style="min-height:120px" placeholder="The more you paste here, the better the relevance score and the AI's picks."></textarea></div>
+      <div><label for="comp">Competitor domains (comma or new line, up to 8)</label><textarea id="comp" placeholder="competitor1.com&#10;competitor2.com"></textarea></div>
     </div>
 
     <div class="sec">2 · What to crawl</div>
     <div class="row">
-      <div><label for="mode">Crawl scope</label><select id="mode"><option value="full">Whole site / blog (every sitemap URL)</option><option value="sample">Sample across sections</option></select></div>
-      <div><label for="pathFilter">Only URLs containing (optional)</label><input id="pathFilter" placeholder="/blog/   (comma for several)"></div>
+      <div><label for="mode">Crawl scope</label><select id="mode"><option value="full">Whole site — follow every link + sitemaps (like Semrush)</option><option value="sample">Quick sample across sections</option></select></div>
+      <div><label for="pathFilter">Only this folder (optional)</label><input id="pathFilter" placeholder="/blog/   (comma for several)"></div>
       <div><label for="maxPages">Max pages per site</label><input id="maxPages" type="number" value="300" min="5" max="3000"></div>
       <div><label for="maxSubs">Max subdomains per site</label><input id="maxSubs" type="number" value="15" min="1" max="60"></div>
     </div>
@@ -104,7 +106,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       <div><label for="yourUrls">Your URLs to include (one per line, optional)</label><textarea id="yourUrls" placeholder="https://yoursite.com/blog/post-1"></textarea></div>
       <div><label for="compUrls">Competitor URLs to include (one per line, optional — new domains are added as competitors)</label><textarea id="compUrls" placeholder="https://competitor1.com/blog/great-post"></textarea></div>
     </div>
-    <p class="note">Pasted URLs are always crawled, even outside the path filter or page limit. Whole-site crawls of big blogs take a few minutes; pages are fetched 6 at a time.</p>
+    <p class="note">Whole-site mode starts at each home page, the folder you give and every sitemap URL, then follows internal links level by level until there are no new pages or it hits the page limit. It respects robots.txt. Pasted URLs are always crawled. Big sites take a few minutes, since pages are fetched 6 at a time.</p>
 
     <div class="sec">3 · Data &amp; AI keys</div>
     <details open>
@@ -115,18 +117,44 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         <div><label for="nIdeas">Topics to suggest</label><input id="nIdeas" type="number" value="15" min="3" max="40"></div>
       </div>
     </details>
-    <details>
-      <summary>Ranking keywords (DataForSEO, optional)</summary>
+    <details open>
+      <summary>Rankings — free sources (all optional)</summary>
       <div class="row" style="margin-top:12px">
-        <div><label for="dfsLogin">DataForSEO login (email)</label><input id="dfsLogin" autocomplete="off"></div>
-        <div><label for="dfsPass">DataForSEO API password</label><input id="dfsPass" type="password" autocomplete="off"></div>
-        <div><label for="loc">Location</label>
-          <select id="loc"><option value="2840">United States</option><option value="2356">India</option><option value="2826">United Kingdom</option><option value="2124">Canada</option><option value="2036">Australia</option><option value="2276">Germany</option><option value="2250">France</option><option value="2784">United Arab Emirates</option><option value="2702">Singapore</option></select></div>
-        <div><label for="lang">Language code</label><input id="lang" value="en"></div>
+        <div><label for="gscFile">Your rankings: Google Search Console export (CSV with query, page, clicks, impressions, position)</label><input id="gscFile" type="file" accept=".csv,text/csv"></div>
+        <div><label for="searx">Competitor rankings: your SearXNG address</label><input id="searx" placeholder="https://searx.yourdomain.com"></div>
+        <div><label for="searxEngines">SearXNG engines</label><input id="searxEngines" value="google" placeholder="google  (blank = instance default)"></div>
+        <div><label for="serpLimit">Keywords to check in SearXNG</label><input id="serpLimit" type="number" value="80" min="5" max="500"></div>
       </div>
-      <label class="chk" style="margin-top:10px"><input id="remember" type="checkbox"> Remember my DataForSEO login and Gemini key in this browser</label>
-      <p class="note">The login is sent only through this tool's Worker straight to api.dataforseo.com and is not stored on any server.
-        Each site costs about one Labs "ranked keywords" request (up to 1,000 keywords). Get a key at dataforseo.com. The Gemini key is likewise only passed through to Google.</p>
+      <div class="row" style="margin-top:12px">
+        <div><label for="lang">Language code</label><input id="lang" value="en"></div>
+        <div><label for="gl">Country code</label><input id="gl" value="us" placeholder="us, in, gb…"></div>
+        <div><label>&nbsp;</label><label class="chk"><input id="useSuggest" type="checkbox" checked> Check AI picks against Google Autocomplete</label></div>
+      </div>
+      <label class="chk" style="margin-top:10px"><input id="remember" type="checkbox"> Remember my Gemini and Supabase keys in this browser</label>
+      <p class="note"><b>Search Console</b> (free) gives your real queries and positions. Export with the free “Search Analytics for Sheets” add-on, Looker Studio, or GSC → Performance → Export (a queries-only file works too).
+        <b>SearXNG</b> is free, open-source metasearch you run yourself (one Docker command; enable the <code>json</code> format). The tool searches each main keyword and records where every site appears in the top 20 —
+        positions are approximate and there's no search volume. <b>Google Autocomplete</b> (free) confirms each AI-picked keyword is something people really type. Keys are passed through to Google only, never stored on a server.</p>
+    </details>
+    <details>
+      <summary>Save reports to Supabase (optional, free tier)</summary>
+      <div class="row" style="margin-top:12px">
+        <div><label for="sbUrl">Supabase project URL</label><input id="sbUrl" placeholder="https://xyzcompany.supabase.co"></div>
+        <div><label for="sbKey">Supabase anon (public) key</label><input id="sbKey" type="password" autocomplete="off"></div>
+        <div><label for="sbReports">Open a saved report</label><select id="sbReports"><option value="">— click Refresh —</option></select></div>
+        <div><label>&nbsp;</label><div style="display:flex;gap:8px"><button class="btn sm" id="sbSave" type="button">Save current report</button><button class="btn sm" id="sbRefresh" type="button">Refresh list</button></div></div>
+      </div>
+      <p class="note">Keeps every report (crawl, rankings, topic map, AI ideas) so you can reopen it or compare over time. Run this once in Supabase → SQL editor:</p>
+      <pre class="note" style="white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px">create table cg_reports (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  brand text, domain text, competitors text[], pages int,
+  data jsonb not null
+);
+alter table cg_reports enable row level security;
+-- Anyone holding your anon key can read and write these rows. Keep the key private,
+-- or switch these policies to authenticated users once you add Supabase Auth.
+create policy "anon read" on cg_reports for select to anon using (true);
+create policy "anon insert" on cg_reports for insert to anon with check (true);</pre>
     </details>
     <div class="actions">
       <button class="btn primary" id="run">Run report</button>
@@ -151,15 +179,15 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   var STOPSET = new Set(STOP);
 
   // ---------- settings & brand profiles ----------
-  var FIELDS = ["brandName", "you", "audience", "about", "offer", "avoid", "comp", "mode", "pathFilter", "maxPages", "maxSubs", "yourUrls", "compUrls", "gemModel", "nIdeas", "loc", "lang"];
-  var SECRETS = ["dfsLogin", "dfsPass", "gemKey"];
+  var FIELDS = ["sbUrl", "brandName", "you", "audience", "about", "offer", "avoid", "kb", "comp", "mode", "pathFilter", "maxPages", "maxSubs", "yourUrls", "compUrls", "gemModel", "nIdeas", "searx", "searxEngines", "serpLimit", "lang", "gl"];
+  var SECRETS = ["gemKey", "sbKey"];
   function readLS(k, d) { try { return JSON.parse(localStorage.getItem(k) || "") || d; } catch (_) { return d; } }
   function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
   function fill(obj, keys) { keys.forEach(function (k) { if (obj[k] != null) $("#" + k).value = obj[k]; }); }
   function collect(keys) { var o = {}; keys.forEach(function (k) { o[k] = $("#" + k).value; }); return o; }
   var saved = readLS("cg-settings", {});
   fill(saved, FIELDS.concat(SECRETS));
-  if (saved.dfsLogin || saved.gemKey) $("#remember").checked = true;
+  if (saved.gemKey) $("#remember").checked = true;
   function saveSettings() {
     var s = collect(FIELDS);
     if ($("#remember").checked) Object.assign(s, collect(SECRETS));
@@ -284,82 +312,163 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
     if (!site.hosts.length && !(opts.extra[r] || []).length) return site;
 
-    // Collect candidate URLs from sitemaps, else from the home page's links.
+    // Sitemaps and robots.txt rules for every live host.
+    var hostSet = new Set(site.hosts.map(function (H) { return H.host; })), rules = {};
     for (var i = 0; i < site.hosts.length && !stopped; i++) {
       var H = site.hosts[i];
       var sm = await api("sitemap?host=" + encodeURIComponent(H.host)).catch(function () { return {}; });
-      var urls = (sm.urls || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
-      H.sitemapCount = urls.length;
-      H.source = urls.length ? "sitemap" : "links";
-      if (!urls.length) urls = (H.home.links || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
-      H.candidates = Array.from(new Set(urls.filter(function (u) { return !junkPath.test(u); })));
+      rules[H.host] = sm.disallow || [];
+      H.sitemapUrls = (sm.urls || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
+      H.source = H.sitemapUrls.length ? "sitemap + links" : "links";
     }
+    var filt = opts.pathFilter;
+    var inFolder = function (u) { return !filt.length || filt.some(function (f) { return u.toLowerCase().indexOf(f) > -1; }); };
+    var allowed = function (u) {
+      try {
+        var x = new URL(u), path = x.pathname + x.search;
+        return !(rules[x.host] || []).some(function (rule) {
+          var re = new RegExp("^" + rule.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\\$$/, "$"));
+          return re.test(path);
+        });
+      } catch (_) { return false; }
+    };
+    var inScope = function (u) { try { var x = new URL(u); return hostSet.has(x.host) && !junkPath.test(u) && allowed(u); } catch (_) { return false; } };
 
-    // Pick pages: the whole site (optionally only paths matching the filter), or a
-    // sample spread across sections. Pasted URLs are always added on top.
-    var budget = opts.maxPages, queue = [], filt = opts.pathFilter;
-    var match = function (u) { return !filt.length || filt.some(function (f) { return u.toLowerCase().indexOf(f) > -1; }); };
+    var brand = brandTokens(r), budget = opts.maxPages, queue = [], seen = new Map(), pages = [];
+    // seen: normalised URL -> { url, depth, inlinks }. A page is "kept" in the report when it is in
+    // the folder; other in-scope pages may still be visited (in whole-site mode) to reach folder pages.
+    var add = function (u, depth, fed) {
+      if (!fed && !inScope(u)) return;
+      var n = normUrl(u), e = seen.get(n);
+      if (e) { e.inlinks++; return; }
+      seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed });
+      queue.push(e);
+    };
+    (opts.extra[r] || []).forEach(function (u) { add(u, 0, true); });
+    site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); seen.get(normUrl(H.home.finalUrl)).data = H.home; seen.get(normUrl(H.home.finalUrl)).inlinks = 0; });
     if (opts.full) {
       site.hosts.forEach(function (H) {
-        H.candidates = H.candidates.filter(match);
-        if (match(H.home.finalUrl)) queue.push({ url: H.home.finalUrl, data: H.home });
+        filt.forEach(function (f) { if (f.charAt(0) === "/") add("https://" + H.host + f, 1); });
+        H.sitemapUrls.forEach(function (u) { add(u, 1); seen.get(normUrl(u)) && (seen.get(normUrl(u)).inlinks = 0); });
       });
-      // Round-robin across hosts so one huge subdomain doesn't eat the budget.
-      var lists = site.hosts.map(function (H) { return H.candidates.slice(); }), k = 0;
-      while (queue.length < budget && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) queue.push({ url: l.shift() }); }
     } else {
-      var per = Math.max(3, Math.floor(budget / site.hosts.length));
+      // Quick sample: a few sitemap/home-link URLs per section, no link following.
+      var per = Math.max(3, Math.floor(budget / Math.max(1, site.hosts.length)));
       site.hosts.forEach(function (H) {
+        var pool0 = (H.sitemapUrls.length ? H.sitemapUrls : (H.home.links || [])).filter(function (u) { return inScope(u) && inFolder(u); });
         var bySec = new Map();
-        H.candidates.filter(match).forEach(function (u) { var k = topicOf({ url: u }); if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(u); });
-        var lists = Array.from(bySec.values()), pick = [], k = 0;
-        while (pick.length < per - 1 && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pick.push(l.shift()); }
-        queue.push({ url: H.home.finalUrl, data: H.home });
-        pick.forEach(function (u) { queue.push({ url: u }); });
+        pool0.forEach(function (u) { var k = topicOf({ url: u }); if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(u); });
+        var lists = Array.from(bySec.values()), n = 0, k = 0;
+        while (n < per - 1 && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) { add(l.shift(), 1); n++; } }
       });
-      queue = queue.slice(0, budget);
     }
-    (opts.extra[r] || []).forEach(function (u) { queue.push({ url: u, fed: true }); });
-    var qs = new Set(); queue = queue.filter(function (q) { var n = normUrl(q.url); if (qs.has(n)) return false; qs.add(n); return true; });
-    log("[" + r + "] crawling " + queue.length + " page(s)…");
 
-    var brand = brandTokens(r), done = 0;
-    var pages = await pool(queue, 6, async function (q) {
-      var p = q.data || await api("page?url=" + encodeURIComponent(q.url)).catch(function () { return { ok: false, url: q.url }; });
-      done++; part(done / queue.length);
-      if (!p.ok) return null;
-      p.host = new URL(p.finalUrl).host; p.fed = !!q.fed;
-      p.keywords = mainKeywords(p, brand);
-      p.mainKeyword = p.keywords[0] || "";
-      p.onPageKeyword = p.mainKeyword; p.keywordSource = "on-page";
-      p.topic = topicOf(p);
-      p.ranks = [];
-      delete p.text; delete p.links;
-      return p;
-    });
-    var seen = new Set();
-    site.pages = pages.filter(function (p) { if (!p || seen.has(normUrl(p.finalUrl))) return false; seen.add(normUrl(p.finalUrl)); return true; });
-    log("[" + r + "] crawled " + site.pages.length + " page(s)");
+    // Breadth-first crawl. Folder pages are crawled first; outside-folder pages are only
+    // visited (to discover links) once the folder frontier is empty, and cost from a separate budget.
+    var visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(30, budget) : 0;
+    var keep = function (e) { return e.fed || inFolder(e.url); };
+    while (!stopped && kept < budget) {
+      queue.sort(function (x, y) { return (keep(y) - keep(x)) || x.depth - y.depth; });
+      var batch = [];
+      while (queue.length && batch.length < 6 && kept + batch.length < budget) {
+        var e = queue.shift();
+        if (!keep(e)) { if (!opts.full || transit >= transitBudget) continue; transit++; }
+        batch.push(e);
+      }
+      if (!batch.length) break;
+      var got = await Promise.all(batch.map(function (e) { return e.data ? Promise.resolve(e.data) : api("page?url=" + encodeURIComponent(e.url)).catch(function () { return { ok: false, url: e.url }; }); }));
+      got.forEach(function (p, i) {
+        var e = batch[i]; visited++;
+        if (!p || !p.ok) return;
+        var fn = normUrl(p.finalUrl);
+        if (fn !== normUrl(e.url)) { if (seen.has(fn) && seen.get(fn) !== e && seen.get(fn).done) return; seen.set(fn, e); }
+        e.done = true;
+        if (opts.full) (p.links || []).forEach(function (l) { add(l, e.depth + 1); });
+        if (!keep(e) || !hostSet.has(new URL(p.finalUrl).host) && !e.fed) return;
+        kept++;
+        p.host = new URL(p.finalUrl).host; p.fed = e.fed; p.depth = e.depth; p.entry = e;
+        p.keywords = mainKeywords(p, brand);
+        p.mainKeyword = p.keywords[0] || "";
+        p.onPageKeyword = p.mainKeyword; p.keywordSource = "on-page";
+        p.topic = topicOf(p);
+        p.indexable = !/noindex/i.test(p.robots || "") && (!p.canonical || normUrl(new URL(p.canonical, p.finalUrl).toString()) === fn);
+        p.ranks = [];
+        delete p.text; delete p.links;
+        pages.push(p);
+      });
+      var left = queue.filter(keep).length;
+      part(Math.min(1, kept / Math.max(1, Math.min(budget, kept + left))));
+      status("Crawling " + r + ": " + kept + " page(s) kept, " + visited + " visited, " + left + " in queue…");
+    }
+    pages.forEach(function (p) { p.inlinks = p.entry.inlinks; delete p.entry; });
+    site.pages = pages;
+    site.discovered = Array.from(seen.values()).filter(keep).length;
+    log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget ? ", stopped at page limit" : "") + ")");
     return site;
   }
 
-  async function fetchRanked(site, opts) {
-    log("[" + site.domain + "] fetching ranking keywords from DataForSEO…");
-    var res = await fetch("/api/cg/ranked", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ login: opts.login, password: opts.password, target: site.domain, location_code: opts.loc, language_code: opts.lang, limit: 1000 }),
-    }).then(function (r) { return r.json(); }).catch(function (e) { return { error: e.message }; });
-    if (res.error) { log("[" + site.domain + "] DataForSEO error: " + res.error); return; }
-    site.ranked = res.keywords;
-    site.rankedTotal = res.total;
-    log("[" + site.domain + "] " + res.keywords.length + " ranking keywords (of " + res.total + " total), cost $" + (res.cost || 0));
+  // ---------- rankings (free sources) ----------
+  // Search Console export: finds the query/page/clicks/impressions/position columns by name.
+  function parseCsv(text) {
+    var rows = [], row = [], cell = "", q = false;
+    text = text.replace(/^﻿/, "");
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+      else if (c === '"') q = true;
+      else if (c === "," || c === "\t" || c === ";") { row.push(cell); cell = ""; }
+      else if (c === "\n" || c === "\r") { if (c === "\r" && text[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (x) { return x.trim(); }); });
+  }
+  function readGsc(text, domain) {
+    var rows = parseCsv(text); if (rows.length < 2) return [];
+    var head = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+    var col = function (re) { for (var i = 0; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
+    var cq = col(/^(top )?quer|^keyword|^search term/), cp = col(/^(top )?page|landing|^url|^address/), cc = col(/^clicks?/), ci = col(/^impr/), cpos = col(/^(avg\.? |average )?position|^pos/);
+    if (cq < 0 || cpos < 0) throw new Error("couldn't find a query and a position column in that CSV");
+    var num = function (v) { return parseFloat(String(v || "").replace(/[^\d.,-]/g, "").replace(",", ".")) || 0; };
+    return rows.slice(1).map(function (r) {
+      return { keyword: String(r[cq] || "").trim().toLowerCase(), url: cp > -1 ? String(r[cp] || "").trim() : "", clicks: cc > -1 ? num(r[cc]) : null,
+        volume: ci > -1 ? num(r[ci]) : null, position: Math.round(num(r[cpos]) * 10) / 10, source: "Search Console" };
+    }).filter(function (k) { return k.keyword && k.position > 0; });
+  }
+
+  // Asks the user's SearXNG for each keyword and records where every site appears.
+  async function serpCheck(sites, opts) {
+    var want = [], seenK = new Set(), pushK = function (k) { k = String(k || "").trim().toLowerCase(); if (k && k.split(" ").length > 1 && !seenK.has(k)) { seenK.add(k); want.push(k); } };
+    // Competitor topics first (that's where gaps are), then your own pages, best-linked first.
+    var byWeight = function (s) { return s.pages.slice().sort(function (a, b) { return (b.inlinks || 0) - (a.inlinks || 0); }); };
+    var lists = sites.slice(1).map(byWeight).concat([byWeight(sites[0])]), k = 0;
+    while (want.length < opts.serpLimit && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pushK(l.shift().onPageKeyword); }
+    log("Checking " + want.length + " keyword(s) in SearXNG…");
+    var done = 0, fails = 0;
+    await pool(want, 2, async function (kw) {
+      var res = await fetch("/api/cg/serp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instance: opts.searx, q: kw, language: opts.lang, engines: opts.engines, pages: 2 }) })
+        .then(function (r) { return r.json(); }).catch(function (e) { return { error: e.message }; });
+      done++; status("SearXNG: " + done + "/" + want.length + " keywords checked…"); prog(done / want.length);
+      if (res.error) { if (fails++ < 3) log("SearXNG error on “" + kw + "”: " + res.error); if (fails === 3) { log("Too many SearXNG errors — stopping the check."); stopped = true; } return; }
+      R0.serpChecked.add(kw);
+      sites.forEach(function (s) {
+        var hit = (res.results || []).filter(function (x) { try { var h = new URL(x.url).host; return h === s.domain || h.endsWith("." + s.domain); } catch (_) { return false; } })[0];
+        if (hit) { s.ranked = s.ranked || []; s.ranked.push({ keyword: kw, position: hit.position, url: hit.url, volume: null, clicks: null, source: "SearXNG" }); }
+      });
+    });
+    stopped = false;
+  }
+
+  // Maps ranking keywords onto crawled pages; a page's best-ranking keyword becomes its main keyword.
+  function attachRanks(site) {
+    if (!site.ranked) return;
+    site.rankedTotal = site.ranked.length;
     var byUrl = new Map(site.pages.map(function (p) { return [normUrl(p.finalUrl), p]; }));
-    res.keywords.forEach(function (k) { var p = byUrl.get(normUrl(k.url)); if (p) p.ranks.push(k); });
-    // A page's main keyword is the one it actually ranks best for (ties: higher volume); on-page analysis is the fallback.
+    site.ranked.forEach(function (k) { var p = byUrl.get(normUrl(k.url)); if (p) p.ranks.push(k); });
     site.pages.forEach(function (p) {
       if (!p.ranks.length) return;
-      p.ranks.sort(function (a, b) { return a.position - b.position || b.volume - a.volume; });
-      p.mainKeyword = p.ranks[0].keyword; p.keywordSource = "ranking";
+      p.ranks.sort(function (a, b) { return a.position - b.position || (b.volume || 0) - (a.volume || 0); });
+      p.mainKeyword = p.ranks[0].keyword; p.keywordSource = p.ranks[0].source;
       p.keywords = [p.mainKeyword].concat(p.keywords.filter(function (k) { return k !== p.mainKeyword; })).slice(0, 5);
     });
   }
@@ -371,7 +480,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     comps.forEach(function (c) {
       (c.ranked || []).forEach(function (k) {
         var r = rows.get(k.keyword);
-        if (!r) rows.set(k.keyword, r = { keyword: k.keyword, volume: k.volume, difficulty: k.difficulty, intent: k.intent, cpc: k.cpc, comps: {}, best: null });
+        if (!r) rows.set(k.keyword, r = { keyword: k.keyword, volume: null, comps: {}, best: null });
         var cur = r.comps[c.domain];
         if (!cur || k.position < cur.position) r.comps[c.domain] = { position: k.position, url: k.url };
         if (!r.best || k.position < r.best.position) r.best = { domain: c.domain, position: k.position, url: k.url };
@@ -380,6 +489,9 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     var out = [];
     rows.forEach(function (r) {
       var m = mine.get(r.keyword);
+      // Without a SearXNG check or a GSC row we can't tell whether you rank, so leave such keywords out.
+      if (!m && !R0.serpChecked.has(r.keyword) && !you.gsc) return;
+      r.volume = m && m.volume != null ? m.volume : null;
       r.you = m ? m.position : null; r.yourUrl = m ? m.url : "";
       r.compCount = Object.keys(r.comps).length;
       if (!m) r.status = r.best.position <= 20 ? "missing" : "low";
@@ -387,9 +499,11 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       else r.status = "shared";
       if (r.status !== "low") out.push(r);
     });
-    mine.forEach(function (k) { if (!rows.has(k.keyword)) out.push({ keyword: k.keyword, volume: k.volume, difficulty: k.difficulty, intent: k.intent, cpc: k.cpc, comps: {}, compCount: 0, you: k.position, yourUrl: k.url, best: null, status: "unique" }); });
-    out.forEach(function (r) { r.opportunity = r.status === "missing" || r.status === "weak" ? Math.round(r.volume * (r.compCount) / (1 + (r.difficulty || 30) / 50)) : 0; });
-    return out.sort(function (a, b) { return b.opportunity - a.opportunity || b.volume - a.volume; });
+    // "unique" needs a SearXNG check, otherwise we don't know competitors are absent.
+    mine.forEach(function (k) { if (!rows.has(k.keyword) && R0.serpChecked.has(k.keyword)) out.push({ keyword: k.keyword, volume: k.volume, comps: {}, compCount: 0, you: k.position, yourUrl: k.url, best: null, status: "unique" }); });
+    // Opportunity: how many competitors rank × how high, plus a bonus when you're absent.
+    out.forEach(function (r) { r.opportunity = r.status === "missing" || r.status === "weak" ? Math.round(r.compCount * (21 - Math.min(20, r.best.position)) * (r.status === "missing" ? 1.5 : 1)) : 0; });
+    return out.sort(function (a, b) { return b.opportunity - a.opportunity || (b.volume || 0) - (a.volume || 0); });
   }
   function stem(w) { return w.replace(/(ies)$/, "y").replace(/(es|s)$/, "").replace(/ing$/, ""); }
   function topicSet(ps) { return ps.map(function (p) { return { p: p, t: new Set(p.keywords.slice(0, 3).join(" ").split(" ").filter(function (w) { return !STOPSET.has(w); }).map(stem)) }; }); }
@@ -404,7 +518,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
           var j = inter / Math.min(x.t.size, m.t.size || 1);
           if (j > best) { best = j; bestP = m.p; }
         });
-        var vol = x.p.ranks.reduce(function (s, k) { return s + (k.position <= 20 ? k.volume : 0); }, 0);
+        var vol = x.p.ranks.filter(function (k) { return k.position <= 20; }).length;
         out.push({ competitor: c.domain, topic: x.p.topic, mainKeyword: x.p.mainKeyword, keywords: x.p.keywords.join(", "), url: x.p.finalUrl, title: x.p.title,
           coverage: best >= 0.67 ? "covered" : best >= 0.34 ? "partial" : "missing", match: bestP ? bestP.finalUrl : "", score: Math.round(best * 100), rankingVolume: vol, rankingCount: x.p.ranks.length });
       });
@@ -413,11 +527,11 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
 
   // ---------- Gemini topic recommendations ----------
-  function brandProfile() { return { name: $("#brandName").value.trim(), domain: root($("#you").value), audience: $("#audience").value.trim(), about: $("#about").value.trim(), offer: $("#offer").value.trim(), avoid: $("#avoid").value.trim() }; }
+  function brandProfile() { return { kb: $("#kb").value.trim(), name: $("#brandName").value.trim(), domain: root($("#you").value), audience: $("#audience").value.trim(), about: $("#about").value.trim(), offer: $("#offer").value.trim(), avoid: $("#avoid").value.trim() }; }
   function pageLine(p) {
     var path = (function () { try { var u = new URL(p.finalUrl); return u.host.replace(/^www\./, "") + u.pathname; } catch (_) { return p.finalUrl; } })();
-    var vol = p.ranks.reduce(function (a, k) { return a + (k.position <= 20 ? k.volume : 0); }, 0);
-    return "- " + p.mainKeyword + " | " + (p.title || "").slice(0, 90) + " | " + path + (p.ranks.length ? " | ranks for " + p.ranks.length + " kws, top-20 vol " + vol : "");
+    var best = p.ranks[0];
+    return "- " + p.mainKeyword + " | " + (p.title || "").slice(0, 90) + " | " + path + (best ? " | ranks #" + best.position + " for “" + best.keyword + "” (" + p.ranks.length + " kws)" : "");
   }
   function buildPrompt() {
     var b = R.brand, n = R.opts.nIdeas, hasRank = [R.you].concat(R.comps).some(function (s) { return s.ranked; });
@@ -426,7 +540,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       "You are a senior SEO content strategist. Recommend the " + n + " best NEW content topics for the brand below.",
       "Use the crawl data to find topics competitors cover that the brand has not covered (or covers weakly), and keep only topics that fit the brand, its offer and audience.",
       "", "## Brand", "Name: " + (b.name || b.domain), "Domain: " + b.domain, "About: " + (b.about || "(not given — infer from the brand's pages)"),
-      "Audience: " + (b.audience || "(not given)"), "Products / focus areas: " + (b.offer || "(not given)"), "Avoid / notes: " + (b.avoid || "none"),
+      "Audience: " + (b.audience || "(not given)"), "Knowledge base:\n" + (b.kb ? b.kb.slice(0, 30000) : "(not given)"), "Products / focus areas: " + (b.offer || "(not given)"), "Avoid / notes: " + (b.avoid || "none"),
       "", "## Brand's existing pages (main keyword | title | url | ranking data)",
     ].concat(cap(R.you.pages, 500).map(pageLine));
     R.comps.forEach(function (c) {
@@ -434,19 +548,24 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       out.push("", "## Competitor " + c.domain + " pages"); out = out.concat(cap(ps, 300).map(pageLine));
     });
     var tg = R.topicGap.filter(function (r) { return r.coverage !== "covered"; });
-    if (tg.length) { out.push("", "## Computed topic gaps (competitor page topics with no or partial match on the brand's site)"); out = out.concat(cap(tg, 200).map(function (r) { return "- [" + r.coverage + "] " + r.mainKeyword + " — " + r.url; })); }
+    var tm = (R.topics || []).filter(function (t) { return !t.you && t.verdict !== "off-brand"; });
+    if (tm.length) {
+      out.push("", "## Scored topic gaps (topic | topic score | brand relevance | competitors covering | competitor pages | example competitor URL)");
+      out = out.concat(cap(tm, 200).map(function (t) { var c = R.comps.filter(function (c) { return t.by[c.domain]; })[0]; return "- " + t.topic + " | " + t.score + " | " + t.relevance + " | " + t.compsWith + "/" + R.comps.length + " | " + (t.total - t.you) + " | " + (c ? t.by[c.domain][0].finalUrl : ""); }));
+    } else if (tg.length) { out.push("", "## Computed topic gaps"); out = out.concat(cap(tg, 200).map(function (r) { return "- [" + r.coverage + "] " + r.mainKeyword + " — " + r.url; })); }
     if (hasRank) {
       var kg = R.kwGap.filter(function (r) { return r.status === "missing" || r.status === "weak"; });
-      out.push("", "## Keyword gaps (keyword | status | monthly volume | difficulty | best competitor position)");
-      out = out.concat(cap(kg, 250).map(function (r) { return "- " + r.keyword + " | " + r.status + " | " + r.volume + " | " + (r.difficulty == null ? "?" : r.difficulty) + " | #" + (r.best ? r.best.position : "?"); }));
+      out.push("", "## Keyword gaps (keyword | status | your position | best competitor position | competitors ranking)");
+      out = out.concat(cap(kg, 250).map(function (r) { return "- " + r.keyword + " | " + r.status + " | " + (r.you ? "#" + r.you : "not in top 20") + " | #" + (r.best ? r.best.position : "?") + " | " + r.compCount; }));
     }
     out.push("", "## Rules",
       "- Don't suggest a topic the brand already covers well (check its pages above).",
-      "- primary_keyword: one realistic search query a person would type. " + (hasRank ? "Prefer keywords from the keyword-gap list when they fit." : "No volume data is available; pick the most natural, commonly searched phrasing."),
-      "- Rank by business value for this brand × size of the gap × how winnable it is. Put the single best pick first.",
+      "- primary_keyword: one realistic search query a person would type. " + (hasRank ? "Prefer keywords from the keyword-gap list when they fit." : "Pick the most natural, commonly searched phrasing (it will be checked against Google Autocomplete)."),
+      "- Score every idea 0-100: relevance (fit with the brand's knowledge base and offer), rank_potential (can this brand realistically rank, given its existing related pages and how competitors cover it), and topic_score (your overall score). Use the scored topic gaps as evidence, but apply judgment.",
+      "- Order by topic_score, best first. The first idea is the single ideal pick to write now.",
       "- competitor_urls: only URLs that appear in the data above.",
       "", "Reply with JSON only, shaped as:",
-      '{"ideas":[{"topic":"","primary_keyword":"","secondary_keywords":[""],"search_intent":"informational|commercial|transactional|navigational","content_type":"blog post|guide|comparison|landing page|tool|other","suggested_title":"","why":"1-2 sentences: brand fit and the gap","competitor_urls":[""],"brand_closest_url":"","priority":"high|medium|low","fit_score":1,"outline":["H2 ..."]}]}');
+      '{"ideas":[{"topic":"","primary_keyword":"","secondary_keywords":[""],"search_intent":"informational|commercial|transactional|navigational","content_type":"blog post|guide|comparison|landing page|tool|other","suggested_title":"","why":"1-2 sentences: brand fit and the gap","competitor_urls":[""],"brand_closest_url":"","priority":"high|medium|low","topic_score":0,"relevance":0,"rank_potential":0,"fit_score":1,"outline":["H2 ..."]}]}');
     return out.join("\n");
   }
   async function runGemini() {
@@ -462,8 +581,20 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     if (res.error || !Array.isArray(ideas)) { R.ideas = { error: res.error || "No ideas returned" }; log("Gemini error: " + R.ideas.error); status("Gemini failed — see the AI tab."); }
     else {
       // Attach real volume / difficulty when the primary keyword is in the ranking data.
-      var known = new Map(); [R.you].concat(R.comps).forEach(function (s) { (s.ranked || []).forEach(function (k) { known.set(k.keyword.toLowerCase(), k); }); });
-      ideas.forEach(function (it) { var k = known.get(String(it.primary_keyword || "").toLowerCase()); if (k) { it.volume = k.volume; it.difficulty = k.difficulty; } });
+      // Attach GSC impressions when you already get them for this keyword.
+      var known = new Map(); (R.you.ranked || []).forEach(function (k) { if (k.volume != null) known.set(k.keyword.toLowerCase(), k); });
+      ideas.forEach(function (it) { var k = known.get(String(it.primary_keyword || "").toLowerCase()); if (k) { it.volume = k.volume; it.yourPos = k.position; } });
+      if (R.opts.useSuggest) {
+        status("Checking AI keywords against Google Autocomplete…");
+        await pool(ideas, 3, async function (it) {
+          var kw = String(it.primary_keyword || "").toLowerCase().trim(); if (!kw) return;
+          var res = await api("suggest?q=" + encodeURIComponent(kw) + "&hl=" + encodeURIComponent(R.opts.lang) + "&gl=" + encodeURIComponent(R.opts.gl)).catch(function () { return {}; });
+          if (!res.suggestions) return;
+          var sug = res.suggestions.map(function (x) { return String(x).toLowerCase(); });
+          it.autocomplete = sug.indexOf(kw) > -1 ? "exact" : sug.some(function (x) { return x.indexOf(kw) === 0; }) ? "prefix" : sug.length ? "related" : "none";
+          it.related = sug.filter(function (x) { return x !== kw; }).slice(0, 8);
+        });
+      }
       R.ideas = { list: ideas, usage: res.usage };
       log("Gemini suggested " + ideas.length + " topics" + (res.usage ? " (" + res.usage.totalTokenCount + " tokens)" : ""));
       status("Done.");
@@ -471,8 +602,8 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     if (current === "ideas") renderView();
   }
   function ideaCsv() {
-    var rows = [["Rank", "Topic", "Primary keyword", "Secondary keywords", "Intent", "Content type", "Suggested title", "Why", "Priority", "Fit score", "Volume", "KD", "Competitor URLs", "Your closest URL", "Outline"]];
-    R.ideas.list.forEach(function (it, i) { rows.push([i + 1, it.topic, it.primary_keyword, (it.secondary_keywords || []).join("; "), it.search_intent, it.content_type, it.suggested_title, it.why, it.priority, it.fit_score, it.volume, it.difficulty, (it.competitor_urls || []).join(" "), it.brand_closest_url, (it.outline || []).join(" / ")]); });
+    var rows = [["Rank", "Topic", "Primary keyword", "Secondary keywords", "Intent", "Content type", "Suggested title", "Why", "Priority", "Topic score", "Relevance", "Rank potential", "Autocomplete", "GSC impressions", "Competitor URLs", "Your closest URL", "Outline"]];
+    R.ideas.list.forEach(function (it, i) { rows.push([i + 1, it.topic, it.primary_keyword, (it.secondary_keywords || []).join("; "), it.search_intent, it.content_type, it.suggested_title, it.why, it.priority, it.topic_score, it.relevance, it.rank_potential, it.autocomplete, it.volume, (it.competitor_urls || []).join(" "), it.brand_closest_url, (it.outline || []).join(" / ")]); });
     var csv = rows.map(function (r) { return r.map(function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
     var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv" })); a.download = "topic-ideas-" + R.you.domain + ".csv"; a.click();
   }
@@ -488,10 +619,11 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         return '<div class="idea' + (i === 0 ? " top" : "") + '">' + (i === 0 ? '<span class="pill p-unique">★ Ideal pick</span> ' : '<span class="pill">#' + (i + 1) + "</span> ") +
           '<span class="pill p-' + pr + '">' + esc(it.priority || "") + " priority</span>" +
           "<h3>" + esc(it.topic) + "</h3>" + '<div class="kw">🎯 ' + esc(it.primary_keyword) + "</div>" +
-          '<div class="meta">' + [it.search_intent, it.content_type, it.fit_score != null ? "fit " + it.fit_score + "/10" : "", it.volume != null ? "vol " + Number(it.volume).toLocaleString() : "", it.difficulty != null ? "KD " + it.difficulty : ""].filter(Boolean).map(function (x) { return '<span class="pill">' + esc(x) + "</span>"; }).join("") + "</div>" +
+          '<div class="meta">' + [it.search_intent, it.content_type, it.topic_score != null ? "score " + it.topic_score + "/100" : "", it.relevance != null ? "relevance " + it.relevance : "", it.rank_potential != null ? "rank potential " + it.rank_potential : "", it.autocomplete ? { exact: "✓ searched on Google", prefix: "✓ searched (longer forms)", related: "~ only related searches", none: "✗ not in Autocomplete" }[it.autocomplete] : "", it.volume != null ? it.volume.toLocaleString() + " GSC impressions" : ""].filter(Boolean).map(function (x) { return '<span class="pill">' + esc(x) + "</span>"; }).join("") + "</div>" +
           (it.suggested_title ? '<div class="lbl">Suggested title</div><div>' + esc(it.suggested_title) + "</div>" : "") +
           "<p>" + esc(it.why) + "</p>" +
           ((it.secondary_keywords || []).length ? '<div class="lbl">Secondary keywords</div><div class="muted">' + esc(it.secondary_keywords.join(", ")) + "</div>" : "") +
+          ((it.related || []).length ? '<div class="lbl">People also search (Google Autocomplete)</div><div class="muted">' + esc(it.related.join(", ")) + "</div>" : "") +
           ((it.outline || []).length ? '<div class="lbl">Outline</div><ol>' + it.outline.map(function (o) { return "<li>" + esc(o) + "</li>"; }).join("") + "</ol>" : "") +
           ((it.competitor_urls || []).length ? '<div class="lbl">Competitors covering it</div>' + it.competitor_urls.map(link).join("") : "") +
           (it.brand_closest_url ? '<div class="lbl">Your closest page</div>' + link(it.brand_closest_url) : "") + "</div>";
@@ -502,8 +634,8 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
 
   // ---------- rendering ----------
-  var R = null, current = "overview";
-  var TABS = [["ideas", "✨ AI topic ideas"], ["overview", "Overview"], ["subdomains", "Subdomains"], ["pages", "Pages & topics"], ["kwgap", "Keyword gap"], ["topicgap", "Topic gap"], ["ranked", "All ranking keywords"]];
+  var R = null, current = "overview", R0 = { serpChecked: new Set() };
+  var TABS = [["ideas", "✨ AI topic ideas"], ["topicmap", "🗺️ Topic map"], ["overview", "Overview"], ["subdomains", "Subdomains"], ["pages", "Pages & topics"], ["kwgap", "Keyword gap"], ["topicgap", "Topic gap"], ["ranked", "All ranking keywords"]];
   function renderTabs() {
     $("#tabs").innerHTML = TABS.map(function (t) { return '<button data-t="' + t[0] + '" class="' + (t[0] === current ? "on" : "") + '">' + t[1] + "</button>"; }).join("");
     $("#tabs").querySelectorAll("button").forEach(function (b) { b.onclick = function () { current = b.dataset.t; renderTabs(); renderView(); }; });
@@ -548,93 +680,158 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   }
 
   function allSites() { return [R.you].concat(R.comps); }
+  var siteFilter = function () { return { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } }; };
+  var posLink = function (x) { return x ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" title="' + esc(x.url) + '">#' + x.position + "</a>" : '<span class="muted">—</span>'; };
+
+  // ---------- topic map: clusters pages from every site into shared topics ----------
+  function topicMap() {
+    var clusters = [];
+    allSites().forEach(function (s) {
+      s.pages.forEach(function (p) {
+        var t = new Set(p.keywords.slice(0, 2).join(" ").split(" ").filter(function (w) { return w && !STOPSET.has(w); }).map(stem));
+        if (!t.size) return;
+        var best = null, bs = 0;
+        clusters.forEach(function (c) {
+          var inter = 0; t.forEach(function (w) { if (c.core.has(w)) inter++; });
+          var sc = inter / Math.min(t.size, c.core.size);
+          if (sc > bs) { bs = sc; best = c; }
+        });
+        if (!best || bs < 0.6) clusters.push(best = { core: t, pages: [], names: new Map() });
+        best.pages.push({ site: s.domain, p: p });
+        best.names.set(p.mainKeyword, (best.names.get(p.mainKeyword) || 0) + 1);
+      });
+    });
+    // Brand vocabulary from the profile + knowledge base (stemmed term weights).
+    var b = R.brand || brandProfile(), vocab = new Map();
+    [[b.about, 3], [b.offer, 4], [b.audience, 2], [b.kb, 1]].forEach(function (f) { tokens(f[0]).forEach(function (w) { if (!STOPSET.has(w)) { w = stem(w); vocab.set(w, (vocab.get(w) || 0) + f[1]); } }); });
+    var vmax = Math.max(1, Math.max.apply(null, Array.from(vocab.values()).concat([1])));
+    var avoid = new Set(tokens(b.avoid).filter(function (w) { return !STOPSET.has(w); }).map(stem));
+    var myTopics = topicSet(R.you.pages);
+    return clusters.map(function (c) {
+      var by = {}; c.pages.forEach(function (x) { (by[x.site] = by[x.site] || []).push(x.p); });
+      var compsWith = R.comps.filter(function (cp) { return by[cp.domain]; }).length, you = (by[R.you.domain] || []).length;
+      var status = you && compsWith ? (compsWith === R.comps.length ? "everyone" : "shared") : you ? "you only" : compsWith >= 2 ? "gap — shared by competitors" : "gap";
+      var label = Array.from(c.names.entries()).sort(function (a, b) { return b[1] - a[1] || a[0].length - b[0].length; })[0][0];
+      var ranks = c.pages.reduce(function (n, x) { return n + x.p.ranks.length; }, 0);
+      // --- Topic score (0-100) = 40% brand relevance + 25% gap + 20% competitor demand + 15% rankability.
+      var words = Array.from(c.core), hit = 0;
+      words.forEach(function (w) { if (vocab.has(w)) hit += 0.5 + 0.5 * Math.min(1, vocab.get(w) / (vmax * 0.25)); });
+      var relevance = vocab.size ? Math.round(100 * Math.min(1, hit / Math.max(1, words.length) * 1.3)) : 50;
+      if (words.some(function (w) { return avoid.has(w); })) relevance = Math.round(relevance * 0.2);
+      var near = 0; myTopics.forEach(function (m) { var i = 0; c.core.forEach(function (w) { if (m.t.has(w)) i++; }); near = Math.max(near, i / Math.min(c.core.size, m.t.size || 1)); });
+      var gap = you ? 0 : near >= 0.34 ? 55 : 100;
+      var demand = Math.round(100 * Math.min(1, (compsWith / Math.max(1, R.comps.length)) * 0.7 + Math.min(1, (c.pages.length - you) / 6) * 0.3));
+      var compBest = Infinity; c.pages.forEach(function (x) { if (x.site !== R.you.domain) x.p.ranks.forEach(function (k) { compBest = Math.min(compBest, k.position); }); });
+      // Rankable when competitors already rank for it (proven demand) and you have related pages to build on.
+      var rankability = Math.round(40 + (near >= 0.34 ? 30 : 0) + (compBest <= 10 ? 30 : compBest <= 20 ? 15 : 0));
+      var score = you ? Math.round(relevance * 0.4) : Math.round(relevance * 0.4 + gap * 0.25 + demand * 0.2 + rankability * 0.15);
+      return { topic: label, by: by, you: you, compsWith: compsWith, status: status, total: c.pages.length, ranks: ranks,
+        keywords: Array.from(c.names.keys()).slice(0, 8).join(", "), relevance: relevance, gap: gap, demand: demand, rankability: rankability, score: score,
+        verdict: you ? "covered" : score >= 70 ? "write next" : score >= 50 ? "worth it" : relevance < 35 ? "off-brand" : "low priority" };
+    }).sort(function (a, b) { return b.score - a.score || b.compsWith - a.compsWith || b.total - a.total; });
+  }
+
   function renderView() {
     var v = $("#view"); v.innerHTML = "";
-    var hasRank = allSites().some(function (s) { return s.ranked; });
+    var hasRank = allSites().some(function (s) { return s.ranked; }), hasComp = R.comps.some(function (s) { return s.ranked; });
     if (current === "ideas") { renderIdeas(v); return; }
-    var noRank = "Add a DataForSEO login under “Ranking keywords” and run again to fill this view.";
+    var noRank = "No ranking data yet. Add a Search Console export (your site) and/or a SearXNG address (all sites) under “Rankings — free sources”, then run again.";
     if (current === "overview") {
       var kg = R.kwGap, missing = kg.filter(function (r) { return r.status === "missing"; }), weak = kg.filter(function (r) { return r.status === "weak"; });
-      var tg = R.topicGap.filter(function (r) { return r.coverage === "missing"; });
+      var tm = R.topics, gaps = tm.filter(function (t) { return /^gap/.test(t.status); });
       v.insertAdjacentHTML("beforeend", '<div class="kpis">' +
         [["Sites crawled", allSites().length], ["Live subdomains", allSites().reduce(function (s, x) { return s + x.hosts.length; }, 0)], ["Pages analysed", allSites().reduce(function (s, x) { return s + x.pages.length; }, 0)],
-         ["Missing keywords", hasRank ? missing.length : "—"], ["Weak keywords", hasRank ? weak.length : "—"], ["Missing volume / mo", hasRank ? missing.reduce(function (s, r) { return s + r.volume; }, 0).toLocaleString() : "—"], ["Topics you lack", tg.length]]
+         ["Topics found", tm.length], ["Topic gaps", gaps.length], ["Gaps 2+ competitors share", gaps.filter(function (t) { return t.compsWith >= 2; }).length],
+         ["Missing keywords", hasComp ? missing.length : "—"], ["Weak keywords", hasComp ? weak.length : "—"]]
           .map(function (k) { return '<div class="kpi"><b>' + (typeof k[1] === "number" ? k[1].toLocaleString() : k[1]) + "</b><span>" + k[0] + "</span></div>"; }).join("") + "</div>");
       v.appendChild(table([
         { h: "Site", v: function (s) { return s.domain + (s === R.you ? " (you)" : ""); } },
         { h: "Live subdomains", n: 1, v: function (s) { return s.hosts.length; } },
         { h: "Pages crawled", n: 1, v: function (s) { return s.pages.length; } },
+        { h: "Pages found in scope", n: 1, v: function (s) { return s.discovered; } },
         { h: "Ranking keywords", n: 1, v: function (s) { return s.ranked ? s.rankedTotal : null; }, html: function (s) { return num(s.ranked ? s.rankedTotal : null); } },
         { h: "Top-10 keywords", n: 1, v: function (s) { return s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null; }, html: function (s) { return num(s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null); } },
-        { h: "Est. traffic (sample)", n: 1, v: function (s) { return s.ranked ? Math.round(s.ranked.reduce(function (a, k) { return a + k.etv; }, 0)) : null; }, html: function (s) { return num(s.ranked ? Math.round(s.ranked.reduce(function (a, k) { return a + k.etv; }, 0)) : null); } },
-        { h: "Top keyword", v: function (s) { return s.ranked && s.ranked[0] ? s.ranked[0].keyword : ""; } },
+        { h: "Ranking source", v: function (s) { return s.ranked ? Array.from(new Set(s.ranked.map(function (k) { return k.source; }))).join(" + ") : ""; } },
       ], allSites(), { name: "overview" }));
       if (!hasRank) v.insertAdjacentHTML("beforeend", '<p class="note">' + noRank + "</p>");
+    }
+    if (current === "topicmap") {
+      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px">Every crawled page from every site, grouped into topics by its main keywords. Numbers are pages per site on that topic. <b>Topic score</b> (0–100) = 40% brand relevance (topic words vs your profile and knowledge base) + 25% gap (you have no page) + 20% competitor demand (how many competitors write about it) + 15% rankability (competitors rank for it, you have related pages to link from). ' +
+        '<b>gap — shared by competitors</b>: 2+ competitors cover it and you don\'t (strongest signal) · <b>gap</b>: one competitor covers it · <b>shared</b>/<b>everyone</b>: you and competitors both cover it · <b>you only</b>: your unique topics.</p>');
+      var cols = [
+        { h: "Topic", v: function (r) { return r.topic; }, html: function (r) { return "<b>" + esc(r.topic) + "</b>"; } },
+        { h: "Topic score", n: 1, v: function (r) { return r.score; }, html: function (r) { return "<b>" + r.score + "</b>"; } },
+        { h: "Verdict", v: function (r) { return r.verdict; }, html: function (r) { return pill({ "write next": "missing", "worth it": "weak", "covered": "shared", "off-brand": "low", "low priority": "low" }[r.verdict]).replace(/>[^<]+</, ">" + esc(r.verdict) + "<"); } },
+        { h: "Brand relevance", n: 1, v: function (r) { return r.relevance; } }, { h: "Gap", n: 1, v: function (r) { return r.gap; } },
+        { h: "Competitor demand", n: 1, v: function (r) { return r.demand; } }, { h: "Rankability", n: 1, v: function (r) { return r.rankability; } },
+        { h: "Status", v: function (r) { return r.status; }, html: function (r) { return pill(/shared by/.test(r.status) ? "missing" : /^gap/.test(r.status) ? "weak" : r.status === "you only" ? "unique" : "shared").replace(/>[^<]+</, ">" + esc(r.status) + "<"); } },
+        { h: "Competitors covering", n: 1, v: function (r) { return r.compsWith; } },
+        { h: "You", n: 1, v: function (r) { return r.you; }, html: function (r) { return r.you ? r.you : '<span class="muted">0</span>'; } },
+      ].concat(R.comps.map(function (c) { return { h: c.domain, n: 1, v: function (r) { return (r.by[c.domain] || []).length; }, html: function (r) { var ps = r.by[c.domain] || []; return ps.length ? '<a href="' + esc(ps[0].finalUrl) + '" target="_blank" rel="noopener" title="' + esc(ps.map(function (p) { return p.finalUrl; }).join("\n")) + '">' + ps.length + "</a>" : '<span class="muted">0</span>'; } }; }))
+        .concat([
+          { h: "Ranking kws", n: 1, v: function (r) { return hasRank ? r.ranks : null; }, html: function (r) { return num(hasRank ? r.ranks : null); } },
+          { h: "Keywords in topic", v: function (r) { return r.keywords; } },
+          { h: "Example competitor page", v: function (r) { var c = R.comps.filter(function (c) { return r.by[c.domain]; })[0]; return c ? r.by[c.domain][0].finalUrl : ""; }, html: function (r) { var c = R.comps.filter(function (c) { return r.by[c.domain]; })[0]; return link(c ? r.by[c.domain][0].finalUrl : ""); } },
+          { h: "Your page", v: function (r) { return r.by[R.you.domain] ? r.by[R.you.domain][0].finalUrl : ""; }, html: function (r) { return link(r.by[R.you.domain] ? r.by[R.you.domain][0].finalUrl : ""); } },
+        ]);
+      v.appendChild(table(cols, R.topics, { name: "topic-map", filter: { label: "verdicts", values: ["write next", "worth it", "low priority", "off-brand", "covered"], get: function (r) { return r.verdict; } } }));
     }
     if (current === "subdomains") {
       var rows = [];
       allSites().forEach(function (s) {
         s.hosts.forEach(function (H) {
           var ps = s.pages.filter(function (p) { return p.host === H.host; });
-          var rk = (s.ranked || []).filter(function (k) { try { return new URL(k.url).host === H.host; } catch (_) { return false; } });
+          var rk = (s.ranked || []).filter(function (k) { try { return new URL(k.url).host === H.host; } catch (_) { return false; } }).sort(function (a, b) { return a.position - b.position; });
           var freq = new Map(); ps.forEach(function (p) { p.keywords.slice(0, 2).forEach(function (k) { freq.set(k, (freq.get(k) || 0) + 1); }); });
           rows.push({ site: s.domain, host: H.host, aliases: H.names.filter(function (n) { return n !== H.host; }).join(", "), title: H.home.title, mainKeyword: H.home.keywords ? H.home.keywords[0] : (mainKeywords(H.home, brandTokens(s.domain))[0] || ""),
             topics: Array.from(freq.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6).map(function (e) { return e[0]; }).join(", "),
-            urls: H.candidates.length, source: H.source, crawled: ps.length, ranking: s.ranked ? rk.length : null, top: rk[0] ? rk[0].keyword + " (#" + rk[0].position + ")" : "" });
+            sitemap: H.sitemapUrls.length, source: H.source, crawled: ps.length, ranking: s.ranked ? rk.length : null, top: rk[0] ? rk[0].keyword + " (#" + rk[0].position + ")" : "" });
         });
       });
       v.appendChild(table([
         { h: "Site", v: function (r) { return r.site; } }, { h: "Subdomain", v: function (r) { return r.host; }, html: function (r) { return link("https://" + r.host + "/"); } },
         { h: "Home title", v: function (r) { return r.title; } }, { h: "Main keyword", v: function (r) { return r.mainKeyword; } }, { h: "Topics", v: function (r) { return r.topics; } },
-        { h: "URLs found", n: 1, v: function (r) { return r.urls; } }, { h: "Source", v: function (r) { return r.source; } }, { h: "Crawled", n: 1, v: function (r) { return r.crawled; } },
+        { h: "Sitemap URLs", n: 1, v: function (r) { return r.sitemap; } }, { h: "Discovered via", v: function (r) { return r.source; } }, { h: "Crawled", n: 1, v: function (r) { return r.crawled; } },
         { h: "Ranking kws", n: 1, v: function (r) { return r.ranking; }, html: function (r) { return num(r.ranking); } }, { h: "Top ranking keyword", v: function (r) { return r.top; } },
         { h: "Also answers on", v: function (r) { return r.aliases; } },
-      ], rows, { name: "subdomains", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+      ], rows, { name: "subdomains", filter: siteFilter() }));
     }
     if (current === "pages") {
       var prow = [];
-      allSites().forEach(function (s) { s.pages.forEach(function (p) {
-        var top = p.ranks.slice().sort(function (a, b) { return a.position - b.position || b.volume - a.volume; });
-        prow.push({ site: s.domain, p: p, top: top[0], vol: top.reduce(function (a, k) { return a + k.volume; }, 0) });
-      }); });
+      allSites().forEach(function (s) { s.pages.forEach(function (p) { prow.push({ site: s.domain, p: p, top: p.ranks[0] }); }); });
       v.appendChild(table([
         { h: "Site", v: function (r) { return r.site; } }, { h: "URL", v: function (r) { return r.p.finalUrl; }, html: function (r) { return link(r.p.finalUrl); } },
         { h: "Topic (section)", v: function (r) { return r.p.topic; } }, { h: "Main keyword", v: function (r) { return r.p.mainKeyword; }, html: function (r) { return "<b>" + esc(r.p.mainKeyword) + "</b>"; } },
         { h: "Keyword source", v: function (r) { return r.p.keywordSource; } },
         { h: "On-page focus", v: function (r) { return r.p.onPageKeyword; } },
         { h: "Other keywords", v: function (r) { return r.p.keywords.slice(1).join(", "); } }, { h: "Title", v: function (r) { return r.p.title; } }, { h: "H1", v: function (r) { return r.p.h1[0] || ""; } },
-        { h: "Top ranking keyword", v: function (r) { return r.top ? r.top.keyword : ""; } }, { h: "Pos", n: 1, v: function (r) { return r.top ? r.top.position : null; }, html: function (r) { return num(r.top ? r.top.position : null); } },
+        { h: "Best position", n: 1, v: function (r) { return r.top ? r.top.position : null; }, html: function (r) { return num(r.top ? r.top.position : null); } },
         { h: "# ranking kws", n: 1, v: function (r) { return hasRank ? r.p.ranks.length : null; }, html: function (r) { return num(hasRank ? r.p.ranks.length : null); } },
-        { h: "Ranking volume", n: 1, v: function (r) { return hasRank ? r.vol : null; }, html: function (r) { return num(hasRank ? r.vol : null); } },
+        { h: "Depth", n: 1, v: function (r) { return r.p.depth; } }, { h: "Inlinks", n: 1, v: function (r) { return r.p.inlinks; } },
+        { h: "Indexable", v: function (r) { return r.p.indexable ? "yes" : "no"; } },
         { h: "H2s", v: function (r) { return r.p.h2.slice(0, 6).join(" | "); } },
-      ], prow, { name: "pages", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+      ], prow, { name: "pages", filter: siteFilter() }));
     }
     if (current === "kwgap") {
-      if (!hasRank) { v.innerHTML = '<div class="empty">' + noRank + "</div>"; return; }
-      var cc = R.comps.map(function (c) {
-        return { h: c.domain, n: 1, v: function (r) { return r.comps[c.domain] ? r.comps[c.domain].position : null; }, html: function (r) { var x = r.comps[c.domain]; return x ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" title="' + esc(x.url) + '">#' + x.position + "</a>" : '<span class="muted">—</span>'; } };
-      });
-      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px"><b>missing</b>: a competitor ranks top 20 and you don\'t rank · <b>weak</b>: you rank, but well below a competitor · <b>shared</b>: you rank about as well · <b>unique</b>: only you rank. Opportunity = volume × competitors ranking, discounted by difficulty.</p>');
+      if (!hasComp) { v.innerHTML = '<div class="empty">The keyword gap needs competitor positions: add a SearXNG address under “Rankings — free sources” and run again. (The Topic map tab works without it.)</div>'; return; }
+      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px">Keywords checked in your SearXNG (plus your Search Console data). <b>missing</b>: a competitor is in the top 20 and you aren\'t · <b>weak</b>: you rank well below a competitor · <b>shared</b>: about level · <b>unique</b>: only you rank. Opportunity = competitors ranking × how high they rank.</p>');
       v.appendChild(table([
         { h: "Keyword", v: function (r) { return r.keyword; }, html: function (r) { return "<b>" + esc(r.keyword) + "</b>"; } },
         { h: "Status", v: function (r) { return r.status; }, html: function (r) { return pill(r.status); } },
-        { h: "Volume", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
-        { h: "KD", n: 1, v: function (r) { return r.difficulty; }, html: function (r) { return num(r.difficulty); } },
-        { h: "Intent", v: function (r) { return r.intent; } },
-        { h: "You", n: 1, v: function (r) { return r.you; }, html: function (r) { return r.you ? '<a href="' + esc(r.yourUrl) + '" target="_blank" rel="noopener">#' + r.you + "</a>" : '<span class="muted">—</span>'; } },
-      ].concat(cc).concat([
+        { h: "You", n: 1, v: function (r) { return r.you; }, html: function (r) { return r.you ? posLink({ url: r.yourUrl, position: r.you }) : '<span class="muted">—</span>'; } },
+      ].concat(R.comps.map(function (c) { return { h: c.domain, n: 1, v: function (r) { return r.comps[c.domain] ? r.comps[c.domain].position : null; }, html: function (r) { return posLink(r.comps[c.domain]); } }; })).concat([
+        { h: "GSC impressions", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
         { h: "Best competitor URL", v: function (r) { return r.best ? r.best.url : ""; }, html: function (r) { return link(r.best ? r.best.url : ""); } },
         { h: "Opportunity", n: 1, v: function (r) { return r.opportunity; }, html: function (r) { return num(r.opportunity); } },
       ]), R.kwGap, { name: "keyword-gap", filter: { label: "statuses", values: ["missing", "weak", "shared", "unique"], get: function (r) { return r.status; } } }));
     }
     if (current === "topicgap") {
-      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px">Each crawled competitor page, matched to your closest crawled page by its main keywords. <b>missing</b> pages are topics to write; <b>partial</b> ones may need a deeper or dedicated page. Coverage is judged only against the pages crawled — raise the page budget for a fuller picture.</p>');
+      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px">Each crawled competitor page, matched to your closest crawled page by its main keywords. <b>missing</b> pages are topics to write; <b>partial</b> ones may need a deeper or dedicated page.</p>');
       v.appendChild(table([
         { h: "Competitor", v: function (r) { return r.competitor; } }, { h: "Coverage", v: function (r) { return r.coverage; }, html: function (r) { return pill(r.coverage === "covered" ? "shared" : r.coverage === "partial" ? "weak" : "missing").replace(/>(shared|weak|missing)</, ">" + r.coverage + "<"); } },
         { h: "Main keyword", v: function (r) { return r.mainKeyword; }, html: function (r) { return "<b>" + esc(r.mainKeyword) + "</b>"; } }, { h: "Topic (section)", v: function (r) { return r.topic; } },
         { h: "Competitor page", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } }, { h: "Title", v: function (r) { return r.title; } },
         { h: "Ranking kws", n: 1, v: function (r) { return hasRank ? r.rankingCount : null; }, html: function (r) { return num(hasRank ? r.rankingCount : null); } },
-        { h: "Top-20 volume", n: 1, v: function (r) { return hasRank ? r.rankingVolume : null; }, html: function (r) { return num(hasRank ? r.rankingVolume : null); } },
         { h: "Your closest page", v: function (r) { return r.match; }, html: function (r) { return link(r.match); } }, { h: "Match %", n: 1, v: function (r) { return r.score; } },
         { h: "Keywords", v: function (r) { return r.keywords; } },
       ], R.topicGap, { name: "topic-gap", filter: { label: "coverage", values: ["missing", "partial", "covered"], get: function (r) { return r.coverage; } } }));
@@ -642,15 +839,54 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     if (current === "ranked") {
       if (!hasRank) { v.innerHTML = '<div class="empty">' + noRank + "</div>"; return; }
       var all = [];
-      allSites().forEach(function (s) { (s.ranked || []).forEach(function (k) { all.push(Object.assign({ site: s.domain, host: (function () { try { return new URL(k.url).host; } catch (_) { return ""; } })() }, k)); }); });
+      allSites().forEach(function (s) { (s.ranked || []).forEach(function (k) { all.push(Object.assign({ site: s.domain }, k)); }); });
       v.appendChild(table([
-        { h: "Site", v: function (r) { return r.site; } }, { h: "Subdomain", v: function (r) { return r.host; } }, { h: "Keyword", v: function (r) { return r.keyword; } },
-        { h: "Pos", n: 1, v: function (r) { return r.position; } }, { h: "Volume", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
-        { h: "KD", n: 1, v: function (r) { return r.difficulty; }, html: function (r) { return num(r.difficulty); } }, { h: "Intent", v: function (r) { return r.intent; } },
-        { h: "CPC", n: 1, v: function (r) { return r.cpc; } }, { h: "URL", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } },
-      ], all, { name: "ranking-keywords", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+        { h: "Site", v: function (r) { return r.site; } }, { h: "Keyword", v: function (r) { return r.keyword; } },
+        { h: "Position", n: 1, v: function (r) { return r.position; } },
+        { h: "Clicks", n: 1, v: function (r) { return r.clicks; }, html: function (r) { return num(r.clicks); } },
+        { h: "Impressions", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
+        { h: "Source", v: function (r) { return r.source; } }, { h: "URL", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } },
+      ], all, { name: "ranking-keywords", filter: siteFilter() }));
     }
   }
+
+  // ---------- Supabase (optional, free tier): save and reopen reports ----------
+  function sbConf() { var u = $("#sbUrl").value.trim().replace(/\/+$/, ""), k = $("#sbKey").value.trim(); return u && k ? { url: u, key: k } : null; }
+  function sbFetch(path, init) {
+    var c = sbConf(); if (!c) return Promise.reject(new Error("Add your Supabase URL and anon key first."));
+    init = init || {};
+    init.headers = Object.assign({ apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json" }, init.headers || {});
+    return fetch(c.url + "/rest/v1/" + path, init).then(function (r) { return r.ok ? r.json().catch(function () { return null; }) : r.text().then(function (t) { throw new Error("Supabase " + r.status + ": " + t.slice(0, 200)); }); });
+  }
+  function snapshot() {
+    return { version: 1, brand: R.brand, opts: { full: R.opts.full, pathFilter: R.opts.pathFilter, maxPages: R.opts.maxPages }, you: R.you, comps: R.comps,
+      serpChecked: Array.from(R0.serpChecked), ideas: R.ideas && R.ideas.list ? R.ideas : null };
+  }
+  function restore(d) {
+    R0.serpChecked = new Set(d.serpChecked || []);
+    R = { you: d.you, comps: d.comps, brand: d.brand, opts: Object.assign({ gemModel: $("#gemModel").value || "gemini-2.5-flash", nIdeas: +$("#nIdeas").value || 15, lang: $("#lang").value || "en", gl: $("#gl").value || "us", useSuggest: $("#useSuggest").checked }, d.opts), ideas: d.ideas };
+    R.kwGap = keywordGap(R.you, R.comps); R.topicGap = topicGap(R.you, R.comps); R.topics = topicMap();
+    $("#report").hidden = false; current = R.ideas ? "ideas" : "topicmap"; renderTabs(); renderView();
+  }
+  $("#sbSave").onclick = function () {
+    if (!R) { alert("Run a report first."); return; }
+    saveSettings();
+    var d = snapshot();
+    sbFetch("cg_reports", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ brand: R.brand.name || R.you.domain, domain: R.you.domain,
+      competitors: R.comps.map(function (c) { return c.domain; }), pages: allSites().reduce(function (n, s) { return n + s.pages.length; }, 0), data: d }) })
+      .then(function () { status("Saved to Supabase."); sbList(); }).catch(function (e) { alert(e.message); });
+  };
+  function sbList() {
+    sbFetch("cg_reports?select=id,brand,domain,competitors,pages,created_at&order=created_at.desc&limit=50").then(function (rows) {
+      $("#sbReports").innerHTML = '<option value="">— saved reports (' + rows.length + ") —</option>" + rows.map(function (r) {
+        return '<option value="' + esc(r.id) + '">' + esc(new Date(r.created_at).toLocaleString() + " · " + r.brand + " vs " + (r.competitors || []).join(", ") + " · " + r.pages + " pages") + "</option>"; }).join("");
+    }).catch(function (e) { status(e.message); });
+  }
+  $("#sbRefresh").onclick = function () { saveSettings(); sbList(); };
+  $("#sbReports").onchange = function () {
+    var id = this.value; if (!id) return;
+    sbFetch("cg_reports?select=data&id=eq." + encodeURIComponent(id)).then(function (rows) { if (rows[0]) { restore(rows[0].data); status("Loaded saved report."); } }).catch(function (e) { alert(e.message); });
+  };
 
   // ---------- run ----------
   $("#run").onclick = async function () {
@@ -671,23 +907,30 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     var opts = { extra: extra, full: $("#mode").value === "full", pathFilter: $("#pathFilter").value.split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean),
       gemKey: $("#gemKey").value.trim(), gemModel: $("#gemModel").value.trim() || "gemini-2.5-flash", nIdeas: Math.max(3, Math.min(40, +$("#nIdeas").value || 15)),
       maxPages: Math.max(5, Math.min(3000, +$("#maxPages").value || 300)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
-      login: $("#dfsLogin").value.trim(), password: $("#dfsPass").value.trim(), loc: $("#loc").value, lang: $("#lang").value.trim() || "en" };
+      searx: $("#searx").value.trim(), engines: $("#searxEngines").value.trim(), serpLimit: Math.max(5, Math.min(500, +$("#serpLimit").value || 80)),
+      lang: $("#lang").value.trim() || "en", gl: $("#gl").value.trim() || "us", useSuggest: $("#useSuggest").checked };
+    var gscFile = $("#gscFile").files[0], gscRows = null;
+    if (gscFile) { try { gscRows = readGsc(await gscFile.text(), you); } catch (e) { alert("Search Console file: " + e.message); return; } }
     stopped = false; $("#run").disabled = true; $("#stop").disabled = false; $("#log").textContent = ""; prog(0);
     var domains = [you].concat(comps), sites = [];
+    R0.serpChecked = new Set();
     try {
       for (var i = 0; i < domains.length && !stopped; i++) {
         status("Crawling " + domains[i] + " (" + (i + 1) + "/" + domains.length + ")…");
         var site = await crawlSite(domains[i], opts, function (f) { prog((i + f) / domains.length); });
-        if (opts.login && opts.password && !stopped) await fetchRanked(site, opts);
         sites.push(site);
       }
       if (!sites.length) return;
+      if (gscRows) { sites[0].ranked = gscRows; sites[0].gsc = true; log("[" + you + "] " + gscRows.length + " Search Console rows loaded"); }
+      if (opts.searx && !stopped) await serpCheck(sites, opts);
+      sites.forEach(attachRanks);
       R = { you: sites[0], comps: sites.slice(1) };
+      R.topics = topicMap();
       R.kwGap = keywordGap(R.you, R.comps);
       R.topicGap = topicGap(R.you, R.comps);
       prog(1); status(stopped ? "Stopped — showing partial results." : "Done.");
       R.opts = opts; R.brand = brandProfile(); R.ideas = null;
-      $("#report").hidden = false; current = opts.gemKey ? "ideas" : "overview"; renderTabs(); renderView();
+      $("#report").hidden = false; current = opts.gemKey ? "ideas" : "topicmap"; renderTabs(); renderView();
       if (opts.gemKey && !stopped) await runGemini();
       $("#report").scrollIntoView({ behavior: "smooth" });
     } catch (e) {

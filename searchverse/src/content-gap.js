@@ -5,7 +5,8 @@
 //   GET  /api/cg/subdomains?domain=example.com   subdomains from certificate logs
 //   GET  /api/cg/sitemap?host=www.example.com     page URLs from robots.txt/sitemaps
 //   GET  /api/cg/page?url=https://...             title, H1, headings, text, links
-//   POST /api/cg/ranked                           DataForSEO ranked keywords (proxy)
+//   GET  /api/cg/suggest?q=...                    Google Autocomplete suggestions (free)
+//   POST /api/cg/serp                             positions from the user's SearXNG
 //   POST /api/cg/gemini                           Gemini topic recommendations (proxy)
 
 const UA = "Mozilla/5.0 (compatible; SearchVerseContentGap/1.0; +https://searchverse.app)";
@@ -74,10 +75,23 @@ const locs = (xml) => [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)/g
 async function sitemap(host) {
   host = cleanHost(host);
   if (!safeUrl("https://" + host)) return json({ error: "Invalid host" }, 400);
-  const queue = [];
+  const queue = [], disallow = [];
   try {
     const { res: r } = await get(`https://${host}/robots.txt`, 8000);
-    if (r.ok) for (const m of (await r.text()).matchAll(/^\s*sitemap:\s*(\S+)/gim)) queue.push(m[1]);
+    if (r.ok) {
+      const txt = await r.text();
+      for (const m of txt.matchAll(/^\s*sitemap:\s*(\S+)/gim)) queue.push(m[1]);
+      // Disallow rules from the "User-agent: *" group(s).
+      let all = false, inAgents = false;
+      for (const line of txt.split(/\r?\n/)) {
+        const m = line.replace(/#.*/, "").trim().match(/^([\w-]+)\s*:\s*(.*)$/);
+        if (!m) continue;
+        const k = m[1].toLowerCase(), v = m[2].trim();
+        if (k === "user-agent") { all = inAgents ? all || v === "*" : v === "*"; inAgents = true; continue; }
+        inAgents = false;
+        if (all && k === "disallow" && v) disallow.push(v);
+      }
+    }
   } catch (_) {}
   if (!queue.length) queue.push(`https://${host}/sitemap.xml`, `https://${host}/sitemap_index.xml`);
 
@@ -98,7 +112,7 @@ async function sitemap(host) {
       }
     } catch (_) {}
   }
-  return json({ host, sitemaps, urls: [...urls] });
+  return json({ host, sitemaps, urls: [...urls], disallow });
 }
 
 async function page(raw) {
@@ -153,47 +167,56 @@ async function page(raw) {
   });
 }
 
-// Proxies DataForSEO Labs "ranked keywords". The browser sends the user's own
-// DataForSEO login; it is passed straight through and never stored here.
-async function ranked(request) {
+// Google Autocomplete (free, no key): confirms people search a phrase and
+// returns related searches.
+async function suggest(q, hl, gl) {
+  if (!q) return json({ error: "q is required" }, 400);
+  const u = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}&hl=${encodeURIComponent(hl || "en")}&gl=${encodeURIComponent(gl || "us")}`;
+  const { res: r } = await get(u, 8000);
+  if (!r.ok) return json({ error: "Autocomplete HTTP " + r.status }, 502);
+  const data = JSON.parse(new TextDecoder("utf-8").decode(await r.arrayBuffer()));
+  return json({ q, suggestions: Array.isArray(data[1]) ? data[1] : [] });
+}
+
+// A SearXNG instance's address: a public hostname, or a public IPv4 address
+// (private, loopback and link-local ranges are refused).
+function safeInstance(raw) {
+  let u;
+  try { u = new URL(raw); } catch (_) { return null; }
+  if (!["http:", "https:"].includes(u.protocol)) return null;
+  const m = u.hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (m) {
+    const [a, b] = [+m[1], +m[2]];
+    if (a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)) return null;
+    return u;
+  }
+  return safeUrl(raw) ? u : null;
+}
+
+// Runs one query on the user's own SearXNG (open-source metasearch) and returns
+// the ordered result URLs, so positions can be read for every site at once.
+async function serp(request) {
   let body;
   try { body = await request.json(); } catch (_) { return json({ error: "Bad JSON" }, 400); }
-  const { login, password, target, location_code = 2840, language_code = "en", limit = 1000 } = body || {};
-  if (!login || !password || !target) return json({ error: "login, password and target are required" }, 400);
-  const task = {
-    target: cleanHost(target), location_code: Number(location_code), language_code,
-    limit: Math.min(Number(limit) || 1000, 1000), load_rank_absolute: true,
-    order_by: ["keyword_data.keyword_info.search_volume,desc"],
-  };
-  const r = await fetch("https://api.dataforseo.com/v3/dataforseo_labs/google/ranked_keywords/live", {
-    method: "POST",
-    headers: { Authorization: "Basic " + btoa(login + ":" + password), "Content-Type": "application/json" },
-    body: JSON.stringify([task]),
-  });
-  const data = await r.json().catch(() => ({}));
-  const t = data.tasks && data.tasks[0];
-  if (!r.ok || !t || t.status_code !== 20000) {
-    return json({ error: (t && t.status_message) || data.status_message || "DataForSEO HTTP " + r.status }, 502);
+  const { instance, q, language = "en", engines = "", pages = 2 } = body || {};
+  const base = instance && safeInstance(String(instance).replace(/\/+$/, ""));
+  if (!base || !q) return json({ error: "A valid SearXNG address and q are required" }, 400);
+  const results = [];
+  for (let page = 1; page <= Math.min(Number(pages) || 2, 5); page++) {
+    const u = new URL(base.toString().replace(/\/+$/, "") + "/search");
+    u.searchParams.set("q", q); u.searchParams.set("format", "json");
+    u.searchParams.set("language", language); u.searchParams.set("pageno", String(page));
+    if (engines) u.searchParams.set("engines", engines);
+    const r = await fetch(u.toString(), { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+    if (r.status === 403) return json({ error: "SearXNG refused JSON (enable `json` under search.formats in its settings.yml)" }, 502);
+    if (!r.ok) return json({ error: "SearXNG HTTP " + r.status }, 502);
+    const data = await r.json().catch(() => ({}));
+    const rows = (data.results || []).map((x) => ({ url: x.url, title: x.title || "", engines: x.engines || [] }));
+    if (!rows.length) break;
+    results.push(...rows);
   }
-  const items = (t.result && t.result[0] && t.result[0].items) || [];
-  return json({
-    target: task.target,
-    total: (t.result && t.result[0] && t.result[0].total_count) || items.length,
-    cost: t.cost,
-    keywords: items.map((it) => {
-      const kd = it.keyword_data || {}, info = kd.keyword_info || {}, s = (it.ranked_serp_element || {}).serp_item || {};
-      return {
-        keyword: kd.keyword,
-        volume: info.search_volume || 0,
-        cpc: info.cpc || 0,
-        difficulty: (kd.keyword_properties || {}).keyword_difficulty ?? null,
-        intent: ((kd.search_intent_info || {}).main_intent) || "",
-        position: s.rank_group ?? null,
-        url: s.url || "",
-        etv: s.etv || 0,
-      };
-    }),
-  });
+  const seen = new Set();
+  return json({ q, results: results.filter((x) => x.url && !seen.has(x.url) && seen.add(x.url)).map((x, i) => ({ position: i + 1, ...x })) });
 }
 
 // Proxies one Gemini generateContent call with the user's own API key, asking
@@ -226,7 +249,8 @@ export async function handleContentGap(request, url) {
     if (p === "subdomains") return await subdomains(url.searchParams.get("domain"));
     if (p === "sitemap") return await sitemap(url.searchParams.get("host"));
     if (p === "page") return await page(url.searchParams.get("url"));
-    if (p === "ranked" && request.method === "POST") return await ranked(request);
+    if (p === "suggest") return await suggest(url.searchParams.get("q"), url.searchParams.get("hl"), url.searchParams.get("gl"));
+    if (p === "serp" && request.method === "POST") return await serp(request);
     if (p === "gemini" && request.method === "POST") return await gemini(request);
     return json({ error: "Not found" }, 404);
   } catch (e) {

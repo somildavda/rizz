@@ -38,32 +38,35 @@ Manual: `cd searchverse && npx wrangler login && npx wrangler deploy`.
 ## Content Gap & Topic Planner (`/content-gap/`)
 Page: `public/content-gap/index.html`. API: `src/content-gap.js`, served by this
 Worker under `/api/cg/*`. The browser drives the crawl in small requests, so no
-single Worker call goes over Cloudflare's subrequest limit.
+single Worker call goes over Cloudflare's subrequest limit. Everything uses free
+sources. There are no paid APIs.
 
-For your domain and each competitor it:
-1. Finds subdomains from certificate-transparency logs (crt.sh), skips mail/dev/CDN
-   hosts, checks which ones serve pages and merges `www`/apex duplicates.
-2. Gathers URLs from `robots.txt` sitemaps (or home-page links when there are none) and
-   crawls a page budget spread across subdomains and site sections.
-3. Pulls each page's title, meta, H1–H3 and text, and works out its **topic**
-   (subdomain + section) and **main keyword** (weighted phrases from the title, H1,
-   slug, H2s and meta).
-4. With a DataForSEO login (optional, entered in the page), fetches up to 1,000
-   **ranking keywords** per site (DataForSEO Labs `ranked_keywords`, covers all
-   subdomains). It maps them to the crawled pages, and a page's best-ranking keyword
-   becomes its main keyword.
-5. Builds the **keyword gap** (missing / weak / shared / unique, with an opportunity
-   score) and the **topic gap** (competitor pages with no matching page of yours).
+1. **Brand profile & knowledge base.** Name, domain, what it does, audience, products,
+   topics to avoid, a pasted knowledge base and competitors. Profiles are saved in the browser.
+2. **Whole-site crawl (Semrush-style).** For each site: subdomains from certificate logs
+   (crt.sh) are checked to see which are live. The crawl starts from each home page, the
+   folder you give (for example `/blog/`) and every sitemap URL, then follows internal
+   links level by level until it finds no new pages or reaches the page limit. It
+   respects robots.txt and records depth, inlinks and indexability. Pasted URLs are
+   always crawled. Pages are fetched as HTML (no browser), which covers almost every
+   blog. Sites that build their content with JavaScript in the browser would need
+   Crawl4AI later.
+3. **Topic and main keyword per page,** from the title, H1, slug, H2s and meta.
+4. **Rankings (free, optional).**
+   - Your site: a Google Search Console CSV export.
+   - All sites: your own [SearXNG](https://github.com/searxng/searxng) instance
+     (open source, `json` format enabled). It searches each main keyword and records
+     each site's position in the top 20. Positions are approximate and there is no volume.
+5. **Topic map & Topic score.** Pages from every site are clustered into topics, showing
+   which topics competitors share and where you have none. Each topic gets a score from
+   0 to 100: 40% brand relevance (against the profile and knowledge base), 25% gap,
+   20% competitor demand and 15% rankability.
+6. **AI topic ideas** (Gemini free tier, `/api/cg/gemini`). Gemini reads the profile,
+   knowledge base, pages and scored gaps. It returns ranked topics with a primary
+   keyword, topic, relevance and rank-potential scores, a title and an outline. Each
+   primary keyword is checked against free Google Autocomplete (`/api/cg/suggest`).
+7. **Supabase (optional, free tier).** Saves and reopens full reports. The table SQL is
+   shown in the page.
 
-Each table filters, sorts and exports to CSV. The DataForSEO login goes from the
-browser through the Worker to api.dataforseo.com and is never stored on the server.
-
-**Brand profile & AI topic ideas.** Save a brand profile (name, domain, what it does,
-audience, products, topics to avoid, competitors) in the browser. Choose "whole site"
-to crawl every sitemap URL (optionally only paths like `/blog/`, up to 3,000 pages per
-site), and paste extra URLs for you or competitors. Those are always crawled, and new
-domains are added as competitors. With a Gemini API key (the free tier works), the
-Worker proxies one `generateContent` call (`/api/cg/gemini`) that reads the brand
-profile, every crawled page and the computed gaps. It returns ranked topic ideas, each
-with a primary keyword, secondary keywords, intent, title, outline and the competitor
-pages covering it. The first one is marked as the ideal pick.
+Each table filters, sorts and exports to CSV. Keys go from the browser through the
+Worker to Google, or straight to your Supabase project. They are never stored on a server.
