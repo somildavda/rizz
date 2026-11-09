@@ -47,6 +47,8 @@ export class AppStore extends DurableObject {
     // Older accounts used "admin"/"user"; they become owner/member.
     this.sql.exec("UPDATE users SET role = 'owner' WHERE role = 'admin' AND id = (SELECT MIN(id) FROM users)");
     this.sql.exec("UPDATE users SET role = 'member' WHERE role = 'user'");
+    // Which tools each person may open (JSON list). Empty/NULL = every tool.
+    try { this.sql.exec("ALTER TABLE users ADD COLUMN tools TEXT"); } catch (_) {}
   }
   rows(q, ...a) { return this.sql.exec(q, ...a).toArray(); }
   one(q, ...a) { return this.rows(q, ...a)[0] || null; }
@@ -66,7 +68,7 @@ export class AppStore extends DurableObject {
     // ---- who is this? (called by the Worker on every request) ----
     if (path === "/session") {
       const tok = body.token && await sha256(body.token);
-      const r = tok && this.one(`SELECT u.id, u.name, u.email, u.status, u.role FROM sessions s JOIN users u ON u.id = s.user_id
+      const r = tok && this.one(`SELECT u.id, u.name, u.email, u.status, u.role, u.tools FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token = ? AND s.expires_at > ?`, tok, now);
       return json({ user: r || null });
     }
@@ -108,7 +110,7 @@ export class AppStore extends DurableObject {
 
     // ---- admin only (the Worker checks the role before forwarding) ----
     if (path === "/admin/users") {
-      return json(this.rows(`SELECT u.id, u.name, u.email, u.status, u.role, u.note, u.created_at, u.approved_at, u.last_login,
+      return json(this.rows(`SELECT u.id, u.name, u.email, u.status, u.role, u.tools, u.note, u.created_at, u.approved_at, u.last_login,
           (SELECT COUNT(*) FROM events e WHERE e.user_id = u.id AND e.type = 'click') AS clicks,
           (SELECT COUNT(*) FROM events e WHERE e.user_id = u.id AND e.type = 'view') AS views,
           (SELECT MAX(ts) FROM events e WHERE e.user_id = u.id) AS last_seen
@@ -127,6 +129,12 @@ export class AppStore extends DurableObject {
         if (!["approved", "rejected", "pending"].includes(st)) return json({ error: "Bad status" }, 400);
         this.sql.exec("UPDATE users SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN ? ELSE approved_at END WHERE id = ?", st, st, now, id);
         if (st !== "approved") this.sql.exec("DELETE FROM sessions WHERE user_id = ?", id);
+      }
+      if (body.tools != null) {
+        const ALL = ["performance", "workspace", "speed", "content-gap", "youtube"];
+        if (!Array.isArray(body.tools)) return json({ error: "Bad tools list" }, 400);
+        const list = body.tools.filter((t) => ALL.includes(t));
+        this.sql.exec("UPDATE users SET tools = ? WHERE id = ?", list.length === ALL.length ? null : JSON.stringify(list), id);
       }
       if (role != null) {
         const allowed = by.role === "owner" ? ["admin", "manager", "member", "viewer"] : ["manager", "member", "viewer"];

@@ -44,6 +44,28 @@ export async function currentUser(request, env) {
 export const RANK = { viewer: 1, member: 2, manager: 3, admin: 4, owner: 5 };
 export const atLeast = (user, role) => !!user && (RANK[user.role] || 0) >= RANK[role];
 
+// Tools and which paths belong to them. Owner and team admins can open every tool.
+export const TOOLS = ["performance", "workspace", "speed", "content-gap", "youtube"];
+export function toolsFor(user) {
+  if (!user) return [];
+  if (atLeast(user, "admin")) return TOOLS.slice();
+  try { const t = JSON.parse(user.tools || "null"); return Array.isArray(t) ? t : TOOLS.slice(); } catch (_) { return TOOLS.slice(); }
+}
+function toolOf(url, request) {
+  const first = url.pathname.split("/")[1];
+  if (first === "api" && url.pathname.startsWith("/api/cg/")) return "content-gap";
+  if (["performance", "speed", "youtube", "content-gap"].includes(first)) return first;
+  const ref = request.headers.get("Referer");       // scripts inside a proxied tool call root paths
+  if (ref) { try { const r = new URL(ref); const id = r.pathname.split("/")[1]; if (r.host === url.host && ["performance", "speed", "youtube"].includes(id) && !url.pathname.startsWith("/api/") && !url.pathname.startsWith("/sv/")) return id; } catch (_) {} }
+  return null;
+}
+const NO_TOOL_HTML = (name) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>No access</title>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:#06070D;color:#EDEFFA;font-family:Inter,system-ui,sans-serif;text-align:center;padding:24px">
+<div><div style="font-size:48px">🔒</div><h1 style="font-size:26px;margin:12px 0 8px">You don't have access to ${name} yet</h1>
+<p style="color:#9097B5;max-width:420px;margin:0 auto 20px">Ask your team admin to turn it on for you from the dashboard.</p>
+<a href="/" target="_top" style="display:inline-block;padding:12px 20px;border-radius:12px;background:linear-gradient(90deg,#7C5CFF,#22D3EE);color:#fff;font-weight:700;text-decoration:none">Back to SearchVerse</a></div></body>`;
+const TOOL_NAMES = { performance: "Performance Explorer", workspace: "Search Workspace", speed: "PageSpeed Lab", "content-gap": "Topic Planner", youtube: "Video Visibility" };
+
 const setSession = (token, maxAge) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 
 // Handles auth/admin/tracking routes. Returns a Response, or null when the request
@@ -92,7 +114,7 @@ export async function gate(request, env, url) {
   }
 
   const user = await currentUser(request, env);
-  if (p === "/api/auth/me") return json({ user: user ? { name: user.name, email: user.email, role: user.role } : null });
+  if (p === "/api/auth/me") return json({ user: user ? { name: user.name, email: user.email, role: user.role, tools: toolsFor(user) } : null });
 
   if (!user) {
     const wantsHtml = (request.headers.get("Accept") || "").includes("text/html");
@@ -104,6 +126,13 @@ export async function gate(request, env, url) {
     const b = await request.json().catch(() => ({}));
     await call(env, "/track", { ...meta(request), ...b, user_id: user.id, country: (request.cf && request.cf.country) || "" });
     return json({ ok: true });
+  }
+
+  // Per-tool access
+  const tool = toolOf(url, request);
+  if (tool && !toolsFor(user).includes(tool)) {
+    if (p.startsWith("/api/") || !(request.headers.get("Accept") || "").includes("text/html")) return json({ error: "You don't have access to " + TOOL_NAMES[tool] + " yet." }, 403);
+    return new Response(NO_TOOL_HTML(TOOL_NAMES[tool]), { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
 
   if (p === "/admin" || p.startsWith("/api/admin/")) {

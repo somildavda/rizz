@@ -434,13 +434,19 @@ window.SV_CREATOR = {
   window.SV_SIGNED_IN = null; // null until we know
   fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : {}; }).then(function (d) {
     if (!d.user) return;
-    window.SV_SIGNED_IN = true; $("#navIn").hidden = true;
+    window.SV_SIGNED_IN = true; window.SV_TOOLS_OK = d.user.tools || null; $("#navIn").hidden = true;
     $("#navOut").hidden = false; $("#navOut").title = "Signed in as " + d.user.name;
     if (d.user.role === "owner" || d.user.role === "admin") $("#navAdmin").hidden = false;
   }).catch(function () {}).then(function () { if (window.SV_SIGNED_IN !== true) window.SV_SIGNED_IN = false; if (typeof route === "function") route(); });
   document.addEventListener("click", function (e) {
     var a = e.target.closest("[data-launch]");
-    if (!a || window.SV_SIGNED_IN !== false) return;
+    if (!a) return;
+    if (window.SV_SIGNED_IN === true && window.SV_TOOLS_OK) {
+      var tm = location.hash.match(/^#\/tools\/([\w-]+)/), tid = tm && tm[1];
+      if (tid && window.SV_TOOLS_OK.indexOf(tid) < 0) { e.preventDefault(); e.stopPropagation(); alert("🔒 You don't have access to this tool yet.\n\nAsk your team admin to turn it on for you."); }
+      return;
+    }
+    if (window.SV_SIGNED_IN !== false) return;
     e.preventDefault(); e.stopPropagation();
     location.href = "/login?next=" + encodeURIComponent("/" + (a.getAttribute("href") || location.hash || ""));
   }, true);
