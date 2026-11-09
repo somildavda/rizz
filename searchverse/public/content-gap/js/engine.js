@@ -104,6 +104,11 @@ export async function crawlSite(domain, opts, part) {
     else live.get(fh).names.push(hosts[i]);
   });
   site.hosts = Array.from(live.values()).slice(0, opts.maxSubs);
+  if (!site.hosts.length) {
+    probes.slice(0, 3).forEach(function (p, i) { log("[" + r + "] " + hosts[i] + ": " + ((p && p.error) || "no answer")); });
+    log("[" + r + "] This site didn't let us in (often bot protection). Paste its article links in step 2 → “Article links to include” and we'll use those.");
+    site.refused = true;
+  }
   log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
   if (!site.hosts.length && !(opts.extra[r] || []).length) return site;
 
@@ -137,12 +142,20 @@ export async function crawlSite(domain, opts, part) {
   // Two FIFO queues (breadth-first): pages that belong in the report, and pages outside the
   // folder that are only visited to discover links to folder pages.
   var mainQ = [], transQ = [], mi = 0, ti = 0;
-  var keep = function (e) { return e.fed || inFolder(e.url); };
-  var add = function (u, depth, fed) {
+  // Category pages like /blog/prepaid/ often list articles that live at /blog/article-name.
+  // Links from a section page that stay under its parent folder (/blog/) belong to the section.
+  var parents = filt.map(function (f) { var x = f.replace(/\/+$/, ""), i = x.lastIndexOf("/"); return i > 0 ? x.slice(0, i + 1) : ""; }).filter(Boolean);
+  var underParent = function (u) { try { var path = new URL(u).pathname.toLowerCase(); return parents.some(function (pp) { return path.indexOf(pp) === 0 && path.length > pp.length; }); } catch (_) { return false; } };
+  var keep = function (e) { return e.fed || e.fromSection || inFolder(e.url); };
+  var add = function (u, depth, fed, fromSection) {
     if (!fed && !inScope(u)) return;
     var n = normUrl(u), e = seen.get(n);
-    if (e) { e.inlinks++; return; }
-    seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed });
+    if (e) {
+      e.inlinks++;
+      if (fromSection && !keep(e)) { e.fromSection = true; mainQ.push(e); }
+      return;
+    }
+    seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed, fromSection: !!fromSection });
     (keep(e) ? mainQ : transQ).push(e);
   };
   (opts.extra[r] || []).forEach(function (u) { add(u, 0, true); });
@@ -165,27 +178,36 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
     });
   }
 
-  var visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
+  var fails = 0, visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
   while (!state.stopped && kept < budget) {
     var batch = [];
     while (batch.length < 6 && kept + batch.length < budget) {
-      if (mi < mainQ.length) batch.push(mainQ[mi++]);
-      else if (opts.full && ti < transQ.length && transit < transitBudget) { batch.push(transQ[ti++]); transit++; }
+      var next = null;
+      if (mi < mainQ.length) next = mainQ[mi++];
+      else if (opts.full && ti < transQ.length && transit < transitBudget) { next = transQ[ti++]; if (keep(next)) next = null; else transit++; }
       else break;
+      if (!next || next.taken) continue;
+      next.taken = true; batch.push(next);
     }
     if (!batch.length) break;
     var got = await Promise.all(batch.map(function (e) { return e.data ? Promise.resolve(e.data) : api("page?url=" + encodeURIComponent(e.url)).catch(function () { return { ok: false, url: e.url }; }); }));
     got.forEach(function (p, i) {
       var e = batch[i]; visited++;
-      if (!p || !p.ok) return;
+      if (!p || !p.ok) {
+        // A pasted link we couldn't open still counts: build it from the link and its title.
+        if (!e.fed) { if (fails++ < 3) log("[" + r + "] couldn't read " + e.url + ": " + ((p && p.error) || "error")); return; }
+        p = { ok: true, url: e.url, finalUrl: e.url, title: (opts.titles || {})[e.url] || "", description: "", h1: [], h2: [], h3: [], links: [], fromList: true };
+      }
       var fn = normUrl(p.finalUrl);
       if (fn !== normUrl(e.url)) { var o = seen.get(fn); if (o && o !== e && o.done) { o.inlinks += e.inlinks; return; } seen.set(fn, e); }
       e.done = true;
-      if (opts.full) (p.links || []).forEach(function (l) { add(l, e.depth + 1); });
+      if (opts.full) { var fromSec = filt.length && inFolder(e.url); (p.links || []).forEach(function (l) { add(l, e.depth + 1, false, fromSec && underParent(l)); }); }
       if (!keep(e) || (!hostSet.has(new URL(p.finalUrl).host) && !e.fed)) return;
       kept++;
       p.host = new URL(p.finalUrl).host; p.fed = e.fed; p.depth = e.depth; p.entry = e;
       p.type = pageType(p);
+      // The section pages you chose (e.g. /blog/prepaid/) are listings of articles, not topics.
+      if (filt.some(function (f) { try { return new URL(p.finalUrl).pathname.toLowerCase().replace(/\/+$/, "") === f.replace(/\/+$/, ""); } catch (_) { return false; } })) p.type = "listing";
       p.keywords = p.type === "listing" ? [] : mainKeywords(p, brand);
       p.mainKeyword = p.keywords[0] || "";
       p.onPageKeyword = p.mainKeyword; p.keywordSource = p.mainKeyword ? "on-page" : "";
@@ -202,7 +224,7 @@ site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(norm
   }
   pages.forEach(function (p) { p.inlinks = p.entry.inlinks; delete p.entry; });
   site.pages = pages;
-  site.discovered = mainQ.length; site.queuedLeft = mainQ.length - mi;
+  site.discovered = mainQ.length; site.queuedLeft = mainQ.slice(mi).filter(function (x) { return !x.taken; }).length;
   log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget && mainQ.length > mi ? ", state.stopped at the page limit — " + (mainQ.length - mi).toLocaleString() + " more found but not crawled" : "") + ")");
   return site;
 }

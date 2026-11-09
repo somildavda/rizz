@@ -154,8 +154,8 @@ function stepCompetitors() {
     <div class="comp-head"><span>#</span><span>Website or blog link</span><span>Section(s) (optional, comma-separated)</span><span>Niche (what they focus on)</span><span></span></div>
     <div id="comps">${draft.competitors.map(compRow).join("")}</div>
     <button class="btn sm" id="addComp" type="button">＋ Add another competitor</button>
-    <details style="margin-top:22px"><summary class="muted" style="cursor:pointer">Extra competitor pages to include (optional)</summary>
-      <div style="margin-top:12px">${field("compUrls", "Specific competitor pages", "One link per line. We always read these, even if they're outside the folder you choose. Links from a new website add it as a competitor.", draft.scan.compUrls, { area: 1, ph: "https://competitor.com/blog/great-article" })}</div>
+    <details style="margin-top:22px" ${draft.scan.compUrls ? "open" : ""}><summary class="muted" style="cursor:pointer">Article links to include (optional) — use this for sites that don't let us in</summary>
+      <div style="margin-top:12px">${field("compUrls", "Competitor article links", "One per line, optionally with its title after a <code>|</code>. We always include these. If a site blocks automated visits, we build its topics from these links and titles. Collect them in your own browser — e.g. from their blog page or their public sitemap.", draft.scan.compUrls, { area: 1, tall: 1, ph: "https://www.att.com/blog/what-is-esim/ | What is an eSIM?\nhttps://www.jio.com/jiostories/best-prepaid-plans | Best prepaid plans" })}</div>
     </details>`;
 }
 const compRow = (c, i) => `<div class="comp-row"><span class="no">${i + 1}</span>
@@ -328,7 +328,13 @@ async function runScan(project) {
   const you = project.domain;
   let comps = (project.competitors || []).filter((c) => c.domain && c.domain !== you);
   // Extra pasted URLs, grouped by site; links to a new site add it as a competitor.
-  const extra = {}, lines = (t) => String(t || "").split(/\s+/).filter((u) => /^https?:\/\//i.test(u));
+  // One link per line, optionally followed by its title: "link | title" (or a tab or spaces).
+  const titles = {};
+  const lines = (t) => String(t || "").split(/\n+/).map((line) => {
+    const m = line.trim().match(/^(https?:\/\/\S+)\s*(?:[|\t,]\s*)?(.*)$/i);
+    if (!m) return null; const u = m[1].replace(/[,|]+$/, ""); if (m[2]) titles[u] = m[2].trim(); return u;
+  }).filter(Boolean);
+  const extra = {};
   lines(sc.yourUrls).forEach((u) => { (extra[you] = extra[you] || []).push(u); });
   lines(sc.compUrls).forEach((u) => {
     const h = E.root(u); let d = (comps.find((c) => h === c.domain || h.endsWith("." + c.domain)) || {}).domain;
@@ -336,7 +342,7 @@ async function runScan(project) {
     (extra[d] = extra[d] || []).push(u);
   });
   comps = comps.slice(0, 10);
-  const opts = { extra, full: sc.mode !== "sample", pathFilter: sc.mode === "folder" ? String(sc.folder).split(",").map((x) => x.trim().toLowerCase()).filter(Boolean) : [],
+  const opts = { extra, titles, full: sc.mode !== "sample", pathFilter: sc.mode === "folder" ? String(sc.folder).split(",").map((x) => x.trim().toLowerCase()).filter(Boolean) : [],
     maxPages: sc.maxPages, maxSubs: sc.maxSubs, useSubs: sc.useSubs, searx: pw.searx, engines: pw.engines, serpLimit: pw.serpLimit, lang: pw.lang, gl: pw.gl };
 
   scan = { id: project.id, running: true, idx: 0, progress: 0, now: "Getting ready…", log: [],
@@ -358,7 +364,7 @@ async function runScan(project) {
       catch (err) { scan.log.push(`[${s.domain}] skipped: ${err.message}`); site = { domain: E.root(s.domain), hosts: [], pages: [], ranked: null, discovered: 0, queuedLeft: 0 }; }
       site.niche = s.niche || ""; site.isYou = !!s.isYou;
       s.state = site.pages.length ? "done" : "fail"; s.pages = site.pages.length;
-      s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "whole site read"}` : "Couldn't read this site (it may block robots)";
+      s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "whole site read"}` : (site.refused ? "This site doesn't allow automated visits — paste its article links in step 2 (see the log)" : "Nothing found in this section — check the section link");
       sites.push(site); drawScan();
     }
     if (!sites.length) throw new Error("Stopped before any site was read.");
