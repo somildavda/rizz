@@ -83,7 +83,7 @@ footer{border-top:1px solid var(--line);padding:28px max(16px,5vw);display:flex;
   </header>
 
   <div class="stats">
-    <div class="stat"><b class="grad">4</b><span>Specialist modules</span></div>
+    <div class="stat"><b class="grad">5</b><span>Specialist modules</span></div>
     <div class="stat"><b class="grad">1</b><span>Unified workspace</span></div>
     <div class="stat"><b class="grad">0</b><span>Installs needed</span></div>
   </div>
@@ -185,6 +185,18 @@ window.SV_TOOLS = [
       ["Mobile & desktop", "Compare both strategies side by side."]
     ],
     steps: ["Paste your URLs", "Run the test", "Export results for your audit"]
+  },
+  {
+    id: "content-gap", icon: "🧩", name: "Content Gap Report", tag: "Content",
+    tagline: "Find the topics and keywords competitors win that you don't.",
+    desc: "Crawls your site and up to five competitors, subdomains included, works out each page's topic and main keyword, pulls the keywords every site ranks for, and lists the gaps.",
+    url: "/content-gap/",
+    features: [
+      ["Subdomain discovery", "Finds subdomains in certificate logs, checks which are live and crawls each one."],
+      ["Topic & main keyword", "Every page's section, main keyword and supporting keywords, from on-page signals and real rankings."],
+      ["Keyword & topic gaps", "Missing and weak keywords with volume, difficulty and an opportunity score, plus topics you have no page for."]
+    ],
+    steps: ["Enter your domain and competitors", "Optionally add a DataForSEO login for ranking data", "Run, review the gap tabs and export CSVs"]
   },
   {
     id: "youtube", icon: "▶️", name: "Video Visibility", tag: "YouTube",

@@ -1,3 +1,5 @@
+import { handleContentGap } from "./content-gap.js";
+
 // Serves the hub page and proxies each module under the same address,
 // e.g. /speed/... -> https://searchverse-psi.shred-app.workers.dev/...
 const MODULES = {
@@ -66,6 +68,7 @@ async function proxy(request, url, mod) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/cg/")) return handleContentGap(request, url);
     const mod = resolve(url, request);
     if (mod) return proxy(request, url, mod);
     return env.ASSETS.fetch(request);

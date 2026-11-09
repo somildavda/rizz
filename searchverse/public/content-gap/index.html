@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Gap Report — SearchVerse</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07080F;--panel:#0F1220;--panel2:#151a2c;--line:#1E2236;--text:#E8EAF5;--muted:#8A90AB;--a:#7C5CFF;--b:#22D3EE;--ok:#34D399;--warn:#FBBF24;--bad:#F87171}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:14px;min-height:100vh}
+a{color:var(--b)}
+.wrap{max-width:1280px;margin:auto;padding:24px 16px 80px}
+h1{font-size:26px;letter-spacing:-.02em}
+.grad{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);margin:6px 0 22px;line-height:1.5}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:18px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
+input,select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--text);font:inherit}
+textarea{min-height:64px;resize:vertical}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);margin-top:4px}
+.chk input{width:auto}
+details summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:14px}
+.btn{display:inline-block;padding:11px 20px;border-radius:10px;font-weight:600;border:1px solid var(--line);cursor:pointer;background:var(--panel2);color:var(--text);font:inherit;font-weight:600}
+.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff}
+.btn.sm{padding:6px 12px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;align-items:center}
+#log{font:12px ui-monospace,monospace;color:var(--muted);max-height:160px;overflow:auto;white-space:pre-wrap;margin-top:12px}
+.bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--a),var(--b));transition:width .2s}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.tabs button{background:transparent;border:1px solid var(--line);color:var(--muted);padding:8px 14px;border-radius:99px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--panel2);color:var(--text);border-color:var(--a)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi b{display:block;font-size:22px}
+.kpi span{color:var(--muted);font-size:12px}
+.tools{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.tools input,.tools select{width:auto;min-width:200px;padding:7px 10px}
+.tbl{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:70vh}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--panel2);cursor:pointer;white-space:nowrap;font-weight:600;color:var(--muted)}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line);white-space:nowrap}
+.p-missing{color:var(--bad);border-color:rgba(248,113,113,.4)}
+.p-weak{color:var(--warn);border-color:rgba(251,191,36,.4)}
+.p-shared{color:var(--ok);border-color:rgba(52,211,153,.4)}
+.p-unique{color:var(--b);border-color:rgba(34,211,238,.4)}
+.muted{color:var(--muted)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="grad">Content Gap</span> Report</h1>
+  <p class="sub">Crawls your site and your competitors — every subdomain — and finds each page's topic and main keyword.
+    Add a DataForSEO login to also pull the keywords each site ranks for and see the keywords and topics competitors win that you don't.</p>
+
+  <div class="panel">
+    <div class="row">
+      <div><label for="you">Your domain</label><input id="you" placeholder="yoursite.com"></div>
+      <div style="grid-column:span 2"><label for="comp">Competitor domains (comma or new line, up to 5)</label><textarea id="comp" placeholder="competitor1.com&#10;competitor2.com"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div><label for="maxPages">Pages to crawl per site</label><input id="maxPages" type="number" value="60" min="5" max="500"></div>
+      <div><label for="maxSubs">Max subdomains per site</label><input id="maxSubs" type="number" value="15" min="1" max="60"></div>
+      <div><label>&nbsp;</label><label class="chk"><input id="useSubs" type="checkbox" checked> Discover &amp; crawl subdomains</label></div>
+    </div>
+    <details>
+      <summary>Ranking keywords (DataForSEO, optional)</summary>
+      <div class="row" style="margin-top:12px">
+        <div><label for="dfsLogin">DataForSEO login (email)</label><input id="dfsLogin" autocomplete="off"></div>
+        <div><label for="dfsPass">DataForSEO API password</label><input id="dfsPass" type="password" autocomplete="off"></div>
+        <div><label for="loc">Location</label>
+          <select id="loc"><option value="2840">United States</option><option value="2356">India</option><option value="2826">United Kingdom</option><option value="2124">Canada</option><option value="2036">Australia</option><option value="2276">Germany</option><option value="2250">France</option><option value="2784">United Arab Emirates</option><option value="2702">Singapore</option></select></div>
+        <div><label for="lang">Language code</label><input id="lang" value="en"></div>
+      </div>
+      <label class="chk" style="margin-top:10px"><input id="remember" type="checkbox"> Remember the login in this browser</label>
+      <p class="note">The login is sent only through this tool's Worker straight to api.dataforseo.com and is not stored on any server.
+        Each site costs about one Labs "ranked keywords" request (up to 1,000 keywords). Get a key at dataforseo.com.</p>
+    </details>
+    <div class="actions">
+      <button class="btn primary" id="run">Run report</button>
+      <button class="btn" id="stop" disabled>Stop</button>
+      <span class="muted" id="status"></span>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+    <div id="log"></div>
+  </div>
+
+  <div class="panel" id="report" hidden>
+    <div class="tabs" id="tabs"></div>
+    <div id="view"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var STOP = "a about above after again all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further get had has have having he her here hers him his how i if in into is it its just like me more most my no nor not now of off on once only or other our ours out over own same she should so some such than that the their them then there these they this those through to too under until up us very was we were what when where which while who whom why will with would you your yours new best top guide vs via per one two get see use using page home blog read more click here learn contact us privacy policy terms login sign menu search skip content cookie cookies complete ultimate definitive tips ideas examples everything need know free official welcome index default untitled 2023 2024 2025 2026 2027".split(" ");
+  var STOPSET = new Set(STOP);
+
+  // ---------- settings ----------
+  try {
+    var saved = JSON.parse(localStorage.getItem("cg-settings") || "{}");
+    ["you", "comp", "maxPages", "maxSubs", "loc", "lang", "dfsLogin", "dfsPass"].forEach(function (k) { if (saved[k] != null) $("#" + k).value = saved[k]; });
+    if (saved.dfsLogin) $("#remember").checked = true;
+  } catch (_) {}
+  function saveSettings() {
+    try {
+      var s = {};
+      ["you", "comp", "maxPages", "maxSubs", "loc", "lang"].forEach(function (k) { s[k] = $("#" + k).value; });
+      if ($("#remember").checked) { s.dfsLogin = $("#dfsLogin").value; s.dfsPass = $("#dfsPass").value; }
+      localStorage.setItem("cg-settings", JSON.stringify(s));
+    } catch (_) {}
+  }
+
+  // ---------- helpers ----------
+  var stopped = false;
+  function log(m) { var l = $("#log"); l.textContent += m + "\n"; l.scrollTop = l.scrollHeight; }
+  function status(m) { $("#status").textContent = m; }
+  function prog(p) { $("#prog").style.width = Math.round(p * 100) + "%"; }
+  function host(s) { return String(s || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/[/?#].*$/, ""); }
+  function root(s) { return host(s).replace(/^www\./, ""); }
+  function api(path) {
+    return fetch("/api/cg/" + path).then(function (r) { return r.json(); });
+  }
+  async function pool(items, n, fn) {
+    var i = 0, out = [];
+    async function worker() { while (i < items.length && !stopped) { var k = i++; out[k] = await fn(items[k], k); } }
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+    return out;
+  }
+  function normUrl(u) { try { var x = new URL(u); x.hash = ""; return (x.host + x.pathname).replace(/\/$/, "").toLowerCase(); } catch (_) { return String(u).toLowerCase(); } }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  var junkPath = /\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|mp3|css|js|xml|json|ico)(\?|$)|\/(wp-admin|wp-json|cart|checkout|account|login|signin|signup|feed|tag|author)\b|[?&](replytocom|share|utm_)/i;
+
+  // ---------- keyword extraction ----------
+  function tokens(s) {
+    return String(s || "").toLowerCase().replace(/[’']/g, "").split(/[^\p{L}\p{N}]+/u).filter(function (w) { return w && w.length > 1 && !/^\d+$/.test(w); });
+  }
+  function ngrams(toks, n) {
+    var out = [];
+    for (var i = 0; i + n <= toks.length; i++) {
+      var g = toks.slice(i, i + n);
+      if (STOPSET.has(g[0]) || STOPSET.has(g[n - 1])) continue;
+      if (n === 1 && g[0].length < 3) continue;
+      out.push(g.join(" "));
+    }
+    return out;
+  }
+  function brandTokens(h) { return new Set(tokens(root(h).split(".").slice(0, -1).join(" "))); }
+  // Scores 1-3 word phrases by where they appear: title and H1 count most, then URL slug, H2s, meta and body text.
+  function mainKeywords(p, brand) {
+    var score = new Map();
+    var slug = "";
+    try { slug = decodeURIComponent(new URL(p.finalUrl || p.url).pathname.split("/").filter(Boolean).pop() || "").replace(/\.\w+$/, "").replace(/[-_.]+/g, " "); } catch (_) {}
+    var title = String(p.title || "").split(/\s[|–—\-:·]\s/)[0]; // drop "| Brand" suffix
+    var fields = [[title, 5], [(p.h1 || []).join(" . "), 5], [slug, 3], [(p.h2 || []).join(" . "), 1.5], [p.description, 1.5], [p.text, 0.3]];
+    var strongScore = new Map();
+    fields.forEach(function (f) {
+      String(f[0] || "").split(/[.!?|•·:;,()\[\]]/).forEach(function (chunk) {
+        var t = tokens(chunk);
+        [1, 2, 3, 4].forEach(function (n) {
+          ngrams(t, n).forEach(function (g) {
+            if (g.split(" ").every(function (w) { return brand.has(w) || STOPSET.has(w); })) return;
+            var w = f[1] * [0, 1, 2.2, 2.6, 2.8][n];
+            score.set(g, (score.get(g) || 0) + w);
+            if (f[1] >= 1) strongScore.set(g, true);
+          });
+        });
+      });
+    });
+    // Only phrases that appear in a strong field (title, H1, slug, H2, meta) can be a page's keyword.
+    var strong = Array.from(score.entries()).filter(function (e) { return strongScore.has(e[0]); });
+    strong.sort(function (a, b) { return b[1] - a[1]; });
+    var picked = [];
+    for (var i = 0; i < strong.length && picked.length < 5; i++) {
+      var g = strong[i][0];
+      if (picked.some(function (q) { return q.indexOf(g) > -1; })) continue;
+      picked = picked.filter(function (q) { return g.indexOf(q) === -1; });
+      picked.push(g);
+    }
+    return picked;
+  }
+  function topicOf(p) {
+    try {
+      var u = new URL(p.finalUrl || p.url), seg = u.pathname.split("/").filter(Boolean);
+      var sec = seg.length > 1 ? seg[0] : "(root)";
+      return u.host.replace(/^www\./, "") + " › " + sec;
+    } catch (_) { return "?"; }
+  }
+
+  // ---------- crawl a site ----------
+  async function crawlSite(domain, opts, part) {
+    var r = root(domain), site = { domain: r, hosts: [], pages: [], ranked: null };
+    var hosts = ["www." + r, r];
+    if (opts.useSubs) {
+      log("[" + r + "] finding subdomains in certificate logs…");
+      var s = await api("subdomains?domain=" + encodeURIComponent(r)).catch(function () { return {}; });
+      if (s.subdomains) { hosts = s.subdomains; log("[" + r + "] " + hosts.length + " names found (" + s.source + ")"); }
+    }
+    hosts = hosts.filter(function (h) { return !/^(mail|smtp|imap|pop|mx|webmail|cpanel|autodiscover|ftp|vpn|ns\d*|dns|localhost|dev|staging|test|admin|api|cdn|static|assets|img|images)\d*\./.test(h) || h === r; });
+
+    // Probe which hosts actually serve HTML (and collapse www/apex duplicates).
+    var probes = await pool(hosts.slice(0, 80), 6, function (h) { return api("page?url=" + encodeURIComponent("https://" + h + "/")).catch(function () { return { ok: false }; }); });
+    var live = new Map();
+    probes.forEach(function (p, i) {
+      if (!p || !p.ok) return;
+      var fh = new URL(p.finalUrl).host;
+      if (!fh.endsWith(r)) return;
+      if (!live.has(fh)) live.set(fh, { host: fh, names: [hosts[i]], home: p });
+      else live.get(fh).names.push(hosts[i]);
+    });
+    site.hosts = Array.from(live.values()).slice(0, opts.maxSubs);
+    log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
+    if (!site.hosts.length) return site;
+
+    // Collect candidate URLs from sitemaps, else from the home page's links.
+    for (var i = 0; i < site.hosts.length && !stopped; i++) {
+      var H = site.hosts[i];
+      var sm = await api("sitemap?host=" + encodeURIComponent(H.host)).catch(function () { return {}; });
+      var urls = (sm.urls || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
+      H.sitemapCount = urls.length;
+      H.source = urls.length ? "sitemap" : "links";
+      if (!urls.length) urls = (H.home.links || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
+      H.candidates = Array.from(new Set(urls.filter(function (u) { return !junkPath.test(u); })));
+    }
+
+    // Share the page budget across hosts, spreading picks across sections.
+    var budget = opts.maxPages, per = Math.max(3, Math.floor(budget / site.hosts.length)), queue = [];
+    site.hosts.forEach(function (H) {
+      var bySec = new Map();
+      H.candidates.forEach(function (u) { var k = topicOf({ url: u }); if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(u); });
+      var lists = Array.from(bySec.values()), pick = [], k = 0;
+      while (pick.length < per - 1 && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pick.push(l.shift()); }
+      H.picked = pick.length + 1;
+      queue.push({ url: H.home.finalUrl, data: H.home });
+      pick.forEach(function (u) { if (normUrl(u) !== normUrl(H.home.finalUrl)) queue.push({ url: u }); });
+    });
+    queue = queue.slice(0, budget);
+
+    var brand = brandTokens(r), done = 0;
+    var pages = await pool(queue, 5, async function (q) {
+      var p = q.data || await api("page?url=" + encodeURIComponent(q.url)).catch(function () { return { ok: false, url: q.url }; });
+      done++; part(done / queue.length);
+      if (!p.ok) return null;
+      p.host = new URL(p.finalUrl).host;
+      p.keywords = mainKeywords(p, brand);
+      p.mainKeyword = p.keywords[0] || "";
+      p.onPageKeyword = p.mainKeyword; p.keywordSource = "on-page";
+      p.topic = topicOf(p);
+      p.ranks = [];
+      delete p.text; delete p.links;
+      return p;
+    });
+    var seen = new Set();
+    site.pages = pages.filter(function (p) { if (!p || seen.has(normUrl(p.finalUrl))) return false; seen.add(normUrl(p.finalUrl)); return true; });
+    log("[" + r + "] crawled " + site.pages.length + " page(s)");
+    return site;
+  }
+
+  async function fetchRanked(site, opts) {
+    log("[" + site.domain + "] fetching ranking keywords from DataForSEO…");
+    var res = await fetch("/api/cg/ranked", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ login: opts.login, password: opts.password, target: site.domain, location_code: opts.loc, language_code: opts.lang, limit: 1000 }),
+    }).then(function (r) { return r.json(); }).catch(function (e) { return { error: e.message }; });
+    if (res.error) { log("[" + site.domain + "] DataForSEO error: " + res.error); return; }
+    site.ranked = res.keywords;
+    site.rankedTotal = res.total;
+    log("[" + site.domain + "] " + res.keywords.length + " ranking keywords (of " + res.total + " total), cost $" + (res.cost || 0));
+    var byUrl = new Map(site.pages.map(function (p) { return [normUrl(p.finalUrl), p]; }));
+    res.keywords.forEach(function (k) { var p = byUrl.get(normUrl(k.url)); if (p) p.ranks.push(k); });
+    // A page's main keyword is the one it actually ranks best for (ties: higher volume); on-page analysis is the fallback.
+    site.pages.forEach(function (p) {
+      if (!p.ranks.length) return;
+      p.ranks.sort(function (a, b) { return a.position - b.position || b.volume - a.volume; });
+      p.mainKeyword = p.ranks[0].keyword; p.keywordSource = "ranking";
+      p.keywords = [p.mainKeyword].concat(p.keywords.filter(function (k) { return k !== p.mainKeyword; })).slice(0, 5);
+    });
+  }
+
+  // ---------- gap analysis ----------
+  function keywordGap(you, comps) {
+    var mine = new Map(), rows = new Map();
+    (you.ranked || []).forEach(function (k) { var c = mine.get(k.keyword); if (!c || k.position < c.position) mine.set(k.keyword, k); });
+    comps.forEach(function (c) {
+      (c.ranked || []).forEach(function (k) {
+        var r = rows.get(k.keyword);
+        if (!r) rows.set(k.keyword, r = { keyword: k.keyword, volume: k.volume, difficulty: k.difficulty, intent: k.intent, cpc: k.cpc, comps: {}, best: null });
+        var cur = r.comps[c.domain];
+        if (!cur || k.position < cur.position) r.comps[c.domain] = { position: k.position, url: k.url };
+        if (!r.best || k.position < r.best.position) r.best = { domain: c.domain, position: k.position, url: k.url };
+      });
+    });
+    var out = [];
+    rows.forEach(function (r) {
+      var m = mine.get(r.keyword);
+      r.you = m ? m.position : null; r.yourUrl = m ? m.url : "";
+      r.compCount = Object.keys(r.comps).length;
+      if (!m) r.status = r.best.position <= 20 ? "missing" : "low";
+      else if (m.position > r.best.position + 5 || (m.position > 10 && r.best.position <= 10)) r.status = "weak";
+      else r.status = "shared";
+      if (r.status !== "low") out.push(r);
+    });
+    mine.forEach(function (k) { if (!rows.has(k.keyword)) out.push({ keyword: k.keyword, volume: k.volume, difficulty: k.difficulty, intent: k.intent, cpc: k.cpc, comps: {}, compCount: 0, you: k.position, yourUrl: k.url, best: null, status: "unique" }); });
+    out.forEach(function (r) { r.opportunity = r.status === "missing" || r.status === "weak" ? Math.round(r.volume * (r.compCount) / (1 + (r.difficulty || 30) / 50)) : 0; });
+    return out.sort(function (a, b) { return b.opportunity - a.opportunity || b.volume - a.volume; });
+  }
+  function stem(w) { return w.replace(/(ies)$/, "y").replace(/(es|s)$/, "").replace(/ing$/, ""); }
+  function topicSet(ps) { return ps.map(function (p) { return { p: p, t: new Set(p.keywords.slice(0, 3).join(" ").split(" ").filter(function (w) { return !STOPSET.has(w); }).map(stem)) }; }); }
+  function topicGap(you, comps) {
+    var mine = topicSet(you.pages), out = [];
+    comps.forEach(function (c) {
+      topicSet(c.pages).forEach(function (x) {
+        if (!x.p.mainKeyword || !x.t.size) return;
+        var best = 0, bestP = null;
+        mine.forEach(function (m) {
+          var inter = 0; x.t.forEach(function (w) { if (m.t.has(w)) inter++; });
+          var j = inter / Math.min(x.t.size, m.t.size || 1);
+          if (j > best) { best = j; bestP = m.p; }
+        });
+        var vol = x.p.ranks.reduce(function (s, k) { return s + (k.position <= 20 ? k.volume : 0); }, 0);
+        out.push({ competitor: c.domain, topic: x.p.topic, mainKeyword: x.p.mainKeyword, keywords: x.p.keywords.join(", "), url: x.p.finalUrl, title: x.p.title,
+          coverage: best >= 0.67 ? "covered" : best >= 0.34 ? "partial" : "missing", match: bestP ? bestP.finalUrl : "", score: Math.round(best * 100), rankingVolume: vol, rankingCount: x.p.ranks.length });
+      });
+    });
+    return out.sort(function (a, b) { var o = { missing: 0, partial: 1, covered: 2 }; return o[a.coverage] - o[b.coverage] || b.rankingVolume - a.rankingVolume; });
+  }
+
+  // ---------- rendering ----------
+  var R = null, current = "overview";
+  var TABS = [["overview", "Overview"], ["subdomains", "Subdomains"], ["pages", "Pages & topics"], ["kwgap", "Keyword gap"], ["topicgap", "Topic gap"], ["ranked", "All ranking keywords"]];
+  function renderTabs() {
+    $("#tabs").innerHTML = TABS.map(function (t) { return '<button data-t="' + t[0] + '" class="' + (t[0] === current ? "on" : "") + '">' + t[1] + "</button>"; }).join("");
+    $("#tabs").querySelectorAll("button").forEach(function (b) { b.onclick = function () { current = b.dataset.t; renderTabs(); renderView(); }; });
+  }
+  var link = function (u) { return u ? '<a class="u" href="' + esc(u) + '" target="_blank" rel="noopener" title="' + esc(u) + '">' + esc(u.replace(/^https?:\/\//, "")) + "</a>" : '<span class="muted">—</span>'; };
+  var pill = function (s) { return '<span class="pill p-' + s + '">' + s + "</span>"; };
+  var num = function (n) { return n == null || n === "" ? '<span class="muted">—</span>' : Number(n).toLocaleString(); };
+
+  // Generic sortable/filterable table with CSV export.
+  function table(cols, rows, opts) {
+    opts = opts || {};
+    var state = { sort: null, dir: -1, q: "", f: "" };
+    var box = document.createElement("div");
+    box.innerHTML = '<div class="tools"><input type="search" placeholder="Filter…">' + (opts.filter ? '<select><option value="">All ' + esc(opts.filter.label) + "</option>" + opts.filter.values.map(function (v) { return "<option>" + esc(v) + "</option>"; }).join("") + "</select>" : "") +
+      '<button class="btn sm">Export CSV</button><span class="muted cnt"></span></div><div class="tbl"><table><thead><tr>' + cols.map(function (c, i) { return '<th data-i="' + i + '">' + esc(c.h) + "</th>"; }).join("") + "</tr></thead><tbody></tbody></table></div>";
+    var tb = box.querySelector("tbody");
+    function visible() {
+      var q = state.q.toLowerCase(), rs = rows.filter(function (r) {
+        if (state.f && opts.filter.get(r) !== state.f) return false;
+        return !q || cols.some(function (c) { return String(c.v(r) == null ? "" : c.v(r)).toLowerCase().indexOf(q) > -1; });
+      });
+      if (state.sort != null) { var c = cols[state.sort]; rs = rs.slice().sort(function (a, b) { var x = c.v(a), y = c.v(b); x = x == null ? -Infinity : x; y = y == null ? -Infinity : y; return (x > y ? 1 : x < y ? -1 : 0) * state.dir; }); }
+      return rs;
+    }
+    function draw() {
+      var rs = visible();
+      box.querySelector(".cnt").textContent = rs.length.toLocaleString() + " rows";
+      tb.innerHTML = rs.length ? rs.slice(0, 1500).map(function (r) { return "<tr>" + cols.map(function (c) { return "<td" + (c.n ? ' class="n"' : "") + ">" + (c.html ? c.html(r) : esc(c.v(r))) + "</td>"; }).join("") + "</tr>"; }).join("") : '<tr><td colspan="' + cols.length + '" class="empty">' + esc(opts.empty || "No rows") + "</td></tr>";
+    }
+    box.querySelector("input").oninput = function (e) { state.q = e.target.value; draw(); };
+    if (opts.filter) box.querySelector("select").onchange = function (e) { state.f = e.target.value; draw(); };
+    box.querySelectorAll("th").forEach(function (th) { th.onclick = function () { var i = +th.dataset.i; state.dir = state.sort === i ? -state.dir : -1; state.sort = i; draw(); }; });
+    box.querySelector(".btn").onclick = function () {
+      var csv = [cols.map(function (c) { return c.h; })].concat(visible().map(function (r) { return cols.map(function (c) { return c.v(r); }); }))
+        .map(function (row) { return row.map(function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+      a.download = "content-gap-" + (opts.name || "table") + "-" + R.you.domain + ".csv"; a.click();
+    };
+    if (opts.sort != null) { state.sort = opts.sort; }
+    draw();
+    return box;
+  }
+
+  function allSites() { return [R.you].concat(R.comps); }
+  function renderView() {
+    var v = $("#view"); v.innerHTML = "";
+    var hasRank = allSites().some(function (s) { return s.ranked; });
+    var noRank = "Add a DataForSEO login under “Ranking keywords” and run again to fill this view.";
+    if (current === "overview") {
+      var kg = R.kwGap, missing = kg.filter(function (r) { return r.status === "missing"; }), weak = kg.filter(function (r) { return r.status === "weak"; });
+      var tg = R.topicGap.filter(function (r) { return r.coverage === "missing"; });
+      v.insertAdjacentHTML("beforeend", '<div class="kpis">' +
+        [["Sites crawled", allSites().length], ["Live subdomains", allSites().reduce(function (s, x) { return s + x.hosts.length; }, 0)], ["Pages analysed", allSites().reduce(function (s, x) { return s + x.pages.length; }, 0)],
+         ["Missing keywords", hasRank ? missing.length : "—"], ["Weak keywords", hasRank ? weak.length : "—"], ["Missing volume / mo", hasRank ? missing.reduce(function (s, r) { return s + r.volume; }, 0).toLocaleString() : "—"], ["Topics you lack", tg.length]]
+          .map(function (k) { return '<div class="kpi"><b>' + (typeof k[1] === "number" ? k[1].toLocaleString() : k[1]) + "</b><span>" + k[0] + "</span></div>"; }).join("") + "</div>");
+      v.appendChild(table([
+        { h: "Site", v: function (s) { return s.domain + (s === R.you ? " (you)" : ""); } },
+        { h: "Live subdomains", n: 1, v: function (s) { return s.hosts.length; } },
+        { h: "Pages crawled", n: 1, v: function (s) { return s.pages.length; } },
+        { h: "Ranking keywords", n: 1, v: function (s) { return s.ranked ? s.rankedTotal : null; }, html: function (s) { return num(s.ranked ? s.rankedTotal : null); } },
+        { h: "Top-10 keywords", n: 1, v: function (s) { return s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null; }, html: function (s) { return num(s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null); } },
+        { h: "Est. traffic (sample)", n: 1, v: function (s) { return s.ranked ? Math.round(s.ranked.reduce(function (a, k) { return a + k.etv; }, 0)) : null; }, html: function (s) { return num(s.ranked ? Math.round(s.ranked.reduce(function (a, k) { return a + k.etv; }, 0)) : null); } },
+        { h: "Top keyword", v: function (s) { return s.ranked && s.ranked[0] ? s.ranked[0].keyword : ""; } },
+      ], allSites(), { name: "overview" }));
+      if (!hasRank) v.insertAdjacentHTML("beforeend", '<p class="note">' + noRank + "</p>");
+    }
+    if (current === "subdomains") {
+      var rows = [];
+      allSites().forEach(function (s) {
+        s.hosts.forEach(function (H) {
+          var ps = s.pages.filter(function (p) { return p.host === H.host; });
+          var rk = (s.ranked || []).filter(function (k) { try { return new URL(k.url).host === H.host; } catch (_) { return false; } });
+          var freq = new Map(); ps.forEach(function (p) { p.keywords.slice(0, 2).forEach(function (k) { freq.set(k, (freq.get(k) || 0) + 1); }); });
+          rows.push({ site: s.domain, host: H.host, aliases: H.names.filter(function (n) { return n !== H.host; }).join(", "), title: H.home.title, mainKeyword: H.home.keywords ? H.home.keywords[0] : (mainKeywords(H.home, brandTokens(s.domain))[0] || ""),
+            topics: Array.from(freq.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6).map(function (e) { return e[0]; }).join(", "),
+            urls: H.candidates.length, source: H.source, crawled: ps.length, ranking: s.ranked ? rk.length : null, top: rk[0] ? rk[0].keyword + " (#" + rk[0].position + ")" : "" });
+        });
+      });
+      v.appendChild(table([
+        { h: "Site", v: function (r) { return r.site; } }, { h: "Subdomain", v: function (r) { return r.host; }, html: function (r) { return link("https://" + r.host + "/"); } },
+        { h: "Home title", v: function (r) { return r.title; } }, { h: "Main keyword", v: function (r) { return r.mainKeyword; } }, { h: "Topics", v: function (r) { return r.topics; } },
+        { h: "URLs found", n: 1, v: function (r) { return r.urls; } }, { h: "Source", v: function (r) { return r.source; } }, { h: "Crawled", n: 1, v: function (r) { return r.crawled; } },
+        { h: "Ranking kws", n: 1, v: function (r) { return r.ranking; }, html: function (r) { return num(r.ranking); } }, { h: "Top ranking keyword", v: function (r) { return r.top; } },
+        { h: "Also answers on", v: function (r) { return r.aliases; } },
+      ], rows, { name: "subdomains", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+    }
+    if (current === "pages") {
+      var prow = [];
+      allSites().forEach(function (s) { s.pages.forEach(function (p) {
+        var top = p.ranks.slice().sort(function (a, b) { return a.position - b.position || b.volume - a.volume; });
+        prow.push({ site: s.domain, p: p, top: top[0], vol: top.reduce(function (a, k) { return a + k.volume; }, 0) });
+      }); });
+      v.appendChild(table([
+        { h: "Site", v: function (r) { return r.site; } }, { h: "URL", v: function (r) { return r.p.finalUrl; }, html: function (r) { return link(r.p.finalUrl); } },
+        { h: "Topic (section)", v: function (r) { return r.p.topic; } }, { h: "Main keyword", v: function (r) { return r.p.mainKeyword; }, html: function (r) { return "<b>" + esc(r.p.mainKeyword) + "</b>"; } },
+        { h: "Keyword source", v: function (r) { return r.p.keywordSource; } },
+        { h: "On-page focus", v: function (r) { return r.p.onPageKeyword; } },
+        { h: "Other keywords", v: function (r) { return r.p.keywords.slice(1).join(", "); } }, { h: "Title", v: function (r) { return r.p.title; } }, { h: "H1", v: function (r) { return r.p.h1[0] || ""; } },
+        { h: "Top ranking keyword", v: function (r) { return r.top ? r.top.keyword : ""; } }, { h: "Pos", n: 1, v: function (r) { return r.top ? r.top.position : null; }, html: function (r) { return num(r.top ? r.top.position : null); } },
+        { h: "# ranking kws", n: 1, v: function (r) { return hasRank ? r.p.ranks.length : null; }, html: function (r) { return num(hasRank ? r.p.ranks.length : null); } },
+        { h: "Ranking volume", n: 1, v: function (r) { return hasRank ? r.vol : null; }, html: function (r) { return num(hasRank ? r.vol : null); } },
+        { h: "H2s", v: function (r) { return r.p.h2.slice(0, 6).join(" | "); } },
+      ], prow, { name: "pages", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+    }
+    if (current === "kwgap") {
+      if (!hasRank) { v.innerHTML = '<div class="empty">' + noRank + "</div>"; return; }
+      var cc = R.comps.map(function (c) {
+        return { h: c.domain, n: 1, v: function (r) { return r.comps[c.domain] ? r.comps[c.domain].position : null; }, html: function (r) { var x = r.comps[c.domain]; return x ? '<a href="' + esc(x.url) + '" target="_blank" rel="noopener" title="' + esc(x.url) + '">#' + x.position + "</a>" : '<span class="muted">—</span>'; } };
+      });
+      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px"><b>missing</b>: a competitor ranks top 20 and you don\'t rank · <b>weak</b>: you rank, but well below a competitor · <b>shared</b>: you rank about as well · <b>unique</b>: only you rank. Opportunity = volume × competitors ranking, discounted by difficulty.</p>');
+      v.appendChild(table([
+        { h: "Keyword", v: function (r) { return r.keyword; }, html: function (r) { return "<b>" + esc(r.keyword) + "</b>"; } },
+        { h: "Status", v: function (r) { return r.status; }, html: function (r) { return pill(r.status); } },
+        { h: "Volume", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
+        { h: "KD", n: 1, v: function (r) { return r.difficulty; }, html: function (r) { return num(r.difficulty); } },
+        { h: "Intent", v: function (r) { return r.intent; } },
+        { h: "You", n: 1, v: function (r) { return r.you; }, html: function (r) { return r.you ? '<a href="' + esc(r.yourUrl) + '" target="_blank" rel="noopener">#' + r.you + "</a>" : '<span class="muted">—</span>'; } },
+      ].concat(cc).concat([
+        { h: "Best competitor URL", v: function (r) { return r.best ? r.best.url : ""; }, html: function (r) { return link(r.best ? r.best.url : ""); } },
+        { h: "Opportunity", n: 1, v: function (r) { return r.opportunity; }, html: function (r) { return num(r.opportunity); } },
+      ]), R.kwGap, { name: "keyword-gap", filter: { label: "statuses", values: ["missing", "weak", "shared", "unique"], get: function (r) { return r.status; } } }));
+    }
+    if (current === "topicgap") {
+      v.insertAdjacentHTML("beforeend", '<p class="note" style="margin:0 0 10px">Each crawled competitor page, matched to your closest crawled page by its main keywords. <b>missing</b> pages are topics to write; <b>partial</b> ones may need a deeper or dedicated page. Coverage is judged only against the pages crawled — raise the page budget for a fuller picture.</p>');
+      v.appendChild(table([
+        { h: "Competitor", v: function (r) { return r.competitor; } }, { h: "Coverage", v: function (r) { return r.coverage; }, html: function (r) { return pill(r.coverage === "covered" ? "shared" : r.coverage === "partial" ? "weak" : "missing").replace(/>(shared|weak|missing)</, ">" + r.coverage + "<"); } },
+        { h: "Main keyword", v: function (r) { return r.mainKeyword; }, html: function (r) { return "<b>" + esc(r.mainKeyword) + "</b>"; } }, { h: "Topic (section)", v: function (r) { return r.topic; } },
+        { h: "Competitor page", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } }, { h: "Title", v: function (r) { return r.title; } },
+        { h: "Ranking kws", n: 1, v: function (r) { return hasRank ? r.rankingCount : null; }, html: function (r) { return num(hasRank ? r.rankingCount : null); } },
+        { h: "Top-20 volume", n: 1, v: function (r) { return hasRank ? r.rankingVolume : null; }, html: function (r) { return num(hasRank ? r.rankingVolume : null); } },
+        { h: "Your closest page", v: function (r) { return r.match; }, html: function (r) { return link(r.match); } }, { h: "Match %", n: 1, v: function (r) { return r.score; } },
+        { h: "Keywords", v: function (r) { return r.keywords; } },
+      ], R.topicGap, { name: "topic-gap", filter: { label: "coverage", values: ["missing", "partial", "covered"], get: function (r) { return r.coverage; } } }));
+    }
+    if (current === "ranked") {
+      if (!hasRank) { v.innerHTML = '<div class="empty">' + noRank + "</div>"; return; }
+      var all = [];
+      allSites().forEach(function (s) { (s.ranked || []).forEach(function (k) { all.push(Object.assign({ site: s.domain, host: (function () { try { return new URL(k.url).host; } catch (_) { return ""; } })() }, k)); }); });
+      v.appendChild(table([
+        { h: "Site", v: function (r) { return r.site; } }, { h: "Subdomain", v: function (r) { return r.host; } }, { h: "Keyword", v: function (r) { return r.keyword; } },
+        { h: "Pos", n: 1, v: function (r) { return r.position; } }, { h: "Volume", n: 1, v: function (r) { return r.volume; }, html: function (r) { return num(r.volume); } },
+        { h: "KD", n: 1, v: function (r) { return r.difficulty; }, html: function (r) { return num(r.difficulty); } }, { h: "Intent", v: function (r) { return r.intent; } },
+        { h: "CPC", n: 1, v: function (r) { return r.cpc; } }, { h: "URL", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } },
+      ], all, { name: "ranking-keywords", filter: { label: "sites", values: allSites().map(function (s) { return s.domain; }), get: function (r) { return r.site; } } }));
+    }
+  }
+
+  // ---------- run ----------
+  $("#run").onclick = async function () {
+    var you = root($("#you").value), comps = $("#comp").value.split(/[\s,]+/).map(root).filter(function (d) { return d && d !== you; }).slice(0, 5);
+    if (!you) { alert("Enter your domain."); return; }
+    saveSettings();
+    var opts = { maxPages: Math.max(5, Math.min(500, +$("#maxPages").value || 60)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
+      login: $("#dfsLogin").value.trim(), password: $("#dfsPass").value.trim(), loc: $("#loc").value, lang: $("#lang").value.trim() || "en" };
+    stopped = false; $("#run").disabled = true; $("#stop").disabled = false; $("#log").textContent = ""; prog(0);
+    var domains = [you].concat(comps), sites = [];
+    try {
+      for (var i = 0; i < domains.length && !stopped; i++) {
+        status("Crawling " + domains[i] + " (" + (i + 1) + "/" + domains.length + ")…");
+        var site = await crawlSite(domains[i], opts, function (f) { prog((i + f) / domains.length); });
+        if (opts.login && opts.password && !stopped) await fetchRanked(site, opts);
+        sites.push(site);
+      }
+      if (!sites.length) return;
+      R = { you: sites[0], comps: sites.slice(1) };
+      R.kwGap = keywordGap(R.you, R.comps);
+      R.topicGap = topicGap(R.you, R.comps);
+      prog(1); status(stopped ? "Stopped — showing partial results." : "Done.");
+      $("#report").hidden = false; current = "overview"; renderTabs(); renderView();
+      $("#report").scrollIntoView({ behavior: "smooth" });
+    } catch (e) {
+      log("Error: " + (e && e.message || e)); status("Failed — see log.");
+    } finally { $("#run").disabled = false; $("#stop").disabled = true; }
+  };
+  $("#stop").onclick = function () { stopped = true; status("Stopping…"); };
+})();
+</script>
+</body>
+</html>
