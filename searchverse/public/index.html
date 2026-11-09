@@ -34,14 +34,14 @@ main,nav,footer,.toolpage{position:relative;z-index:1}
 main,.toolpage{overflow-x:clip}
 
 /* ---------- nav ---------- */
-nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px max(16px,5vw);background:rgba(6,7,13,.55);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px max(max(16px,3vw),calc((100% - 1560px) / 2 + 3vw));background:rgba(6,7,13,.55);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
 .brand img{width:34px;height:34px;animation:spin 18s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 nav .links{display:flex;gap:6px}
 nav .links a{color:var(--muted);font-size:14px;padding:8px 12px;border-radius:10px;transition:.2s}
 nav .links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
-.wrap{max-width:1180px;margin:auto;padding:0 max(16px,4vw)}
+.wrap{max-width:1560px;margin:auto;padding:0 max(16px,3vw)}
 
 /* ---------- buttons ---------- */
 .btn{position:relative;display:inline-flex;align-items:center;gap:10px;padding:15px 26px;border-radius:14px;font-weight:700;font-size:16px;border:1px solid var(--line);cursor:pointer;background:var(--panel);color:var(--text);backdrop-filter:blur(8px);transition:transform .2s,box-shadow .2s;overflow:hidden}
@@ -52,11 +52,14 @@ nav .links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .btn .arr{transition:transform .2s}.btn:hover .arr{transform:translateX(4px)}
 
 /* ---------- hero ---------- */
-.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center;min-height:calc(100vh - 70px);padding:40px 0 60px}
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:24px;align-items:center;min-height:calc(100vh - 70px);padding:40px 0 60px}
 .pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--muted);background:var(--panel);margin-bottom:22px}
 .pill i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(52,211,153,.7);animation:ping 2s infinite}
 @keyframes ping{70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
-h1{font-size:clamp(40px,6.2vw,76px);line-height:1.02;letter-spacing:-.045em;font-weight:900}
+h1{font-size:clamp(38px,6.2vw,76px);line-height:1.04;letter-spacing:-.04em;font-weight:800}
+.hero h1{font-size:clamp(36px,4.4vw,64px)}
+.hero h1 .ln{white-space:nowrap}
+@media(max-width:520px){.hero h1 .ln{white-space:normal}}
 .lead{margin-top:22px;color:var(--muted);font-size:19px;line-height:1.6;max-width:540px}
 .cta{margin-top:34px;display:flex;gap:12px;flex-wrap:wrap}
 .trust{margin-top:34px;display:flex;gap:22px;flex-wrap:wrap;color:var(--muted);font-size:14px}
@@ -238,9 +241,9 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
   <div class="wrap">
     <header class="hero">
       <div class="rv">
-        <div class="pill"><i></i> All tools online · free to use</div>
-        <h1>Every search answer,<br><span class="grad">one click away.</span></h1>
-        <p class="lead">SearchVerse is your team's toolbox for Google search. Pick a question, open the tool, get the answer — no installs, no setup, no SEO jargon.</p>
+        <div class="pill"><i></i> ✦ AI-driven search solutions</div>
+        <h1><span class="ln">Every search answer,</span><br><span class="grad ln">one click away.</span></h1>
+        <p class="lead">SearchVerse helps your team scale faster and get more done. It turns hours of search analysis into clear answers in a single click.</p>
         <div class="cta"><a class="btn primary" href="#tools">Find my tool <span class="arr">→</span></a><a class="btn" href="#how">See how it works</a></div>
         <div class="trust"><div><b data-count="0">0</b>tools</div><div><b>0</b>installs</div><div><b>1</b>place for everything</div></div>
       </div>
