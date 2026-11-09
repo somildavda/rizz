@@ -234,7 +234,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 <nav>
   <a class="brand" href="#"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""><span class="grad">SearchVerse</span></a>
   <div class="links"><a href="#tools">Tools</a><a href="#how">How it works</a><a href="#about">Why SearchVerse</a>
-    <a href="/admin" id="navAdmin" hidden>📊 Dashboard</a><a href="/logout" id="navOut" hidden>Sign out</a></div>
+    <a href="/admin" id="navAdmin" hidden>📊 Dashboard</a><a href="/logout" id="navOut" hidden>Sign out</a><a href="/login" id="navIn">Sign in</a></div>
 </nav>
 
 <main id="view-home">
@@ -428,11 +428,20 @@ window.SV_CREATOR = {
   set("[data-year]", new Date().getFullYear());
 
   // ---- signed-in user: admin link and sign out ----
+  // Visitors can browse the homepage; opening a tool asks them to sign in first.
+  window.SV_SIGNED_IN = null; // null until we know
   fetch("/api/auth/me").then(function (r) { return r.ok ? r.json() : {}; }).then(function (d) {
     if (!d.user) return;
+    window.SV_SIGNED_IN = true; $("#navIn").hidden = true;
     $("#navOut").hidden = false; $("#navOut").title = "Signed in as " + d.user.name;
-    if (d.user.role === "admin") $("#navAdmin").hidden = false;
-  }).catch(function () {});
+    if (d.user.role === "owner" || d.user.role === "admin") $("#navAdmin").hidden = false;
+  }).catch(function () {}).then(function () { if (window.SV_SIGNED_IN !== true) window.SV_SIGNED_IN = false; if (typeof route === "function") route(); });
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest("[data-launch]");
+    if (!a || window.SV_SIGNED_IN !== false) return;
+    e.preventDefault(); e.stopPropagation();
+    location.href = "/login?next=" + encodeURIComponent("/" + (a.getAttribute("href") || location.hash || ""));
+  }, true);
 
   // ---- creator card ----
   (function () {
@@ -594,6 +603,7 @@ window.SV_CREATOR = {
   function route() {
     var m = location.hash.match(/^#\/tools\/([\w-]+)(\/launch)?/);
     var t = m && T.filter(function (x) { return x.id === m[1]; })[0];
+    if (t && m[2] && !t.newTab && window.SV_SIGNED_IN === false) { location.href = "/login?next=" + encodeURIComponent("/" + location.hash); return; }
     var launch = !!(t && m[2] && !t.newTab);
     home.hidden = !!t; page.hidden = !t;
     viewer.classList.toggle("on", launch);

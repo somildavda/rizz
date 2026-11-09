@@ -64,6 +64,12 @@ export async function gate(request, env, url) {
     return null;
   }
   if (p.startsWith("/launch/")) return null;
+  // The homepage is public too (tools behind it still need an approved sign-in).
+  if (p === "/" || p === "/index.html") {
+    const ref = request.headers.get("Referer") || "";
+    if (!(await currentUser(request, env))) await call(env, "/track", meta(request, { type: "view", path: "/", title: "Homepage (visitor)", referrer: ref && !ref.includes(url.host) ? new URL(ref).hostname : "" })).catch(() => {});
+    return null;
+  }
   if (p === "/api/launch-share" && request.method === "POST") {
     const b = await request.json().catch(() => ({}));
     await call(env, "/track", meta(request, { type: "click", path: "/launch", tool: "launch-share:" + String(b.via || "").slice(0, 20) }));
