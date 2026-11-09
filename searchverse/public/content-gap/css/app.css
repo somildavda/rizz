@@ -173,6 +173,17 @@ details.log summary{cursor:pointer;color:var(--muted);font-size:13px}
 .eeat label{display:flex;gap:8px;align-items:flex-start;cursor:pointer;font-size:14px}
 .eeat input{margin-top:4px}
 
+/* topical cluster */
+.chipbtn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:99px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chipbtn:hover{border-color:var(--a)}
+.chipbtn.saved{border-color:rgba(96,165,250,.5)}
+.cattr{margin-bottom:16px}
+.cattr h4{font-size:15px;margin:4px 0 6px}
+.crow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:11px;border:1px solid var(--line);background:var(--panel2);margin-bottom:8px;cursor:pointer}
+.crow.pillar{border-color:rgba(124,92,255,.5);background:linear-gradient(135deg,rgba(124,92,255,.1),transparent),var(--panel2)}
+.crow input{margin-top:4px}
+.crow input:disabled{opacity:.3}
+
 /* topical map */
 .tmap-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
 .tmap-head div{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}

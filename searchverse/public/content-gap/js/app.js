@@ -6,7 +6,7 @@
 //   #/p/:id[/:tab]         results dashboard
 //   #/settings             workspace key and API keys
 import * as E from "./engine.js";
-import { buildPlanPrompt, askGemini, checkAutocomplete, serpSnapshot, briefInputs, buildBriefPrompt, localBrief, similarPages, wordSet, overlap } from "./ai.js";
+import { buildPlanPrompt, askGemini, checkAutocomplete, serpSnapshot, briefInputs, buildBriefPrompt, localBrief, similarPages, wordSet, overlap, buildClusterPrompt, localCluster } from "./ai.js";
 import { $, $$, esc, link, pill, num, scoreBar, scoreRing, toast, table, db, workspaceKey, setWorkspaceKey, local, download, toCsv } from "./ui.js";
 
 const view = $("#view");
@@ -571,7 +571,7 @@ async function loadProject(id) {
 
 // ---------------- dashboard ----------------
 const TABS = [
-  ["next", "⭐ Write next"], ["map", "🗺️ Topical map"], ["list", "📋 My topic list"],
+  ["next", "⭐ Write next"], ["cluster", "🧠 Topical cluster"], ["map", "🗺️ Topical map"], ["list", "📋 My topic list"],
   ["changes", "🔄 What changed"], ["compare", "🧩 Compare topics"], ["details", "📊 Details"],
 ];
 
@@ -604,7 +604,7 @@ async function dashboard(id, tab) {
   $$(".tabs button").forEach((b) => { b.onclick = () => { location.hash = `#/p/${id}/${b.dataset.t}`; }; });
   wireDelete(p);
   const T = $("#tab");
-  ({ next: tabNext, map: tabMap, list: tabList, changes: tabChanges, compare: tabCompare, details: tabDetails }[tab] || tabNext)(T, c);
+  ({ next: tabNext, cluster: tabCluster, map: tabMap, list: tabList, changes: tabChanges, compare: tabCompare, details: tabDetails }[tab] || tabNext)(T, c);
 }
 
 function wireDelete(p) {
@@ -845,6 +845,97 @@ function briefText(topic, b) {
   if (b.beat_competitors) L.push("## Beat competitors", b.beat_competitors, "");
   if (b.eeat) { L.push("## E-E-A-T"); EEAT.forEach(([k, t]) => { if ((b.eeat[k] || []).length) L.push(`### ${t.replace(/^\S+ /, "")}`, ...b.eeat[k].map((x) => `- [ ] ${x}`)); }); }
   return L.join("\n");
+}
+
+// 🧠 Topical cluster: Koray's framework for one central entity, from your own point of view.
+function tabCluster(T, c, entityArg) {
+  const p = c.project, R = c.report, pw = { ...DEFAULT_POWER, ...(p.power || {}) };
+  const saved = p.clusters || {};
+  const offer = String((p.brand || {}).offer || "").split(/\n|,/).map((x) => x.trim()).filter(Boolean);
+  const entity = entityArg || Object.keys(saved)[0] || "";
+  const cl = entity && saved[entity.toLowerCase()];
+  T.innerHTML = explain("Pick one <b>central entity</b> — something you sell or want to be known for — and we build its full topical cluster with Koray's framework: <b>core</b> attributes (close to what you sell) and <b>outer</b> attributes (supporting), each with a <b>pillar page</b> and <b>cluster articles</b>. Tick what you want to write and add it to your plan.") +
+    `<div class="card" style="margin-bottom:16px"><label class="f" for="ent">Central entity</label><span class="hint">e.g. eSIM, Prepaid recharge, WiFi broadband, International roaming</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="ent" value="${esc(entity)}" placeholder="Type a topic" style="flex:1;min-width:220px"><button class="btn primary" id="build">🧠 Build cluster</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${offer.map((o) => `<button type="button" class="chipbtn" data-ent="${esc(o)}">${esc(o)}</button>`).join("")}
+        ${Object.keys(saved).filter((k) => !offer.some((o) => o.toLowerCase() === k)).map((k) => `<button type="button" class="chipbtn saved" data-ent="${esc(saved[k].central_entity || k)}">📁 ${esc(saved[k].central_entity || k)}</button>`).join("")}</div></div>
+    <div id="clout">${cl ? "" : `<div class="card emptybig"><b>🧠</b>Pick an entity above and click <b>Build cluster</b>.${local("gemKey") ? "" : `<br><span style="font-size:13px">Tip: <a href="#/settings">add a free Gemini key</a> for a much richer cluster.</span>`}</div>`}</div>`;
+  $$("[data-ent]", T).forEach((b) => { b.onclick = () => { const e = b.dataset.ent; if (saved[e.toLowerCase()]) tabCluster(T, c, e); else { $("#ent", T).value = e; $("#build", T).click(); } }; });
+  $("#build", T).onclick = async () => {
+    const e = $("#ent", T).value.trim(); if (!e) return toast("Type a central entity first.", true);
+    const btn = $("#build", T); btn.disabled = true; btn.textContent = "Building… (about 30 seconds)";
+    try {
+      const sug = (q) => suggestFor(q, pw);
+      let result;
+      if (local("gemKey")) {
+        const titles = R ? R.you.pages.filter((x) => x.type !== "listing").map((x) => x.title).filter(Boolean) : [];
+        const res = await fetch("/api/cg/gemini", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: local("gemKey"), model: pw.model, prompt: buildClusterPrompt(p, e, titles, await sug(e)) }) }).then((r) => r.json());
+        if (res.error) throw new Error(res.error);
+        result = JSON.parse(String(res.text).replace(/^\s*```(json)?|```\s*$/g, ""));
+      } else result = await localCluster(e, sug);
+      result.at = Date.now(); result.central_entity = result.central_entity || e;
+      p.clusters = { ...(p.clusters || {}), [e.toLowerCase()]: result };
+      await db("projects/" + p.id, "PUT", { ...p });
+      toast("Cluster ready"); tabCluster(T, c, e);
+    } catch (err) { toast("Couldn't build the cluster: " + err.message, true); btn.disabled = false; btn.textContent = "🧠 Try again"; }
+  };
+  if (cl) drawCluster($("#clout", T), c, cl);
+}
+
+function drawCluster(box, c, cl) {
+  const p = c.project, R = c.report, backlog = new Map(c.backlog.map((t) => [t.key, t]));
+  const state = (kw) => {
+    if (!R) return { s: "gap" };
+    const mine = similarPages(R.you.pages, kw, 0.67)[0]; if (mine) return { s: "have", url: mine.p.finalUrl };
+    for (const s of R.comps) { const h = similarPages(s.pages, kw, 0.67)[0]; if (h) return { s: "comp", url: h.p.finalUrl, site: s.domain }; }
+    return { s: "gap" };
+  };
+  const badge = (st) => st.s === "have" ? `<span class="pill good">✅ you have it</span> ${link(st.url)}` : st.s === "comp" ? `<span class="pill mid">🥊 ${esc(st.site)} has it</span> ${link(st.url)}` : `<span class="pill low">💡 nobody yet</span>`;
+  const row = (a, attr, isPillar) => {
+    const key = topicKey(a.primary_keyword || a.title), st = state(a.primary_keyword || a.title), inList = backlog.get(key);
+    return `<label class="crow ${isPillar ? "pillar" : ""}"><input type="checkbox" data-k="${esc(key)}" ${st.s === "have" || (inList && inList.status !== "gap") ? "disabled" : ""}>
+      <div class="grow"><b>${isPillar ? "🏛️ Pillar: " : ""}${esc(a.title || a.primary_keyword)}</b>
+        <div class="muted" style="font-size:12.5px">🔑 ${esc(a.primary_keyword || "")}${a.search_intent ? " · " + esc(a.search_intent) : ""}${a.content_type ? " · " + esc(a.content_type) : ""}${a.query_template ? ` · <code>${esc(a.query_template)}</code>` : ""}</div>
+        <div style="margin-top:4px">${badge(st)} ${inList && inList.status !== "gap" ? pill("in your list: " + inList.status, "blue") : ""}</div></div>
+      <a class="btn sm ghost" href="#/p/${esc(p.id)}/brief/${encodeURIComponent(key)}" data-brief="${esc(key)}">📝 Brief</a></label>`;
+  };
+  const items = [];
+  const attrs = (cl.attributes || []).slice().sort((a, b) => (a.section === "core" ? 0 : 1) - (b.section === "core" ? 0 : 1));
+  attrs.forEach((at) => { if (at.pillar && at.pillar.primary_keyword) items.push({ a: at.pillar, at, pillar: true }); (at.articles || []).forEach((a) => items.push({ a, at })); });
+  const counts = { have: 0, comp: 0, gap: 0 }; items.forEach((x) => counts[state(x.a.primary_keyword || x.a.title).s]++);
+  box.innerHTML = `<div class="tmap-head">
+      <div><small>Source context</small>${esc(cl.source_context || (p.brand || {}).about || "—")}</div>
+      <div><small>Central entity</small><b>${esc(cl.central_entity)}</b></div>
+      <div><small>Central search intent</small>${esc(cl.central_search_intent || "—")}</div></div>
+    <div class="kpis" style="margin-top:0"><div class="kpi"><b>${items.length}</b><span>articles in this cluster</span></div><div class="kpi"><b style="color:var(--good)">${counts.have}</b><span>you already have</span></div>
+      <div class="kpi"><b style="color:var(--mid)">${counts.comp}</b><span>only competitors have</span></div><div class="kpi"><b class="grad">${counts.gap}</b><span>nobody has yet</span></div></div>
+    ${cl.local ? explain("Built from Google Autocomplete without AI. <a href=\"#/settings\">Add a Gemini key</a> and rebuild for proper attributes, pillars and query patterns.") : ""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;position:sticky;top:0;z-index:2;background:var(--bg);padding:8px 0">
+      <button class="btn primary" id="addSel" disabled>📌 Add selected to my plan</button><button class="btn ghost" id="selGaps">Select all “nobody yet”</button>
+      <button class="btn ghost" id="clCsv">⬇ CSV</button><span class="muted" id="selCount" style="align-self:center"></span></div>
+    <div class="tmap">${["core", "outer"].map((sec) => `<div class="tsec"><h3>${sec === "core" ? "🎯 Core section" : "🌱 Outer section"}</h3><p>${sec === "core" ? "Attributes closest to what you sell." : "Supporting attributes that build authority and link to the core."}</p>
+      ${attrs.filter((at) => (at.section === "core" ? "core" : "outer") === sec).map((at) => `<div class="cattr"><h4>${esc(at.name)}</h4>${at.why ? `<p class="muted" style="font-size:12.5px;margin:2px 0 8px">${esc(at.why)}</p>` : ""}
+        ${at.pillar && at.pillar.primary_keyword ? row(at.pillar, at, true) : ""}${(at.articles || []).map((a) => row(a, at)).join("")}</div>`).join("") || "<p>—</p>"}</div>`).join("")}</div>`;
+  const boxes = () => $$("input[data-k]", box);
+  const upd = () => { const n = boxes().filter((x) => x.checked).length; $("#addSel", box).disabled = !n; $("#selCount", box).textContent = n ? n + " selected" : ""; };
+  boxes().forEach((x) => { x.onchange = upd; });
+  $$("[data-brief]", box).forEach((a) => { a.onclick = async (e) => { e.preventDefault(); await ensureTopic(a.dataset.brief); c.backlog = await db(`projects/${p.id}/topics`); location.hash = a.getAttribute("href"); }; });
+  $("#selGaps", box).onclick = () => { boxes().forEach((x) => { if (!x.disabled && x.closest(".crow").querySelector(".pill.low")) x.checked = true; }); upd(); };
+  const find = (key) => items.find((x) => topicKey(x.a.primary_keyword || x.a.title) === key);
+  async function ensureTopic(key, status) {
+    const x = find(key); if (!x) return;
+    const old = backlog.get(key);
+    await db(`projects/${p.id}/topics`, "PUT", { topics: [{ key, label: x.a.title || x.a.primary_keyword, section: x.at.section === "core" ? "core" : "outer", score: (old && old.score) || 0, coveredUrl: null,
+      data: { ...((old && old.data) || {}), source: "cluster", entity: cl.central_entity, attribute: x.at.name, pillar: !!x.pillar, primary_keyword: x.a.primary_keyword, search_intent: x.a.search_intent, content_type: x.a.content_type } }] });
+    if (status) await db(`projects/${p.id}/topics/${encodeURIComponent(key)}`, "PATCH", { status });
+  }
+  $("#addSel", box).onclick = async () => {
+    const keys = boxes().filter((x) => x.checked).map((x) => x.dataset.k);
+    try { for (const k of keys) await ensureTopic(k, "planned"); c.backlog = await db(`projects/${p.id}/topics`); toast(`${keys.length} topic(s) added to your plan`); drawCluster(box, c, cl); }
+    catch (e) { toast(e.message, true); }
+  };
+  $("#clCsv", box).onclick = () => download(`cluster-${topicKey(cl.central_entity).replace(/[^a-z0-9]+/g, "-")}.csv`, toCsv([["Section", "Attribute", "Pillar?", "Title", "Primary keyword", "Intent", "Type", "Query pattern", "Status", "URL"]]
+    .concat(items.map((x) => { const st = state(x.a.primary_keyword || x.a.title); return [x.at.section, x.at.name, x.pillar ? "pillar" : "", x.a.title, x.a.primary_keyword, x.a.search_intent, x.a.content_type, x.a.query_template, st.s === "have" ? "you have it" : st.s === "comp" ? st.site + " has it" : "nobody yet", st.url || ""]; }))));
 }
 
 // 🗺️ Topical map (Koray's framework)

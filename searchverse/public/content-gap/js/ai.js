@@ -193,3 +193,47 @@ export function localBrief(project, topic, primary, inputs, suggestions, extraKe
     must_cover: [], beat_competitors: heads.length ? "Cover every heading above, then add what none of them answer." : "No competitor headings captured — re-scan to collect them.",
   };
 }
+
+
+// ---------------- topical cluster (Koray's framework) ----------------
+export function buildClusterPrompt(project, entity, yourTitles, suggestions) {
+  const b = project.brand || {};
+  return [
+    "You are a semantic SEO strategist using Koray Tuğberk GÜBÜR's topical authority framework.",
+    "Build a complete topical map (cluster) for ONE central entity, from this brand's own point of view.",
+    "Framework: SOURCE CONTEXT = how the brand makes money and why it publishes. CENTRAL ENTITY = the topic below. CENTRAL SEARCH INTENT = source context + entity.",
+    "Split the entity into ATTRIBUTES (sub-entities, properties, processes, comparisons, problems). CORE section = attributes closest to the source context (lead to the product); OUTER section = supporting attributes that build authority and link back to the core.",
+    "Each attribute has one PILLAR page and several CLUSTER articles. Each article targets ONE distinct search intent (no near-duplicates) and links to its pillar.",
+    "", "## Brand", "Name: " + (b.name || project.domain), "Website: " + project.domain, "What it does: " + (b.about || ""), "Audience: " + (b.audience || ""),
+    "Products / services: " + (b.offer || ""), "Never write about: " + (b.avoid || "nothing"), "Knowledge base:\n" + (b.kb ? b.kb.slice(0, 12000) : "(none)"),
+    "", "## Central entity", entity,
+    "", "## Google Autocomplete for it", suggestions.length ? suggestions.join("; ") : "(none)",
+    "", "## Brand pages that already exist (titles)", yourTitles.length ? yourTitles.slice(0, 200).join("\n") : "(none)",
+    "", "## Task",
+    "Return 4-8 attributes (mix of core and outer) with 3-8 articles each. Prefer real queries people type (use the Autocomplete list). Include the pillar for each attribute.",
+    "query_template: the general pattern, e.g. 'how to [action] [entity] on [device]'.",
+    "", "Reply with JSON only:",
+    '{"source_context":"","central_entity":"","central_search_intent":"","attributes":[{"name":"","section":"core|outer","why":"","pillar":{"title":"","primary_keyword":""},"articles":[{"title":"","primary_keyword":"","search_intent":"informational|commercial|transactional|navigational","query_template":"","content_type":"guide|how-to|comparison|list|definition|landing page|tool"}]}]}',
+  ].join("\n");
+}
+
+// Without AI: group Google Autocomplete suggestions for the entity into attributes.
+export async function localCluster(entity, suggest) {
+  const mods = ["", "how to ", "what is ", "best ", " vs", " price", " benefits", " problems", " for ", " near me", " plans", " offer", " activate", " not working"];
+  const seen = new Set(), all = [];
+  for (const m of mods) {
+    const q = m.startsWith(" ") ? entity + m : m + entity;
+    (await suggest(q)).forEach((s) => { s = s.toLowerCase().trim(); if (s && !seen.has(s) && s !== entity.toLowerCase()) { seen.add(s); all.push(s); } });
+  }
+  const groups = [
+    ["What it is & basics", /^(what|why|is |meaning|full form|explained)/, "outer"],
+    ["How-to & setup", /^(how|steps|activate|setup|set up|enable|convert|transfer|install)|activat|setup/, "core"],
+    ["Plans, prices & offers", /plan|price|cost|offer|recharge|pack|cheap|best/, "core"],
+    ["Comparisons", /\bvs\b|versus|or |compare|difference/, "outer"],
+    ["Problems & fixes", /not working|problem|issue|error|fix|slow|failed/, "outer"],
+  ];
+  const attrs = groups.map(([name, re, section]) => ({ name, section, why: "", pillar: { title: entity + ": " + name.toLowerCase(), primary_keyword: entity + " " + name.split(" ")[0].toLowerCase() }, articles: [] }));
+  const other = { name: "Other questions", section: "outer", why: "", pillar: { title: "", primary_keyword: "" }, articles: [] };
+  all.forEach((s) => { const g = groups.findIndex(([, re]) => re.test(s)); (g > -1 ? attrs[g] : other).articles.push({ title: s.replace(/\b\w/g, (c) => c.toUpperCase()), primary_keyword: s, search_intent: /price|plan|buy|best|offer|recharge/.test(s) ? "commercial" : "informational", query_template: "", content_type: /^how/.test(s) ? "how-to" : /\bvs\b/.test(s) ? "comparison" : "guide" }); });
+  return { local: true, source_context: "", central_entity: entity, central_search_intent: "", attributes: attrs.concat([other]).filter((a) => a.articles.length) };
+}
