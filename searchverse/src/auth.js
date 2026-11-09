@@ -57,6 +57,19 @@ export async function gate(request, env, url) {
   if (p.startsWith("/sv/") && p !== "/sv/track.js") return null;
   if (p === "/sv/track.js") return new Response(TRACK_JS, { headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" } });
 
+  // The public launch page and its video: open to everyone, views and shares counted anonymously.
+  if (p === "/launch" || p === "/launch/" || p === "/launch/index.html") {
+    const ref = request.headers.get("Referer") || "";
+    await call(env, "/track", meta(request, { type: "view", path: "/launch", title: "Launch page", referrer: ref && !ref.includes(url.host) ? new URL(ref).hostname : "" })).catch(() => {});
+    return null;
+  }
+  if (p.startsWith("/launch/")) return null;
+  if (p === "/api/launch-share" && request.method === "POST") {
+    const b = await request.json().catch(() => ({}));
+    await call(env, "/track", meta(request, { type: "click", path: "/launch", tool: "launch-share:" + String(b.via || "").slice(0, 20) }));
+    return json({ ok: true });
+  }
+
   if (p === "/api/auth/signup" && request.method === "POST") {
     const b = await request.json().catch(() => ({}));
     const r = await call(env, "/signup", { ...b, ip, meta: meta(request, { path: "/login" }) }); const d = await r.json();

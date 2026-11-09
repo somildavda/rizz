@@ -162,7 +162,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   function post(u,b){return fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}).then(function(r){return r.json()})}
   function bars(list,label,val){var max=Math.max.apply(null,list.map(function(x){return x[val]}).concat([1]));
     return list.length?list.map(function(x){return '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(x[label])+'</span><b>'+x[val].toLocaleString()+'</b></div><div class="bar"><i style="width:'+(x[val]/max*100)+'%"></i></div></div>'}).join(""):'<p class="empty">No data yet.</p>'}
-  var TOOL={performance:"📊 Performance Explorer",workspace:"🗂️ Search Workspace",speed:"🚀 PageSpeed Lab","content-gap":"🧩 Topic Planner",youtube:"▶️ Video Visibility"};
+  var TOOL={performance:"📊 Performance Explorer",workspace:"🗂️ Search Workspace",speed:"🚀 PageSpeed Lab","content-gap":"🧩 Topic Planner",youtube:"▶️ Video Visibility","launch-share:linkedin":"🚀 Launch shared on LinkedIn","launch-share:whatsapp":"🚀 Launch shared on WhatsApp","launch-share:x":"🚀 Launch shared on X","launch-share:copy":"🚀 Launch link copied"};
   function stats(){get("/api/admin/stats?days="+days).then(function(s){
     var t=s.totals||{};
     $("#kpis").innerHTML=[["👀",t.visitors,"visitors"],["📄",t.views,"page views"],["🖱️",t.clicks,"tool clicks"],["🔑",t.logins,"logins"],["⏱️",secs(t.avg_seconds),"avg. time on a page"],["👥",s.users,"people with access"],["⏳",s.pending,"waiting for approval",s.pending>0]]

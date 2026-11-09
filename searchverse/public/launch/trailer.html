@@ -1,166 +1,193 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SearchVerse — launch trailer</title>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>SearchVerse Trailer</title>
 <meta name="robots" content="noindex">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-/* A 30-second, 1920×1080 trailer driven entirely by render(t), so it can play live here
-   and be rendered frame by frame into the launch video. */
-:root{--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--ink:#101326;--muted:#5A6283}
+:root{--bg:#06070D;--panel:rgba(18,21,38,.82);--line:rgba(140,150,220,.2);--text:#EDEFFA;--muted:#9097B5;--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--good:#34D399}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;height:100%;overflow:hidden;background:#F6F7FB;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-#stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#F6F7FB}
-.blob{position:absolute;border-radius:50%;filter:blur(110px)}
-.abs{position:absolute;left:0;top:0}
-.center{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
-.big{font-size:132px;font-weight:900;letter-spacing:-.05em;line-height:1;color:var(--ink)}
-.mid{font-size:76px;font-weight:900;letter-spacing:-.04em;line-height:1.08;color:var(--ink)}
-.grad{background:linear-gradient(90deg,var(--a),var(--b) 60%,var(--c));-webkit-background-clip:text;background-clip:text;color:transparent}
-.chip{position:absolute;display:flex;align-items:center;gap:18px;padding:26px 34px;border-radius:28px;background:#fff;font-size:40px;font-weight:700;color:var(--ink);
-  box-shadow:0 30px 60px -28px rgba(16,19,38,.35),0 2px 6px rgba(16,19,38,.06);white-space:nowrap}
-.chip span{font-size:48px}
-.planet{position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#C9BDFF,#7C5CFF 38%,#2A1C7A 72%,#120B36);
-  box-shadow:0 0 140px rgba(124,92,255,.55),inset -36px -40px 80px rgba(0,0,0,.45);display:grid;place-items:center}
-.planet b{font-size:120px;filter:drop-shadow(0 0 20px rgba(255,255,255,.6))}
-.moon{position:absolute;display:flex;align-items:center;gap:12px;padding:16px 24px;border-radius:20px;background:#fff;font-size:28px;font-weight:700;color:var(--ink);box-shadow:0 22px 44px -22px rgba(16,19,38,.4);white-space:nowrap}
-.card{position:absolute;width:820px;padding:44px;border-radius:36px;background:#fff;box-shadow:0 50px 100px -40px rgba(16,19,38,.45),0 2px 8px rgba(16,19,38,.06)}
-.k{font-size:22px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0EA5C6}
-.ct{font-size:54px;font-weight:900;letter-spacing:-.03em;color:var(--ink);margin-top:10px}
-.ring{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;align-content:center;position:relative;background:conic-gradient(#10B981 var(--p),#E6E8F2 0)}
-.ring::before{content:"";position:absolute;inset:14px;border-radius:50%;background:#fff}
-.ring b,.ring i{position:relative;line-height:1}.ring b{font-size:54px;color:var(--ink)}.ring i{font-style:normal;font-size:16px;color:var(--muted);letter-spacing:.1em;margin-top:6px}
-.bar{height:16px;border-radius:16px;background:#E6E8F2;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;border-radius:16px;background:linear-gradient(90deg,var(--a),var(--b))}
-.row{display:flex;justify-content:space-between;font-size:26px;color:var(--muted);margin-top:22px}
-.node{display:inline-block;padding:14px 22px;border-radius:16px;background:#F3F4FA;border:2px solid #E6E8F2;font-size:28px;font-weight:700;color:var(--ink);margin:8px}
-.node.gap{border-color:#FCA5A5;background:#FEF2F2}.node.have{border-color:#6EE7B7;background:#ECFDF5}
-.btn{display:inline-flex;align-items:center;gap:14px;padding:30px 52px;border-radius:26px;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;font-size:44px;font-weight:800;box-shadow:0 30px 60px -20px rgba(124,92,255,.8)}
-.url{font-size:34px;font-weight:600;color:var(--muted);margin-top:34px}
-.by{font-size:28px;color:var(--muted);margin-top:18px}
-.progress{position:absolute;left:0;bottom:0;height:8px;background:linear-gradient(90deg,var(--a),var(--b),var(--c))}
-</style>
-</head>
+html,body{background:#000;overflow:hidden}
+/* 1080 × 1080 stage, scaled to fit the window when previewed */
+#stage{position:absolute;left:50%;top:50%;width:1080px;height:1080px;margin:-540px 0 0 -540px;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+.abs{position:absolute}
+#stars{inset:0}
+.glow{width:900px;height:900px;border-radius:50%;left:90px;top:90px;background:radial-gradient(circle,rgba(124,92,255,.35),rgba(34,211,238,.10) 45%,transparent 70%);filter:blur(10px)}
+.planet{width:260px;height:260px;border-radius:50%;left:410px;top:410px;background:radial-gradient(circle at 32% 30%,#B9A6FF,#7C5CFF 38%,#2A1B7A 72%,#120A3A);box-shadow:0 0 120px rgba(124,92,255,.75),inset -30px -40px 80px rgba(0,0,0,.55)}
+.ring{width:620px;height:620px;left:230px;top:230px;border-radius:50%;border:2px solid rgba(140,150,220,.22)}
+.mod{width:150px;height:56px;border-radius:16px;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 14px;font-weight:700;font-size:17px;white-space:nowrap;box-shadow:0 14px 40px -12px rgba(124,92,255,.6)}
+.mod i{font-style:normal;font-size:24px}
+.scene{inset:0;opacity:0}
+.big{font-weight:900;letter-spacing:-.035em;line-height:1.02;text-align:center;width:100%}
+.grad{background:linear-gradient(90deg,#A78BFA,var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
+.pill{display:inline-block;padding:10px 20px;border-radius:999px;border:1px solid rgba(124,92,255,.5);background:rgba(124,92,255,.14);font-weight:700;font-size:22px;color:#C9BDFF}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:26px;padding:34px;box-shadow:0 30px 80px -30px rgba(0,0,0,.8)}
+.kick{font-size:20px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--b)}
+.row{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:29px;font-weight:600}
+.row:last-child{border:0}
+.bar{flex:0 0 220px;height:12px;border-radius:9px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar b{display:block;height:100%;background:linear-gradient(90deg,var(--a),var(--b))}
+.sc{width:58px;text-align:right;font-weight:800;color:var(--good)}
+.tag{display:inline-block;padding:7px 16px;border-radius:999px;font-size:21px;font-weight:700;background:rgba(34,211,238,.12);color:var(--b);margin:0 8px 10px 0}
+.chk{font-size:27px;padding:9px 0;font-weight:600}
+.chk span{color:var(--good);margin-right:12px}
+.role{padding:18px 22px;border-radius:18px;border:1px solid var(--line);background:var(--panel);font-size:30px;font-weight:700;display:flex;align-items:center;gap:14px}
+.role small{font-size:21px;color:var(--muted);font-weight:500;margin-left:auto}
+</style></head>
 <body>
 <div id="stage">
-  <div class="blob" id="b1" style="width:900px;height:900px;background:#7C5CFF;opacity:.22"></div>
-  <div class="blob" id="b2" style="width:800px;height:800px;background:#22D3EE;opacity:.2"></div>
-  <div class="blob" id="b3" style="width:700px;height:700px;background:#F472B6;opacity:.14"></div>
+  <canvas id="stars" class="abs" width="1080" height="1080"></canvas>
+  <div class="glow abs" id="glow"></div>
 
-  <!-- scene 1: hook -->
-  <div class="center" id="s1"><div class="big" id="s1t">Search is <span class="grad">changing.</span></div></div>
-  <!-- scene 2: five questions -->
-  <div class="center" id="s2h" style="align-items:start;padding-top:120px"><div class="mid">Every day, your team asks…</div></div>
-  <div id="chips"></div>
-  <div class="center" id="s3h" style="align-items:end;padding-bottom:110px"><div class="mid">…and opens <span class="grad">5 different tools.</span></div></div>
-  <!-- scene 4: reveal -->
-  <div class="planet" id="planet"><b>🔭</b></div>
-  <div id="moons"></div>
-  <div class="center" id="s4t" style="align-items:end;padding-bottom:120px"><div><div class="big" style="font-size:150px">Meet <span class="grad">SearchVerse</span></div><div class="mid" style="font-size:44px;color:var(--muted);font-weight:600;margin-top:24px;letter-spacing:-.01em">Every search tool your team needs. One place.</div></div></div>
-  <!-- scene 5: product -->
-  <div class="center" id="s5h" style="align-items:start;padding-top:90px"><div class="mid">Know exactly <span class="grad">what to write next.</span></div></div>
-  <div class="card" id="c1">
-    <div class="k">⭐ Best pick</div>
-    <div style="display:flex;gap:36px;align-items:center;margin-top:22px">
-      <div class="ring" id="ring" style="--p:0%"><b id="ringN">0</b><i>SCORE</i></div>
-      <div><div class="ct" style="margin:0;font-size:46px">How to activate eSIM</div><div style="font-size:30px;font-weight:700;color:#0EA5C6;margin-top:10px">🔑 esim activation</div></div>
+  <!-- 1 · the hook -->
+  <div class="scene abs" id="s1">
+    <div class="big abs" id="h1a" style="top:340px;font-size:76px">Hours of search<br>analysis…</div>
+    <div class="big abs" id="h1b" style="top:600px;font-size:110px"><span class="grad">One click.</span></div>
+  </div>
+
+  <!-- 2 · the planet and its tools -->
+  <div class="scene abs" id="s2">
+    <div class="ring abs" id="ring"></div>
+    <div class="planet abs" id="planet"></div>
+    <div id="mods"></div>
+    <div class="abs" style="top:80px;width:100%;text-align:center"><span class="pill">✦ AI-driven search solutions</span></div>
+    <div class="big abs" id="h2" style="top:880px;font-size:84px">Meet <span class="grad">SearchVerse</span></div>
+  </div>
+
+  <!-- 3 · crawl competitors -->
+  <div class="scene abs" id="s3">
+    <div class="abs" style="top:110px;left:90px;right:90px">
+      <div class="kick">🧩 Topic Planner</div>
+      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">Reads your site<br>and your <span class="grad">competitors'</span></div>
     </div>
-    <div class="row"><span>Fits your brand</span><b style="color:var(--ink)">92</b></div><div class="bar"><i id="bar1" style="width:0"></i></div>
-    <div class="row"><span>Chance to rank</span><b style="color:var(--ink)">78</b></div><div class="bar"><i id="bar2" style="width:0"></i></div>
+    <div class="card abs" style="left:90px;right:90px;top:470px" id="crawl"></div>
   </div>
-  <div class="card" id="c2" style="width:760px">
-    <div class="k">🗺️ Topical map</div><div class="ct" style="font-size:44px">eSIM — core &amp; supporting topics</div>
-    <div style="margin-top:20px"><span class="node have">✅ eSIM plans</span><span class="node gap">💡 activate eSIM</span><span class="node gap">💡 eSIM vs physical SIM</span><span class="node have">✅ eSIM on iPhone</span><span class="node gap">💡 eSIM not working</span></div>
+
+  <!-- 4 · scored gaps -->
+  <div class="scene abs" id="s4">
+    <div class="abs" style="top:110px;left:90px;right:90px">
+      <div class="kick">Topic gaps</div>
+      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">What they rank for.<br><span class="grad">What you're missing.</span></div>
+    </div>
+    <div class="card abs" style="left:90px;right:90px;top:450px" id="gaps"></div>
   </div>
-  <div class="card" id="c3" style="width:700px">
-    <div class="k">📝 Full brief</div><div class="ct" style="font-size:42px">Keywords, outline &amp; E&#8209;E&#8209;A&#8209;T</div>
-    <div style="font-size:28px;color:var(--muted);margin-top:18px;line-height:1.6">H2 · What is an eSIM?<br>H2 · How to activate it, step by step<br>H2 · eSIM vs physical SIM<br>FAQ · Can I use eSIM abroad?</div>
+
+  <!-- 5 · the brief -->
+  <div class="scene abs" id="s5">
+    <div class="abs" style="top:110px;left:90px;right:90px">
+      <div class="kick">AI content brief</div>
+      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">From gap to brief<br><span class="grad">in one click</span></div>
+    </div>
+    <div class="card abs" style="left:90px;right:90px;top:450px" id="brief">
+      <div style="font-size:30px;font-weight:800;margin-bottom:18px">5G vs 4G: what really changes</div>
+      <div><span class="tag">5g vs 4g speed</span><span class="tag">5g coverage</span><span class="tag">5g phones</span><span class="tag">is 5g worth it</span></div>
+      <div style="margin-top:14px">
+        <div class="chk"><span>✓</span>H2 and H3 outline</div>
+        <div class="chk"><span>✓</span>Keywords mapped to title, H1 and FAQs</div>
+        <div class="chk"><span>✓</span>E-E-A-T: experience, expertise, trust</div>
+        <div class="chk"><span>✓</span>Topical map built on Koray's framework</div>
+      </div>
+    </div>
   </div>
-  <!-- scene 6: tagline -->
-  <div class="center" id="s6"><div class="big" style="font-size:140px">Every search answer.<br><span class="grad">One click away.</span></div></div>
-  <!-- scene 7: CTA -->
-  <div class="center" id="s7"><div>
-    <div class="mid" style="font-size:60px">🚀 SearchVerse is <span class="grad">now live</span></div>
-    <div style="margin-top:56px"><span class="btn">Request access →</span></div>
-    <div class="url">searchverse-hub.shred-app.workers.dev/launch</div>
-    <div class="by">Built by <b style="color:var(--ink)">Somil Davda</b></div>
-  </div></div>
-  <div class="progress" id="prog"></div>
+
+  <!-- 6 · teams -->
+  <div class="scene abs" id="s6">
+    <div class="abs" style="top:110px;left:90px;right:90px">
+      <div class="kick">Built for teams</div>
+      <div class="big" style="text-align:left;font-size:66px;margin-top:16px">The right access<br>for <span class="grad">every role</span></div>
+    </div>
+    <div class="abs" style="left:90px;right:90px;top:450px;display:grid;gap:16px" id="roles">
+      <div class="role">👑 Owner<small>runs the show</small></div>
+      <div class="role">🛡️ Team admin<small>approves people</small></div>
+      <div class="role">📋 Project manager<small>runs scans and briefs</small></div>
+      <div class="role">✍️ Member<small>writes and updates</small></div>
+      <div class="role">👀 Viewer<small>follows along</small></div>
+    </div>
+  </div>
+
+  <!-- 7 · end card -->
+  <div class="scene abs" id="s7">
+    <div class="planet abs" style="width:150px;height:150px;left:465px;top:200px"></div>
+    <div class="big abs" style="top:400px;font-size:104px"><span class="grad">SearchVerse</span></div>
+    <div class="abs" style="top:540px;width:100%;text-align:center;font-size:34px;color:var(--muted);font-weight:600">Every search answer, one click away.</div>
+    <div class="abs" style="top:650px;width:100%;text-align:center"><span class="pill" style="font-size:28px;padding:16px 34px;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;border:0">Request access →</span></div>
+    <div class="abs" style="top:950px;width:100%;text-align:center;font-size:22px;color:var(--muted)">Built by <b style="color:var(--text)">Somil Davda</b> · SEO at Infidigit</div>
+  </div>
 </div>
+
 <script>
-(function () {
-  var D = 30, W = 1920, H = 1080;
-  var $ = function (id) { return document.getElementById(id); };
-  var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
-  var ease = function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
-  var inOut = function (x) { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
-  // visibility of a scene between a and b, with fade in/out of f seconds
-  var vis = function (t, a, b, f) { f = f || .5; return clamp((t - a) / f) * clamp((b - t) / f); };
-  function show(el, o, tx, ty, s, r) { el.style.opacity = o; el.style.transform = "translate(" + (tx || 0) + "px," + (ty || 0) + "px) scale(" + (s == null ? 1 : s) + ") rotate(" + (r || 0) + "deg)"; el.style.visibility = o > .002 ? "visible" : "hidden"; }
+// Every frame is drawn from the time t (seconds), so the video renders the same every time.
+var D = 30, $ = function (s) { return document.getElementById(s); };
+var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
+var ease = function (x) { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
+var span = function (t, a, b) { return ease((t - a) / (b - a)); };
 
-  var Q = [["📊", "How am I doing on Google?"], ["🚀", "Is my website fast enough?"], ["🧩", "What should I write next?"], ["▶️", "Do my videos show up?"], ["🗂️", "Where are this week's reports?"]];
-  var spots = [[150, 300], [1080, 250], [260, 560], [1100, 520], [620, 760]];
-  var chips = Q.map(function (q) { var d = document.createElement("div"); d.className = "chip"; d.innerHTML = "<span>" + q[0] + "</span>" + q[1]; $("chips").appendChild(d); return d; });
-  var moons = ["📊 Performance", "🚀 PageSpeed", "🧩 Topic Planner", "▶️ Video", "🗂️ Workspace"].map(function (n) { var d = document.createElement("div"); d.className = "moon"; d.textContent = n; $("moons").appendChild(d); return d; });
+// fit the 1080 stage in any preview window
+function fit() { var k = Math.min(innerWidth, innerHeight) / 1080; $("stage").style.transform = "scale(" + k + ")"; }
+if (!/render=1/.test(location.search)) { addEventListener("resize", fit); fit(); }
 
-  function render(t) {
-    // drifting background colour
-    show($("b1"), .22, -200 + Math.sin(t / 4) * 120, -250 + Math.cos(t / 5) * 80);
-    show($("b2"), .2, 1300 + Math.cos(t / 4.5) * 120, 300 + Math.sin(t / 3.5) * 100);
-    show($("b3"), .14, 500 + Math.sin(t / 6) * 200, 700 + Math.cos(t / 4) * 60);
+// stars (fixed seed)
+var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+var STARS = []; for (var i = 0; i < 220; i++) STARS.push([rnd() * 1080, rnd() * 1080, rnd() * 1.6 + .3, rnd() * 6.28]);
+function stars(t) {
+  var c = $("stars").getContext("2d"); c.clearRect(0, 0, 1080, 1080);
+  STARS.forEach(function (s) { c.globalAlpha = .35 + .35 * Math.sin(t * 2 + s[3]); c.fillStyle = "#fff"; c.beginPath(); c.arc(s[0], (s[1] + t * 6 * s[2]) % 1080, s[2], 0, 7); c.fill(); });
+}
 
-    // 0–3 s: hook
-    var v1 = vis(t, 0, 3.2, .6); show($("s1"), v1, 0, (1 - ease(t / 1.2)) * 60, .96 + .04 * ease(t / 1.2));
+// orbiting modules
+var MODS = [["📊", "Performance"], ["🗂️", "Workspace"], ["🚀", "PageSpeed"], ["🧩", "Topic Planner"], ["▶️", "Video"]];
+$("mods").innerHTML = MODS.map(function (m, i) { return '<div class="mod abs" id="m' + i + '"><i>' + m[0] + "</i>" + m[1] + "</div>"; }).join("");
 
-    // 3–10.5 s: the five questions, then they collapse to the centre
-    show($("s2h"), vis(t, 3, 10.3, .5), 0, 0);
-    show($("s3h"), vis(t, 6.6, 10.3, .5), 0, (1 - ease((t - 6.6) / .8)) * 40);
-    chips.forEach(function (c, i) {
-      var start = 3.4 + i * .45, inn = ease((t - start) / .7);
-      var col = inOut((t - 9.2) / 1.2); // collapse into the planet
-      var x = spots[i][0], y = spots[i][1], cx = W / 2 - 300, cy = H / 2 - 50;
-      var o = clamp((t - start) / .4) * (1 - clamp((t - 10) / .4));
-      var bob = Math.sin(t * 1.6 + i) * 8;
-      show(c, o, x + (cx - x) * col, y + (1 - inn) * 80 + bob + (cy - y) * col, (.85 + .15 * inn) * (1 - .7 * col), (1 - inn) * (i % 2 ? 6 : -6));
+// crawl card
+var SITES = [["airtel.in", 1284], ["jio.com", 1906], ["myvi.in", 842]];
+$("crawl").innerHTML = SITES.map(function (s, i) { return '<div class="row"><span style="flex:1">🌐 ' + s[0] + '</span><span class="bar"><b id="cb' + i + '"></b></span><span id="cn' + i + '" style="width:230px;text-align:right;color:var(--muted);white-space:nowrap"></span></div>'; }).join("");
+
+// gap list
+var GAPS = [["5G vs 4G explained", 94], ["Best prepaid plans", 89], ["eSIM setup guide", 83], ["International roaming", 77], ["Wi-Fi calling", 71]];
+$("gaps").innerHTML = GAPS.map(function (g, i) { return '<div class="row" id="g' + i + '"><span style="flex:1">' + g[0] + '</span><span class="bar"><b id="gb' + i + '"></b></span><span class="sc" id="gs' + i + '"></span></div>'; }).join("");
+
+// scene windows [start, end]
+var SC = { s1: [0, 4.2], s2: [4, 10], s3: [9.8, 14.6], s4: [14.4, 19.4], s5: [19.2, 23.6], s6: [23.4, 26.8], s7: [26.6, 30.5] };
+function vis(id, t) { var w = SC[id], o = Math.min(span(t, w[0], w[0] + .5), 1 - span(t, w[1] - .4, w[1])); $(id).style.opacity = o; return o; }
+function rise(el, t, a) { var k = span(t, a, a + .7); el.style.opacity = k; el.style.transform = "translateY(" + (1 - k) * 40 + "px)"; }
+
+window.renderAt = function (t) {
+  stars(t);
+  $("glow").style.transform = "scale(" + (1 + .06 * Math.sin(t * .8)) + ")";
+
+  if (vis("s1", t) > 0) { rise($("h1a"), t, .3); rise($("h1b"), t, 1.8); $("h1b").style.transform += " scale(" + (1 + .04 * span(t, 1.8, 4)) + ")"; }
+
+  if (vis("s2", t) > 0) {
+    var g = span(t, 4, 5.4);
+    $("planet").style.transform = "scale(" + (.3 + .7 * g) + ")"; $("ring").style.transform = "scale(" + g + ")"; $("ring").style.opacity = g;
+    MODS.forEach(function (m, i) {
+      var a = (t - 4) * .55 + i / MODS.length * 6.283, k = span(t, 4.6 + i * .25, 5.6 + i * .25);
+      var x = 540 + Math.cos(a) * 310 * k - 75, y = 540 + Math.sin(a) * 310 * k - 28;
+      var e = $("m" + i); e.style.left = x + "px"; e.style.top = y + "px"; e.style.opacity = k; e.style.transform = "scale(" + (.85 + .2 * (Math.sin(a) + 1) / 2) + ")"; e.style.zIndex = Math.sin(a) > 0 ? 3 : 1;
     });
-
-    // 10–15.5 s: planet + orbit + "Meet SearchVerse"
-    var pv = vis(t, 10, 15.6, .6), pg = ease((t - 10) / 1);
-    show($("planet"), pv, W / 2 - 150, H / 2 - 260 + Math.sin(t * 1.4) * 10, .4 + .6 * pg);
-    moons.forEach(function (m, i) {
-      var a = (i / moons.length) * Math.PI * 2 + t * .7, rx = 470 * pg, ry = 150 * pg;
-      var x = W / 2 + Math.cos(a) * rx - 130, y = H / 2 - 130 + Math.sin(a) * ry;
-      show(m, pv * clamp((t - 10.3 - i * .1) / .4), x, y, .8 + .2 * (Math.sin(a) + 1) / 2);
-      m.style.zIndex = Math.sin(a) > 0 ? 3 : 1;
-    });
-    $("planet").style.zIndex = 2;
-    show($("s4t"), vis(t, 11.2, 15.6, .6), 0, (1 - ease((t - 11.2) / .8)) * 50);
-
-    // 15.5–24.5 s: product cards
-    var hv = vis(t, 15.6, 24.6, .5); show($("s5h"), hv, 0, 0);
-    var c1 = ease((t - 16) / .8), c2 = ease((t - 18.8) / .8), c3 = ease((t - 21.2) / .8), out = 1 - clamp((t - 24.2) / .4);
-    show($("c1"), clamp((t - 16) / .4) * out, 140 + (1 - c1) * -200, 300 + Math.sin(t) * 6, 1, (1 - c1) * -4);
-    show($("c2"), clamp((t - 18.8) / .4) * out, 1000 + (1 - c2) * 200, 240 + Math.cos(t) * 6, 1, (1 - c2) * 4);
-    show($("c3"), clamp((t - 21.2) / .4) * out, 1060, 620 + (1 - c3) * 160 + Math.sin(t * 1.2) * 6, 1);
-    var sc = Math.round(88 * ease((t - 16.4) / 1.4)); $("ringN").textContent = sc; $("ring").style.setProperty("--p", sc + "%");
-    $("bar1").style.width = 92 * ease((t - 16.8) / 1.2) + "%"; $("bar2").style.width = 78 * ease((t - 17.1) / 1.2) + "%";
-
-    // 24.5–27.5 s: tagline
-    show($("s6"), vis(t, 24.6, 27.6, .5), 0, (1 - ease((t - 24.6) / .9)) * 50, .97 + .03 * ease((t - 24.6) / .9));
-    // 27.5–30 s: call to action
-    show($("s7"), clamp((t - 27.6) / .5), 0, (1 - ease((t - 27.6) / .8)) * 40);
-    $("prog").style.width = (t / D * 100) + "%";
+    rise($("h2"), t, 6.2);
   }
-  window.renderAt = render; window.DURATION = D;
 
-  function fit() { var s = Math.min(innerWidth / W, innerHeight / H); var st = $("stage"); st.style.transform = "scale(" + s + ")"; st.style.left = (innerWidth - W * s) / 2 + "px"; st.style.top = (innerHeight - H * s) / 2 + "px"; }
-  addEventListener("resize", fit); fit();
-  if (!/render=1/.test(location.search)) {
-    var t0 = performance.now();
-    (function loop(now) { render(((now - t0) / 1000) % D); requestAnimationFrame(loop); })(t0);
-  } else render(0);
-})();
+  if (vis("s3", t) > 0) SITES.forEach(function (s, i) {
+    var k = span(t, 10.6 + i * .35, 13.4 + i * .2);
+    $("cb" + i).style.width = k * 100 + "%";
+    $("cn" + i).textContent = k >= 1 ? "✓ " + s[1].toLocaleString() + " pages" : Math.round(k * s[1]).toLocaleString() + " pages";
+  });
+
+  if (vis("s4", t) > 0) GAPS.forEach(function (g, i) {
+    var k = span(t, 15.2 + i * .3, 16.6 + i * .3);
+    rise($("g" + i), t, 15 + i * .3);
+    $("gb" + i).style.width = k * g[1] + "%"; $("gs" + i).textContent = Math.round(k * g[1]);
+  });
+
+  if (vis("s5", t) > 0) { rise($("brief"), t, 19.6); [].forEach.call($("brief").querySelectorAll(".tag,.chk"), function (e, i) { e.style.opacity = span(t, 20.2 + i * .22, 20.6 + i * .22); }); }
+
+  if (vis("s6", t) > 0) [].forEach.call($("roles").children, function (e, i) { rise(e, t, 23.8 + i * .22); });
+
+  if (vis("s7", t) > 0) { var e = $("s7"); e.style.transform = "scale(" + (1.06 - .06 * span(t, 26.6, 28)) + ")"; }
+};
+
+// live preview loops the video
+if (!/render=1/.test(location.search)) { var t0 = performance.now(); (function loop() { renderAt(((performance.now() - t0) / 1000) % D); requestAnimationFrame(loop); })(); }
+else renderAt(0);
 </script>
-</body>
-</html>
+</body></html>
