@@ -21,7 +21,7 @@ a{color:inherit;text-decoration:none}
 
 /* ---------- living background ---------- */
 #stars{position:fixed;inset:0;z-index:0;pointer-events:none}
-.blob{position:fixed;border-radius:50%;filter:blur(80px);opacity:.45;z-index:0;pointer-events:none;animation:drift 22s ease-in-out infinite alternate}
+.blob{position:fixed;border-radius:50%;filter:blur(80px) hue-rotate(calc(var(--hue,0) * 1deg));opacity:.45;z-index:0;pointer-events:none;animation:drift 22s ease-in-out infinite alternate}
 .blob.b1{width:520px;height:520px;background:#5B3DF5;top:-160px;left:-120px}
 .blob.b2{width:460px;height:460px;background:#0EA5C6;top:10%;right:-140px;animation-duration:28s}
 .blob.b3{width:380px;height:380px;background:#C2417F;bottom:-160px;left:30%;opacity:.25;animation-duration:32s}
@@ -128,6 +128,40 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 /* reveal on scroll */
 .rv{opacity:0;transform:translateY(30px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
 .rv.in{opacity:1;transform:none}
+/* cards fly in in 3D, one after another */
+.ask.rv{transform:perspective(900px) rotateX(28deg) translateY(80px) scale(.92);transition:opacity .9s ease,transform 1s cubic-bezier(.2,.8,.2,1)}
+.ask.rv.in{transform:none}
+/* headings: words rise in */
+.words .w{display:inline-block;opacity:0;transform:translateY(.5em) rotateX(-40deg);transition:opacity .6s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+.words.in .w{opacity:1;transform:none}
+
+/* scroll progress bar */
+#prog{position:fixed;top:0;left:0;height:3px;width:100%;z-index:50;transform-origin:0 50%;transform:scaleX(0);background:linear-gradient(90deg,var(--a),var(--b),var(--c));box-shadow:0 0 12px rgba(34,211,238,.6)}
+
+/* "how it works" scroll story: the panel sticks while you scroll through the steps */
+.story{position:relative;height:300vh}
+.story .stick{position:sticky;top:0;height:100vh;display:grid;align-items:center;padding-top:64px}
+.storyin{display:grid;grid-template-columns:1fr 1fr;gap:50px;align-items:center}
+.sbig{position:relative;height:360px;perspective:900px}
+.sbig .ico{position:absolute;inset:0;margin:auto;width:240px;height:240px;border-radius:60px;display:grid;place-items:center;font-size:120px;
+  background:linear-gradient(135deg,rgba(124,92,255,.4),rgba(34,211,238,.25));border:1px solid rgba(124,92,255,.5);box-shadow:0 40px 90px -30px rgba(124,92,255,.9);
+  opacity:0;transform:rotateY(-70deg) scale(.7);transition:opacity .5s,transform .7s cubic-bezier(.2,.8,.2,1)}
+.sbig .ico.on{opacity:1;transform:rotateY(0) scale(1)}
+.sbig .ico.past{opacity:0;transform:rotateY(70deg) scale(.7)}
+.slist{display:grid;gap:18px;position:relative;padding-left:34px}
+.slist::before{content:"";position:absolute;left:10px;top:8px;bottom:8px;width:4px;border-radius:4px;background:var(--line)}
+.slist .fill{position:absolute;left:10px;top:8px;width:4px;border-radius:4px;background:linear-gradient(var(--a),var(--b),var(--c));height:0;transition:height .2s linear}
+.sitem{position:relative;padding:20px 22px;border-radius:20px;border:1px solid var(--line);background:var(--panel);opacity:.4;transform:scale(.96);transition:opacity .4s,transform .4s,border-color .4s,box-shadow .4s}
+.sitem::before{content:"";position:absolute;left:-30px;top:28px;width:16px;height:16px;border-radius:50%;background:var(--panel2);border:3px solid var(--line);transition:.4s}
+.sitem.on{opacity:1;transform:none;border-color:rgba(124,92,255,.6);box-shadow:0 24px 50px -24px rgba(124,92,255,.7)}
+.sitem.on::before,.sitem.done::before{background:var(--b);border-color:var(--b);box-shadow:0 0 14px var(--b)}
+.sitem.done{opacity:.75}
+.sitem h3{font-size:22px}.sitem p{color:var(--muted);margin-top:6px;line-height:1.55}
+.sitem .k{font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--b)}
+@media(max-width:900px){.storyin{grid-template-columns:1fr}.sbig{height:200px}.sbig .ico{width:150px;height:150px;font-size:76px;border-radius:40px}.story{height:260vh}}
+
+/* final panel zooms in with scroll */
+.band.zoom{transform:scale(var(--z,.86));opacity:var(--o,.4);transition:none}
 
 /* ---------- tool page ---------- */
 .thero{display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:center;padding:50px 0 30px}
@@ -171,6 +205,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 </style>
 </head>
 <body>
+<div id="prog"></div>
 <canvas id="stars"></canvas>
 <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="floor"></div>
 
@@ -200,21 +235,24 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
   </div>
 
   <section id="tools"><div class="wrap">
-    <div class="sec-h rv"><span class="kicker">Start here</span><h2>What do you want to do <span class="grad">today?</span></h2><p>Every tool answers one simple question. Pick yours.</p></div>
+    <div class="sec-h rv"><span class="kicker">Start here</span><h2 class="words">What do you want to do <span class="grad">today?</span></h2><p>Every tool answers one simple question. Pick yours.</p></div>
     <div class="asks" id="grid"></div>
   </div></section>
 
-  <section id="how"><div class="wrap">
-    <div class="sec-h rv"><span class="kicker">How it works</span><h2>Three steps. That's it.</h2></div>
-    <div class="flow">
-      <div class="stepc rv"><div class="n">🎯<b>1</b></div><h3>Pick a question</h3><p>Choose the card that matches what you want to know.</p></div>
-      <div class="stepc rv"><div class="n">🚀<b>2</b></div><h3>Open the tool</h3><p>It opens right here — nothing to install or learn.</p></div>
-      <div class="stepc rv"><div class="n">🏆<b>3</b></div><h3>Act on the answer</h3><p>Clear results you can share with your team or client.</p></div>
+  <section id="how" class="story"><div class="stick"><div class="wrap">
+    <div class="sec-h" style="margin-bottom:30px"><span class="kicker">How it works</span><h2 class="words">Three steps. That's it.</h2><p>Keep scrolling 👇</p></div>
+    <div class="storyin">
+      <div class="sbig" aria-hidden="true"><div class="ico on">🎯</div><div class="ico">🚀</div><div class="ico">🏆</div></div>
+      <div class="slist"><div class="fill"></div>
+        <div class="sitem on"><div class="k">STEP 1</div><h3>Pick a question</h3><p>Choose the card that matches what you want to know — like “What should I write next?”</p></div>
+        <div class="sitem"><div class="k">STEP 2</div><h3>Open the tool</h3><p>It opens right here, full screen. Nothing to install, nothing to learn.</p></div>
+        <div class="sitem"><div class="k">STEP 3</div><h3>Act on the answer</h3><p>Clear results in plain words you can share with your team or client.</p></div>
+      </div>
     </div>
-  </div></section>
+  </div></div></section>
 
   <section id="about"><div class="wrap">
-    <div class="sec-h rv"><span class="kicker">Why SearchVerse</span><h2>Built so <span class="grad">anyone</span> can use it</h2><p>Plain words, big buttons and answers you can act on — whether you're an SEO expert or opening a search tool for the first time.</p></div>
+    <div class="sec-h rv"><span class="kicker">Why SearchVerse</span><h2 class="words">Built so <span class="grad">anyone</span> can use it</h2><p>Plain words, big buttons and answers you can act on — whether you're an SEO expert or opening a search tool for the first time.</p></div>
     <div class="stats">
       <div class="stat rv"><b class="grad" data-count="0">0</b><span>specialist tools</span></div>
       <div class="stat rv"><b class="grad">⚡</b><span>answers in seconds</span></div>
@@ -223,7 +261,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
     </div>
   </div></section>
 
-  <section><div class="wrap"><div class="band rv"><h2>Ready to find your answer?</h2><p>Pick a tool and you'll have results in minutes.</p><a class="btn primary" href="#tools">Explore the tools <span class="arr">→</span></a></div></div></section>
+  <section><div class="wrap"><div class="band zoom" id="finale"><h2>Ready to find your answer?</h2><p>Pick a tool and you'll have results in minutes.</p><a class="btn primary" href="#tools">Explore the tools <span class="arr">→</span></a></div></div></section>
 </main>
 
 <main class="toolpage" id="view-tool" hidden>
@@ -402,6 +440,59 @@ window.SV_NEW = { "content-gap": true };
   }, { threshold: .12 }) : null;
   function observe(root) { (root || document).querySelectorAll(".rv:not(.in)").forEach(function (el, i) { el.style.transitionDelay = (i % 6) * 70 + "ms"; if (io) io.observe(el); else el.classList.add("in"); }); }
   observe();
+
+  // ---- scroll effects ----
+  // Split "words" headings into words that rise in one by one when they come into view.
+  document.querySelectorAll(".words").forEach(function (hd) {
+    var i = 0;
+    (function split(node) {
+      Array.from(node.childNodes).forEach(function (n) {
+        if (n.nodeType === 3) {
+          var frag = document.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach(function (part) {
+            if (!part) return;
+            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+            var w = h("span", "w", part); w.style.transitionDelay = (i++ * 70) + "ms"; frag.appendChild(w);
+          });
+          node.replaceChild(frag, n);
+        } else if (n.nodeType === 1) {
+          if (n.classList.contains("grad")) { n.classList.add("w"); n.style.transitionDelay = (i++ * 70) + "ms"; } else split(n);
+        }
+      });
+    })(hd);
+    if (io) io.observe(hd); else hd.classList.add("in");
+  });
+
+  var prog = $("#prog"), heroTxt = $(".hero > div"), story = $("#how"), icons = document.querySelectorAll(".sbig .ico"),
+      items = document.querySelectorAll(".sitem"), fill = $(".slist .fill"), finale = $("#finale"), blobs = document.querySelectorAll(".blob");
+  var ticking = false;
+  function onScroll() {
+    ticking = false;
+    var y = scrollY, vh = innerHeight, max = document.documentElement.scrollHeight - vh;
+    prog.style.transform = "scaleX(" + (max > 0 ? y / max : 0) + ")";
+    if (reduce || $("#view-home").hidden) return;
+    // hero: the orbit rises, spins and grows; the headline drifts away slower
+    var hp = Math.min(1, y / vh);
+    var base = innerWidth < 640 ? .6 : innerWidth < 900 ? .72 : 1;
+    scene.style.transition = heroTxt.style.transition = "none";
+    scene.style.transform = "translateY(" + (-hp * 120) + "px) scale(" + (base * (1 + hp * .35)) + ") rotate(" + (hp * 25) + "deg)";
+    scene.style.opacity = 1 - hp * 1.1;
+    heroTxt.style.transform = "translateY(" + (hp * 80) + "px)"; heroTxt.style.opacity = 1 - hp * 1.3;
+    // background colours drift with the page
+    blobs.forEach(function (b, i) { b.style.translate = (Math.sin(y / 700 + i) * 60) + "px " + (y * (.08 + i * .04)) + "px"; });
+    document.body.style.setProperty("--hue", (Math.sin(y / 1400) * 45).toFixed(1)); // stays within purple, blue and pink
+    // story: which step is active depends on how far we are through the sticky section
+    var r = story.getBoundingClientRect(), total = story.offsetHeight - vh, sp = Math.max(0, Math.min(.999, -r.top / total));
+    var step = Math.floor(sp * 3);
+    icons.forEach(function (ic, i) { ic.classList.toggle("on", i === step); ic.classList.toggle("past", i < step); });
+    items.forEach(function (it, i) { it.classList.toggle("on", i === step); it.classList.toggle("done", i < step); });
+    fill.style.height = "calc(" + Math.round(sp * 100) + "% - 16px)";
+    // finale zooms in as it reaches the middle of the screen
+    var fr = finale.getBoundingClientRect(), fp = Math.max(0, Math.min(1, (vh - fr.top) / (vh * .7)));
+    finale.style.setProperty("--z", (.86 + fp * .14).toFixed(3)); finale.style.setProperty("--o", (.4 + fp * .6).toFixed(3));
+  }
+  addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } }, { passive: true });
+  addEventListener("resize", onScroll); onScroll();
 
   // ---- starfield ----
   var cv = $("#stars"), cx = cv.getContext("2d"), stars = [];
