@@ -1,0 +1,205 @@
+{
+ "duration": 96.487,
+ "scenes": [
+  {
+   "id": "s0",
+   "start": 0.0,
+   "end": 6.366,
+   "lines": [
+    {
+     "text": "Your team spends hours on search analysis.",
+     "start": 0.45,
+     "end": 3.266
+    },
+    {
+     "text": "What if it took just one click?",
+     "start": 3.546,
+     "end": 5.466
+    }
+   ]
+  },
+  {
+   "id": "s1",
+   "start": 6.366,
+   "end": 13.479,
+   "lines": [
+    {
+     "text": "Meet SearchVerse.",
+     "start": 6.816,
+     "end": 8.096
+    },
+    {
+     "text": "Smart, AI-powered search tools, built for SEO teams.",
+     "start": 8.376,
+     "end": 12.579
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "start": 13.479,
+   "end": 24.37,
+   "lines": [
+    {
+     "text": "Where is your traffic really coming from?",
+     "start": 13.929,
+     "end": 16.318
+    },
+    {
+     "text": "Performance Explorer shows your clicks, impressions and rankings,",
+     "start": 16.598,
+     "end": 20.459
+    },
+    {
+     "text": "split by every product line, in one view.",
+     "start": 20.739,
+     "end": 23.47
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "start": 24.37,
+   "end": 35.219,
+   "lines": [
+    {
+     "text": "Who is on track, and who needs help?",
+     "start": 24.82,
+     "end": 27.017
+    },
+    {
+     "text": "Search Workspace lets you set deadlines for every task,",
+     "start": 27.297,
+     "end": 30.881
+    },
+    {
+     "text": "and see each person's performance score at a glance.",
+     "start": 31.161,
+     "end": 34.319
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "start": 35.219,
+   "end": 45.299,
+   "lines": [
+    {
+     "text": "Is your website too slow?",
+     "start": 35.669,
+     "end": 37.461
+    },
+    {
+     "text": "PageSpeed Lab tests hundreds of pages at once,",
+     "start": 37.741,
+     "end": 41.047
+    },
+    {
+     "text": "and shows exactly which pages need fixing.",
+     "start": 41.327,
+     "end": 44.399
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "start": 45.299,
+   "end": 55.487,
+   "lines": [
+    {
+     "text": "What are your competitors writing that you're not?",
+     "start": 45.749,
+     "end": 48.672
+    },
+    {
+     "text": "Topic Planner reads their websites and yours,",
+     "start": 48.952,
+     "end": 51.875
+    },
+    {
+     "text": "and finds every topic you're missing.",
+     "start": 52.155,
+     "end": 54.587
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "start": 55.487,
+   "end": 65.487,
+   "lines": [
+    {
+     "text": "Then it scores each topic for your brand,",
+     "start": 55.937,
+     "end": 58.582
+    },
+    {
+     "text": "and writes a full content brief, in one click.",
+     "start": 58.862,
+     "end": 61.699
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "start": 65.487,
+   "end": 75.487,
+   "lines": [
+    {
+     "text": "Are your videos showing up in search?",
+     "start": 65.937,
+     "end": 67.942
+    },
+    {
+     "text": "Video Visibility tracks where you rank on YouTube,",
+     "start": 68.222,
+     "end": 71.529
+    },
+    {
+     "text": "compared with other channels.",
+     "start": 71.809,
+     "end": 73.558
+    }
+   ]
+  },
+  {
+   "id": "s8",
+   "start": 75.487,
+   "end": 84.487,
+   "lines": [
+    {
+     "text": "Built for teams.",
+     "start": 75.937,
+     "end": 77.259
+    },
+    {
+     "text": "Shared projects, five roles, and access only with approval.",
+     "start": 77.539,
+     "end": 81.571
+    }
+   ]
+  },
+  {
+   "id": "s9",
+   "start": 84.487,
+   "end": 96.487,
+   "lines": [
+    {
+     "text": "SearchVerse is now live for testing.",
+     "start": 84.937,
+     "end": 87.262
+    },
+    {
+     "text": "We're testing a few more modules before we roll them out.",
+     "start": 87.542,
+     "end": 91.723
+    },
+    {
+     "text": "Request beta access, and tell us what you think!",
+     "start": 92.003,
+     "end": 95.033
+    }
+   ]
+  }
+ ]
+}
