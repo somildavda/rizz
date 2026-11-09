@@ -20,6 +20,13 @@ const STEP_NAMES = ["Your brand", "Competitors", "What to scan", "Power-ups", "R
 const DEFAULT_SCAN = { mode: "full", folder: "/blog/", maxPages: 2000, maxSubs: 15, useSubs: true, yourUrls: "", compUrls: "" };
 const DEFAULT_POWER = { searx: "", engines: "google", serpLimit: 80, lang: "en", gl: "us", nIdeas: 15, model: "gemini-2.5-flash" };
 
+// "https://www.att.com/blog/" -> { domain: "att.com", folder: "/blog/" }
+function splitLink(raw) {
+  const t = String(raw || "").trim(); let folder = "";
+  try { const u = new URL(/^https?:\/\//i.test(t) ? t : "https://" + t); folder = u.pathname === "/" ? "" : u.pathname.toLowerCase(); } catch (_) {}
+  return { domain: E.root(t), folder };
+}
+const cleanFolder = (f) => { f = String(f || "").trim().toLowerCase(); if (/^https?:/.test(f)) f = splitLink(f).folder; return f && f[0] !== "/" ? "/" + f : f; };
 const newId = () => Math.random().toString(36).slice(2, 10);
 const when = (t) => t ? new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
 const plural = (n, w) => n.toLocaleString() + " " + w + (n === 1 ? "" : "s");
@@ -124,8 +131,9 @@ function stepBrand() {
     ${explain("We use this to judge which topics fit <b>you</b>. The more you write, the smarter the topic scores get. Simple sentences are perfect.")}
     <div class="grid2">
       ${field("bName", "Brand name", "What people call you.", b.name || draft.name, { ph: "e.g. Acme" })}
-      ${field("bDomain", "Your website", "Just the address — no need for https://", draft.domain, { ph: "e.g. acme.com" })}
+      ${field("bDomain", "Your website", "Just the address — or paste your blog link and we'll split it.", draft.domain, { ph: "e.g. acme.com" })}
     </div>
+    ${field("bFolder", "Only read this section of your site (optional)", "e.g. <code>/blog/</code>. Leave empty to read your whole website.", draft.scan.yourFolder, { ph: "/blog/" })}
     ${field("bAbout", "What do you do?", "One or two sentences, like you'd tell a friend.", b.about, { area: 1, ph: "e.g. We make simple CRM software that helps small sales teams keep track of their customers." })}
     <div class="grid2">
       ${field("bAudience", "Who is it for?", "Your ideal customer.", b.audience, { ph: "e.g. founders of 5–50 person B2B startups" })}
@@ -137,8 +145,8 @@ function stepBrand() {
 
 function stepCompetitors() {
   return `<h2>🥊 Who are your competitors?</h2>
-    ${explain("Add each competitor on its own line, with its <b>niche</b> — what it's known for. We read their whole website and compare it with yours. Up to 8.")}
-    <div class="comp-head"><span>#</span><span>Website</span><span>Niche (what they focus on)</span><span></span></div>
+    ${explain("Add each competitor on its own line, with its <b>niche</b> — what it's known for. Want only their blog? Paste the blog link (like <code>https://www.att.com/blog/</code>) and we'll fill in the <b>section</b> for you. Leave the section empty to read the whole website. Up to 8.")}
+    <div class="comp-head"><span>#</span><span>Website or blog link</span><span>Section (optional)</span><span>Niche (what they focus on)</span><span></span></div>
     <div id="comps">${draft.competitors.map(compRow).join("")}</div>
     <button class="btn sm" id="addComp" type="button">＋ Add another competitor</button>
     <details style="margin-top:22px"><summary class="muted" style="cursor:pointer">Extra competitor pages to include (optional)</summary>
@@ -146,7 +154,8 @@ function stepCompetitors() {
     </details>`;
 }
 const compRow = (c, i) => `<div class="comp-row"><span class="no">${i + 1}</span>
-  <input class="cDomain" value="${esc(c.domain)}" placeholder="competitor.com" aria-label="Competitor website">
+  <input class="cDomain" value="${esc(c.domain)}" placeholder="competitor.com or its blog link" aria-label="Competitor website">
+  <input class="cFolder" value="${esc(c.folder || "")}" placeholder="whole site" aria-label="Section to read">
   <input class="cNiche" value="${esc(c.niche || "")}" placeholder="e.g. CRM for startups" aria-label="Competitor niche">
   <button type="button" class="cDel" title="Remove">✕</button></div>`;
 
@@ -154,10 +163,11 @@ function stepScope() {
   const s = draft.scan;
   const minutes = (n) => Math.max(1, Math.round(n / 3 / 60));
   return `<h2>🔍 What should we read?</h2>
-    ${explain("We start on each home page and follow every link (and every sitemap), just like Google does, until we've seen the whole site or hit your page limit.")}
+    ${explain("We start on each home page and follow every link (and every sitemap), just like Google does, until we've seen the whole site or hit your page limit. Sections you set per site in steps 1 and 2 always win — here they are:")}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 18px">${[{ domain: draft.domain, folder: draft.scan.yourFolder }].concat(draft.competitors.filter((c) => c.domain)).map((c) => pill(c.domain + (c.folder ? " → " + c.folder : " → whole site"), c.folder ? "blue" : "")).join("")}</div>
     <div class="choice">
       <label><input type="radio" name="mode" value="full" ${s.mode === "full" ? "checked" : ""}><span class="em">🌍</span><b>The whole website</b><small>Every page we can find. Best for a full picture.</small></label>
-      <label><input type="radio" name="mode" value="folder" ${s.mode === "folder" ? "checked" : ""}><span class="em">📂</span><b>Just one folder</b><small>e.g. only the blog. Faster and more focused.</small></label>
+      <label><input type="radio" name="mode" value="folder" ${s.mode === "folder" ? "checked" : ""}><span class="em">📂</span><b>Same folder on every site</b><small>e.g. /blog on all of them. Sites with their own section (steps 1–2) keep theirs.</small></label>
       <label><input type="radio" name="mode" value="sample" ${s.mode === "sample" ? "checked" : ""}><span class="em">⚡</span><b>A quick look</b><small>A small sample from each section. Good for a first try.</small></label>
     </div>
     <div id="folderBox" ${s.mode === "folder" ? "" : "hidden"}>${field("folder", "Which folder?", "The part of the address after the domain. Separate several with commas.", s.folder, { ph: "/blog/" })}</div>
@@ -201,7 +211,8 @@ function stepReview() {
     <dl class="recap">
       <dt>Brand</dt><dd><b>${esc(draft.brand.name || draft.domain)}</b> · ${esc(draft.domain)}</dd>
       <dt>What you do</dt><dd>${esc(draft.brand.about || "—")}</dd>
-      <dt>Competitors</dt><dd>${comps.map((c) => `${esc(c.domain)}${c.niche ? ` <span class="muted">(${esc(c.niche)})</span>` : ""}`).join("<br>") || "—"}</dd>
+      <dt>Your site</dt><dd>${esc(draft.domain)}${draft.scan.yourFolder ? " → only " + esc(draft.scan.yourFolder) : ""}</dd>
+      <dt>Competitors</dt><dd>${comps.map((c) => `${esc(c.domain)}${c.folder ? ` → only ${esc(c.folder)}` : ""}${c.niche ? ` <span class="muted">(${esc(c.niche)})</span>` : ""}`).join("<br>") || "—"}</dd>
       <dt>What we'll read</dt><dd>${esc(scope)} · up to ${Number(s.maxPages).toLocaleString()} pages per site${s.useSubs ? " · with subdomains" : ""}</dd>
       <dt>Power-ups</dt><dd>${[local("gemKey") ? "✨ AI planner" : "", pendingGsc ? "📈 Search Console" : "", p.searx ? "🏁 SearXNG" : ""].filter(Boolean).join(" · ") || "None (that's fine!)"}</dd>
     </dl>`;
@@ -210,8 +221,10 @@ function stepReview() {
 function wireStep(step) {
   if (step === 2) {
     const redraw = () => { $("#comps").innerHTML = draft.competitors.map(compRow).join(""); wireRows(); };
-    const read = () => { draft.competitors = $$(".comp-row").map((r) => ({ domain: E.root($(".cDomain", r).value), niche: $(".cNiche", r).value.trim() })); };
-    const wireRows = () => $$(".cDel").forEach((b, i) => { b.onclick = () => { read(); draft.competitors.splice(i, 1); if (!draft.competitors.length) draft.competitors.push({ domain: "", niche: "" }); redraw(); }; });
+    const read = () => { draft.competitors = readComps(); };
+    // Pasting a full link moves its path into the Section box.
+    const wireRows = () => { $$(".comp-row").forEach((r) => { $(".cDomain", r).onchange = () => { const x = splitLink($(".cDomain", r).value); if (x.folder) { $(".cDomain", r).value = x.domain; if (!$(".cFolder", r).value) $(".cFolder", r).value = x.folder; } }; }); wireDel(); };
+    const wireDel = () => $$(".cDel").forEach((b, i) => { b.onclick = () => { read(); draft.competitors.splice(i, 1); if (!draft.competitors.length) draft.competitors.push({ domain: "", niche: "" }); redraw(); }; });
     wireRows();
     $("#addComp").onclick = () => { read(); if (draft.competitors.length >= 8) return toast("Up to 8 competitors.", true); draft.competitors.push({ domain: "", niche: "" }); redraw(); $$(".cDomain").pop().focus(); };
   }
@@ -229,16 +242,22 @@ function wireStep(step) {
 }
 
 // Reads the current step's inputs into the draft. Returns false when something required is missing.
+function readComps() {
+  return $$(".comp-row").map((r) => { const x = splitLink($(".cDomain", r).value); return { domain: x.domain, folder: cleanFolder($(".cFolder", r).value) || x.folder, niche: $(".cNiche", r).value.trim() }; });
+}
+
 async function collect(step, lenient) {
   const v = (id) => ($("#" + id) ? $("#" + id).value.trim() : "");
   if (step === 1) {
     draft.brand = { ...draft.brand, name: v("bName"), about: v("bAbout"), audience: v("bAudience"), avoid: v("bAvoid"), offer: v("bOffer"), kb: v("bKb") };
-    draft.domain = E.root(v("bDomain")); draft.name = draft.brand.name || draft.domain;
+    const mine = splitLink(v("bDomain"));
+    draft.domain = mine.domain; draft.name = draft.brand.name || draft.domain;
+    draft.scan.yourFolder = cleanFolder(v("bFolder")) || mine.folder;
     if (!lenient && !draft.domain) { toast("Add your website first.", true); $("#bDomain").focus(); return false; }
     if (!lenient && !draft.brand.about) { toast("Tell us in a sentence what you do — it powers the scores.", true); $("#bAbout").focus(); return false; }
   }
   if (step === 2) {
-    draft.competitors = $$(".comp-row").map((r) => ({ domain: E.root($(".cDomain", r).value), niche: $(".cNiche", r).value.trim() })).filter((c, i, a) => c.domain || a.length === 1);
+    draft.competitors = readComps().filter((c, i, a) => c.domain || a.length === 1);
     draft.scan.compUrls = v("compUrls");
     if (!lenient && !draft.competitors.some((c) => c.domain)) { toast("Add at least one competitor.", true); return false; }
     if (!lenient && draft.competitors.some((c) => c.domain === draft.domain)) { toast("A competitor can't be your own website.", true); return false; }
@@ -294,7 +313,7 @@ function drawScan() {
   $("#scanNow").textContent = scan.now || "";
   $("#scanBar").style.width = Math.round((scan.progress || 0) * 100) + "%";
   $("#scanSites").innerHTML = scan.sites.map((s, i) => `<div class="scan-site ${i === scan.idx && scan.running ? "on" : ""}"><span class="st">${s.state === "done" ? "✅" : s.state === "busy" ? "⏳" : s.state === "fail" ? "⚠️" : "⏸️"}</span>
-    <div><span class="nm">${esc(s.domain)}</span>${s.isYou ? " " + pill("you", "blue") : s.niche ? " " + pill(s.niche) : ""}<small>${esc(s.note || (s.state === "wait" ? "Waiting its turn" : ""))}</small></div>
+    <div><span class="nm">${esc(s.domain)}${s.folder ? `<span class="muted"> ${esc(s.folder)}</span>` : ""}</span>${s.isYou ? " " + pill("you", "blue") : s.niche ? " " + pill(s.niche) : ""}<small>${esc(s.note || (s.state === "wait" ? "Waiting its turn" : ""))}</small></div>
     <span class="muted">${s.pages ? plural(s.pages, "page") : ""}</span></div>`).join("");
   $("#log").textContent = scan.log.join("\n");
 }
@@ -316,7 +335,7 @@ async function runScan(project) {
     maxPages: sc.maxPages, maxSubs: sc.maxSubs, useSubs: sc.useSubs, searx: pw.searx, engines: pw.engines, serpLimit: pw.serpLimit, lang: pw.lang, gl: pw.gl };
 
   scan = { id: project.id, running: true, idx: 0, progress: 0, now: "Getting ready…", log: [],
-    sites: [{ domain: you, isYou: true, state: "wait" }].concat(comps.map((c) => ({ domain: c.domain, niche: c.niche, state: "wait" }))) };
+    sites: [{ domain: you, isYou: true, folder: sc.yourFolder || "", state: "wait" }].concat(comps.map((c) => ({ domain: c.domain, niche: c.niche, folder: c.folder || "", state: "wait" }))) };
   E.state.stopped = false; E.state.serpChecked = new Set();
   E.hooks.log = (m) => { scan.log.push(m); drawScan(); };
   E.hooks.status = (m) => { scan.now = m; const s = scan.sites[scan.idx]; if (s && s.state === "busy") s.note = m.replace(/^Crawling [^:]+: /, ""); drawScan(); };
@@ -326,7 +345,9 @@ async function runScan(project) {
     const sites = [];
     for (let i = 0; i < scan.sites.length && !E.state.stopped; i++) {
       scan.idx = i; const s = scan.sites[i]; s.state = "busy"; s.note = "Finding subdomains and sitemaps…"; drawScan();
-      const site = await E.crawlSite(s.domain, opts, (f) => { scan.progress = (i + f) / scan.sites.length; drawScan(); });
+      // A site's own section wins over the shared folder setting.
+      const siteOpts = s.folder ? { ...opts, pathFilter: [s.folder] } : opts;
+      const site = await E.crawlSite(s.domain, siteOpts, (f) => { scan.progress = (i + f) / scan.sites.length; drawScan(); });
       site.niche = s.niche || ""; site.isYou = !!s.isYou;
       s.state = site.pages.length ? "done" : "fail"; s.pages = site.pages.length;
       s.note = site.pages.length ? `${site.hosts.length} subdomain(s) · ${site.queuedLeft ? site.queuedLeft.toLocaleString() + " more pages found than the limit" : "whole site read"}` : "Couldn't read this site (it may block robots)";
