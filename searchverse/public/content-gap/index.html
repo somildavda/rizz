@@ -98,7 +98,7 @@ td .u{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     <div class="row">
       <div><label for="mode">Crawl scope</label><select id="mode"><option value="full">Whole site — follow every link + sitemaps (like Semrush)</option><option value="sample">Quick sample across sections</option></select></div>
       <div><label for="pathFilter">Only this folder (optional)</label><input id="pathFilter" placeholder="/blog/   (comma for several)"></div>
-      <div><label for="maxPages">Max pages per site</label><input id="maxPages" type="number" value="300" min="5" max="3000"></div>
+      <div><label for="maxPages">Max pages per site</label><input id="maxPages" type="number" value="2000" min="5" max="50000"></div>
       <div><label for="maxSubs">Max subdomains per site</label><input id="maxSubs" type="number" value="15" min="1" max="60"></div>
     </div>
     <label class="chk" style="margin-top:10px"><input id="useSubs" type="checkbox" checked> Discover &amp; crawl subdomains</label>
@@ -312,44 +312,50 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
     log("[" + r + "] " + site.hosts.length + " live host(s): " + site.hosts.map(function (x) { return x.host; }).join(", "));
     if (!site.hosts.length && !(opts.extra[r] || []).length) return site;
 
-    // Sitemaps and robots.txt rules for every live host.
+    // robots.txt rules and the full sitemap tree for every live host (one file per request).
     var hostSet = new Set(site.hosts.map(function (H) { return H.host; })), rules = {};
     for (var i = 0; i < site.hosts.length && !stopped; i++) {
       var H = site.hosts[i];
-      var sm = await api("sitemap?host=" + encodeURIComponent(H.host)).catch(function () { return {}; });
-      rules[H.host] = sm.disallow || [];
-      H.sitemapUrls = (sm.urls || []).filter(function (u) { try { return new URL(u).host === H.host; } catch (_) { return false; } });
+      var rb = await api("robots?host=" + encodeURIComponent(H.host)).catch(function () { return { sitemaps: [], disallow: [] }; });
+      rules[H.host] = (rb.disallow || []).map(function (rule) {
+        return new RegExp("^" + rule.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\\$$/, "$"));
+      });
+      H.sitemapUrls = [];
+      var smQ = (rb.sitemaps || []).slice(), smSeen = new Set(), files = 0;
+      while (smQ.length && !stopped && files < 1000 && H.sitemapUrls.length < opts.maxPages * 3) {
+        var sm = smQ.shift(); if (smSeen.has(sm)) continue; smSeen.add(sm); files++;
+        var f = await api("sitemapfile?url=" + encodeURIComponent(sm)).catch(function () { return {}; });
+        (f.sitemaps || []).forEach(function (x) { smQ.push(x); });
+        (f.urls || []).forEach(function (u) { try { if (new URL(u).host === H.host) H.sitemapUrls.push(u); } catch (_) {} });
+        if (files % 5 === 0) status("Reading sitemaps of " + H.host + ": " + files + " file(s), " + H.sitemapUrls.length.toLocaleString() + " URLs…");
+      }
+      H.sitemapFiles = files;
       H.source = H.sitemapUrls.length ? "sitemap + links" : "links";
+      log("[" + r + "] " + H.host + ": " + H.sitemapUrls.length.toLocaleString() + " URLs in " + files + " sitemap file(s)");
     }
     var filt = opts.pathFilter;
     var inFolder = function (u) { return !filt.length || filt.some(function (f) { return u.toLowerCase().indexOf(f) > -1; }); };
-    var allowed = function (u) {
-      try {
-        var x = new URL(u), path = x.pathname + x.search;
-        return !(rules[x.host] || []).some(function (rule) {
-          var re = new RegExp("^" + rule.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\\$$/, "$"));
-          return re.test(path);
-        });
-      } catch (_) { return false; }
-    };
-    var inScope = function (u) { try { var x = new URL(u); return hostSet.has(x.host) && !junkPath.test(u) && allowed(u); } catch (_) { return false; } };
+    var allowed = function (x) { var path = x.pathname + x.search; return !(rules[x.host] || []).some(function (re) { return re.test(path); }); };
+    var inScope = function (u) { try { var x = new URL(u); return hostSet.has(x.host) && !junkPath.test(u) && allowed(x); } catch (_) { return false; } };
 
-    var brand = brandTokens(r), budget = opts.maxPages, queue = [], seen = new Map(), pages = [];
-    // seen: normalised URL -> { url, depth, inlinks }. A page is "kept" in the report when it is in
-    // the folder; other in-scope pages may still be visited (in whole-site mode) to reach folder pages.
+    var brand = brandTokens(r), budget = opts.maxPages, seen = new Map(), pages = [];
+    // Two FIFO queues (breadth-first): pages that belong in the report, and pages outside the
+    // folder that are only visited to discover links to folder pages.
+    var mainQ = [], transQ = [], mi = 0, ti = 0;
+    var keep = function (e) { return e.fed || inFolder(e.url); };
     var add = function (u, depth, fed) {
       if (!fed && !inScope(u)) return;
       var n = normUrl(u), e = seen.get(n);
       if (e) { e.inlinks++; return; }
       seen.set(n, e = { url: u, depth: depth, inlinks: fed ? 0 : 1, fed: !!fed });
-      queue.push(e);
+      (keep(e) ? mainQ : transQ).push(e);
     };
     (opts.extra[r] || []).forEach(function (u) { add(u, 0, true); });
-    site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); seen.get(normUrl(H.home.finalUrl)).data = H.home; seen.get(normUrl(H.home.finalUrl)).inlinks = 0; });
+    site.hosts.forEach(function (H) { add(H.home.finalUrl, 0); var e = seen.get(normUrl(H.home.finalUrl)); e.data = H.home; e.inlinks = 0; });
     if (opts.full) {
       site.hosts.forEach(function (H) {
         filt.forEach(function (f) { if (f.charAt(0) === "/") add("https://" + H.host + f, 1); });
-        H.sitemapUrls.forEach(function (u) { add(u, 1); seen.get(normUrl(u)) && (seen.get(normUrl(u)).inlinks = 0); });
+        H.sitemapUrls.forEach(function (u) { var had = seen.has(normUrl(u)); add(u, 1); if (!had && seen.get(normUrl(u))) seen.get(normUrl(u)).inlinks = 0; });
       });
     } else {
       // Quick sample: a few sitemap/home-link URLs per section, no link following.
@@ -363,17 +369,13 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
       });
     }
 
-    // Breadth-first crawl. Folder pages are crawled first; outside-folder pages are only
-    // visited (to discover links) once the folder frontier is empty, and cost from a separate budget.
-    var visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(30, budget) : 0;
-    var keep = function (e) { return e.fed || inFolder(e.url); };
+    var visited = 0, kept = 0, transit = 0, transitBudget = filt.length ? Math.max(200, Math.round(budget / 2)) : 0, t0 = Date.now();
     while (!stopped && kept < budget) {
-      queue.sort(function (x, y) { return (keep(y) - keep(x)) || x.depth - y.depth; });
       var batch = [];
-      while (queue.length && batch.length < 6 && kept + batch.length < budget) {
-        var e = queue.shift();
-        if (!keep(e)) { if (!opts.full || transit >= transitBudget) continue; transit++; }
-        batch.push(e);
+      while (batch.length < 6 && kept + batch.length < budget) {
+        if (mi < mainQ.length) batch.push(mainQ[mi++]);
+        else if (opts.full && ti < transQ.length && transit < transitBudget) { batch.push(transQ[ti++]); transit++; }
+        else break;
       }
       if (!batch.length) break;
       var got = await Promise.all(batch.map(function (e) { return e.data ? Promise.resolve(e.data) : api("page?url=" + encodeURIComponent(e.url)).catch(function () { return { ok: false, url: e.url }; }); }));
@@ -381,30 +383,44 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
         var e = batch[i]; visited++;
         if (!p || !p.ok) return;
         var fn = normUrl(p.finalUrl);
-        if (fn !== normUrl(e.url)) { if (seen.has(fn) && seen.get(fn) !== e && seen.get(fn).done) return; seen.set(fn, e); }
+        if (fn !== normUrl(e.url)) { var o = seen.get(fn); if (o && o !== e && o.done) { o.inlinks += e.inlinks; return; } seen.set(fn, e); }
         e.done = true;
         if (opts.full) (p.links || []).forEach(function (l) { add(l, e.depth + 1); });
-        if (!keep(e) || !hostSet.has(new URL(p.finalUrl).host) && !e.fed) return;
+        if (!keep(e) || (!hostSet.has(new URL(p.finalUrl).host) && !e.fed)) return;
         kept++;
         p.host = new URL(p.finalUrl).host; p.fed = e.fed; p.depth = e.depth; p.entry = e;
-        p.keywords = mainKeywords(p, brand);
+        p.type = pageType(p);
+        p.keywords = p.type === "listing" ? [] : mainKeywords(p, brand);
         p.mainKeyword = p.keywords[0] || "";
-        p.onPageKeyword = p.mainKeyword; p.keywordSource = "on-page";
+        p.onPageKeyword = p.mainKeyword; p.keywordSource = p.mainKeyword ? "on-page" : "";
         p.topic = topicOf(p);
-        p.indexable = !/noindex/i.test(p.robots || "") && (!p.canonical || normUrl(new URL(p.canonical, p.finalUrl).toString()) === fn);
+        p.indexable = !/noindex/i.test(p.robots || "") && (!p.canonical || (function () { try { return normUrl(new URL(p.canonical, p.finalUrl).toString()) === fn; } catch (_) { return true; } })());
         p.ranks = [];
-        delete p.text; delete p.links;
+        delete p.text; delete p.links; delete p.h3;
         pages.push(p);
       });
-      var left = queue.filter(keep).length;
+      var left = mainQ.length - mi, rate = kept / Math.max(1, (Date.now() - t0) / 1000);
       part(Math.min(1, kept / Math.max(1, Math.min(budget, kept + left))));
-      status("Crawling " + r + ": " + kept + " page(s) kept, " + visited + " visited, " + left + " in queue…");
+      status("Crawling " + r + ": " + kept.toLocaleString() + " kept · " + visited.toLocaleString() + " visited · " + left.toLocaleString() + " queued · " + rate.toFixed(1) + " pages/s" +
+        (left ? " · ~" + Math.ceil(Math.min(left, budget - kept) / Math.max(0.1, rate) / 60) + " min left" : ""));
     }
     pages.forEach(function (p) { p.inlinks = p.entry.inlinks; delete p.entry; });
     site.pages = pages;
-    site.discovered = Array.from(seen.values()).filter(keep).length;
-    log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget ? ", stopped at page limit" : "") + ")");
+    site.discovered = mainQ.length; site.queuedLeft = mainQ.length - mi;
+    log("[" + r + "] crawled " + pages.length + " page(s) (" + visited + " visited, " + site.discovered + " found in scope" + (kept >= budget && mainQ.length > mi ? ", stopped at the page limit — " + (mainQ.length - mi).toLocaleString() + " more found but not crawled" : "") + ")");
     return site;
+  }
+
+  // Listing pages (blog index, pagination, tags, categories, authors) are crawled for links
+  // but not treated as topics.
+  function pageType(p) {
+    var u; try { u = new URL(p.finalUrl); } catch (_) { return "page"; }
+    var path = u.pathname.toLowerCase().replace(/\/+$/, "");
+    if (/\/(page|p)\/\d+$/.test(path) || /[?&](page|paged|p)=\d+/.test(u.search)) return "listing";
+    if (/\/(tag|tags|category|categories|topic|topics|author|authors|archive|archives)(\/|$)/.test(path)) return "listing";
+    if (/^\/(blog|blogs|news|articles|resources|insights|learn|posts|knowledge-base|kb|guides)$/.test(path) || path === "") return path === "" ? "home" : "listing";
+    if (/\/(blog|blogs|news|articles|posts|insights|guides|learn|resources)\//.test(path + "/") && path.split("/").length > 2) return "article";
+    return "page";
   }
 
   // ---------- rankings (free sources) ----------
@@ -440,7 +456,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
   async function serpCheck(sites, opts) {
     var want = [], seenK = new Set(), pushK = function (k) { k = String(k || "").trim().toLowerCase(); if (k && k.split(" ").length > 1 && !seenK.has(k)) { seenK.add(k); want.push(k); } };
     // Competitor topics first (that's where gaps are), then your own pages, best-linked first.
-    var byWeight = function (s) { return s.pages.slice().sort(function (a, b) { return (b.inlinks || 0) - (a.inlinks || 0); }); };
+    var byWeight = function (s) { return s.pages.filter(function (p) { return p.mainKeyword && p.type !== "listing"; }).sort(function (a, b) { return (b.inlinks || 0) - (a.inlinks || 0); }); };
     var lists = sites.slice(1).map(byWeight).concat([byWeight(sites[0])]), k = 0;
     while (want.length < opts.serpLimit && lists.some(function (l) { return l.length; })) { var l = lists[k++ % lists.length]; if (l.length) pushK(l.shift().onPageKeyword); }
     log("Checking " + want.length + " keyword(s) in SearXNG…");
@@ -506,7 +522,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
     return out.sort(function (a, b) { return b.opportunity - a.opportunity || (b.volume || 0) - (a.volume || 0); });
   }
   function stem(w) { return w.replace(/(ies)$/, "y").replace(/(es|s)$/, "").replace(/ing$/, ""); }
-  function topicSet(ps) { return ps.map(function (p) { return { p: p, t: new Set(p.keywords.slice(0, 3).join(" ").split(" ").filter(function (w) { return !STOPSET.has(w); }).map(stem)) }; }); }
+  function topicSet(ps) { return ps.filter(function (p) { return p.type !== "listing" && p.type !== "home"; }).map(function (p) { return { p: p, t: new Set(p.keywords.slice(0, 3).join(" ").split(" ").filter(function (w) { return !STOPSET.has(w); }).map(stem)) }; }); }
   function topicGap(you, comps) {
     var mine = topicSet(you.pages), out = [];
     comps.forEach(function (c) {
@@ -644,37 +660,49 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
   var pill = function (s) { return '<span class="pill p-' + s + '">' + s + "</span>"; };
   var num = function (n) { return n == null || n === "" ? '<span class="muted">—</span>' : Number(n).toLocaleString(); };
 
-  // Generic sortable/filterable table with CSV export.
+  // Generic sortable/filterable table with paging and CSV export. Columns marked
+  // `opt` are dropped when no row has a value (e.g. ranking columns without ranking data).
   function table(cols, rows, opts) {
     opts = opts || {};
-    var state = { sort: null, dir: -1, q: "", f: "" };
+    cols = cols.filter(function (c) { return !c.opt || rows.some(function (r) { var x = c.v(r); return x != null && x !== ""; }); });
+    var filters = opts.filters || (opts.filter ? [opts.filter] : []);
+    var PAGE = 200, state = { sort: null, dir: -1, q: "", f: filters.map(function (f) { return f.initial || ""; }), page: 0 };
     var box = document.createElement("div");
-    box.innerHTML = '<div class="tools"><input type="search" placeholder="Filter…">' + (opts.filter ? '<select><option value="">All ' + esc(opts.filter.label) + "</option>" + opts.filter.values.map(function (v) { return "<option>" + esc(v) + "</option>"; }).join("") + "</select>" : "") +
-      '<button class="btn sm">Export CSV</button><span class="muted cnt"></span></div><div class="tbl"><table><thead><tr>' + cols.map(function (c, i) { return '<th data-i="' + i + '">' + esc(c.h) + "</th>"; }).join("") + "</tr></thead><tbody></tbody></table></div>";
+    box.innerHTML = '<div class="tools"><input type="search" placeholder="Filter…">' + filters.map(function (f, i) {
+        return '<select data-f="' + i + '"><option value="">All ' + esc(f.label) + "</option>" + f.values.map(function (v) { return "<option" + (v === f.initial ? " selected" : "") + ">" + esc(v) + "</option>"; }).join("") + "</select>"; }).join("") +
+      '<button class="btn sm csv">Export CSV</button><span class="muted cnt"></span><span class="pager" style="margin-left:auto;display:flex;gap:6px;align-items:center"><button class="btn sm prev">‹ Prev</button><span class="muted pg"></span><button class="btn sm next">Next ›</button></span></div>' +
+      '<div class="tbl"><table><thead><tr>' + cols.map(function (c, i) { return '<th data-i="' + i + '">' + esc(c.h) + "</th>"; }).join("") + "</tr></thead><tbody></tbody></table></div>";
     var tb = box.querySelector("tbody");
     function visible() {
       var q = state.q.toLowerCase(), rs = rows.filter(function (r) {
-        if (state.f && opts.filter.get(r) !== state.f) return false;
+        for (var i = 0; i < filters.length; i++) if (state.f[i] && filters[i].get(r) !== state.f[i]) return false;
         return !q || cols.some(function (c) { return String(c.v(r) == null ? "" : c.v(r)).toLowerCase().indexOf(q) > -1; });
       });
       if (state.sort != null) { var c = cols[state.sort]; rs = rs.slice().sort(function (a, b) { var x = c.v(a), y = c.v(b); x = x == null ? -Infinity : x; y = y == null ? -Infinity : y; return (x > y ? 1 : x < y ? -1 : 0) * state.dir; }); }
       return rs;
     }
     function draw() {
-      var rs = visible();
+      var rs = visible(), pages = Math.max(1, Math.ceil(rs.length / PAGE));
+      state.page = Math.min(state.page, pages - 1);
+      var slice = rs.slice(state.page * PAGE, state.page * PAGE + PAGE);
       box.querySelector(".cnt").textContent = rs.length.toLocaleString() + " rows";
-      tb.innerHTML = rs.length ? rs.slice(0, 1500).map(function (r) { return "<tr>" + cols.map(function (c) { return "<td" + (c.n ? ' class="n"' : "") + ">" + (c.html ? c.html(r) : esc(c.v(r))) + "</td>"; }).join("") + "</tr>"; }).join("") : '<tr><td colspan="' + cols.length + '" class="empty">' + esc(opts.empty || "No rows") + "</td></tr>";
+      box.querySelector(".pg").textContent = "page " + (state.page + 1) + " / " + pages;
+      box.querySelector(".pager").style.display = pages > 1 ? "flex" : "none";
+      box.querySelector(".prev").disabled = state.page === 0; box.querySelector(".next").disabled = state.page >= pages - 1;
+      tb.innerHTML = slice.length ? slice.map(function (r) { return "<tr>" + cols.map(function (c) { return "<td" + (c.n ? ' class="n"' : "") + ">" + (c.html ? c.html(r) : esc(c.v(r))) + "</td>"; }).join("") + "</tr>"; }).join("") : '<tr><td colspan="' + cols.length + '" class="empty">' + esc(opts.empty || "No rows") + "</td></tr>";
     }
-    box.querySelector("input").oninput = function (e) { state.q = e.target.value; draw(); };
-    if (opts.filter) box.querySelector("select").onchange = function (e) { state.f = e.target.value; draw(); };
-    box.querySelectorAll("th").forEach(function (th) { th.onclick = function () { var i = +th.dataset.i; state.dir = state.sort === i ? -state.dir : -1; state.sort = i; draw(); }; });
-    box.querySelector(".btn").onclick = function () {
+    box.querySelector("input").oninput = function (e) { state.q = e.target.value; state.page = 0; draw(); };
+    box.querySelectorAll("select[data-f]").forEach(function (sel) { sel.onchange = function () { state.f[+sel.dataset.f] = sel.value; state.page = 0; draw(); }; });
+    box.querySelector(".prev").onclick = function () { state.page--; draw(); box.scrollIntoView(); };
+    box.querySelector(".next").onclick = function () { state.page++; draw(); box.scrollIntoView(); };
+    box.querySelectorAll("th").forEach(function (th) { th.onclick = function () { var i = +th.dataset.i; state.dir = state.sort === i ? -state.dir : -1; state.sort = i; state.page = 0; draw(); }; });
+    box.querySelector(".csv").onclick = function () {
       var csv = [cols.map(function (c) { return c.h; })].concat(visible().map(function (r) { return cols.map(function (c) { return c.v(r); }); }))
         .map(function (row) { return row.map(function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
       var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
       a.download = "content-gap-" + (opts.name || "table") + "-" + R.you.domain + ".csv"; a.click();
     };
-    if (opts.sort != null) { state.sort = opts.sort; }
+    if (opts.sort != null) state.sort = opts.sort;
     draw();
     return box;
   }
@@ -688,6 +716,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
     var clusters = [];
     allSites().forEach(function (s) {
       s.pages.forEach(function (p) {
+        if (p.type === "listing" || p.type === "home") return;
         var t = new Set(p.keywords.slice(0, 2).join(" ").split(" ").filter(function (w) { return w && !STOPSET.has(w); }).map(stem));
         if (!t.size) return;
         var best = null, bs = 0;
@@ -725,6 +754,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
       // Rankable when competitors already rank for it (proven demand) and you have related pages to build on.
       var rankability = Math.round(40 + (near >= 0.34 ? 30 : 0) + (compBest <= 10 ? 30 : compBest <= 20 ? 15 : 0));
       var score = you ? Math.round(relevance * 0.4) : Math.round(relevance * 0.4 + gap * 0.25 + demand * 0.2 + rankability * 0.15);
+      c.pages.forEach(function (x) { x.p.cluster = label; });
       return { topic: label, by: by, you: you, compsWith: compsWith, status: status, total: c.pages.length, ranks: ranks,
         keywords: Array.from(c.names.keys()).slice(0, 8).join(", "), relevance: relevance, gap: gap, demand: demand, rankability: rankability, score: score,
         verdict: you ? "covered" : score >= 70 ? "write next" : score >= 50 ? "worth it" : relevance < 35 ? "off-brand" : "low priority" };
@@ -749,9 +779,13 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
         { h: "Live subdomains", n: 1, v: function (s) { return s.hosts.length; } },
         { h: "Pages crawled", n: 1, v: function (s) { return s.pages.length; } },
         { h: "Pages found in scope", n: 1, v: function (s) { return s.discovered; } },
-        { h: "Ranking keywords", n: 1, v: function (s) { return s.ranked ? s.rankedTotal : null; }, html: function (s) { return num(s.ranked ? s.rankedTotal : null); } },
-        { h: "Top-10 keywords", n: 1, v: function (s) { return s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null; }, html: function (s) { return num(s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null); } },
-        { h: "Ranking source", v: function (s) { return s.ranked ? Array.from(new Set(s.ranked.map(function (k) { return k.source; }))).join(" + ") : ""; } },
+        { h: "Articles", n: 1, v: function (s) { return s.pages.filter(function (p) { return p.type === "article"; }).length; } },
+        { h: "Topics covered", n: 1, v: function (s) { return R.topics.filter(function (t) { return t.by[s.domain]; }).length; } },
+        { h: "Topic gaps (you lack)", n: 1, v: function (s) { return s === R.you ? null : R.topics.filter(function (t) { return t.by[s.domain] && !t.you; }).length; }, html: function (s) { return num(s === R.you ? null : R.topics.filter(function (t) { return t.by[s.domain] && !t.you; }).length); } },
+        { h: "Not crawled (page limit)", n: 1, v: function (s) { return s.queuedLeft || 0; } },
+        { h: "Ranking keywords", n: 1, opt: 1, v: function (s) { return s.ranked ? s.rankedTotal : null; }, html: function (s) { return num(s.ranked ? s.rankedTotal : null); } },
+        { h: "Top-10 keywords", n: 1, opt: 1, v: function (s) { return s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null; }, html: function (s) { return num(s.ranked ? s.ranked.filter(function (k) { return k.position <= 10; }).length : null); } },
+        { h: "Ranking source", opt: 1, v: function (s) { return s.ranked ? Array.from(new Set(s.ranked.map(function (k) { return k.source; }))).join(" + ") : ""; } },
       ], allSites(), { name: "overview" }));
       if (!hasRank) v.insertAdjacentHTML("beforeend", '<p class="note">' + noRank + "</p>");
     }
@@ -769,7 +803,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
         { h: "You", n: 1, v: function (r) { return r.you; }, html: function (r) { return r.you ? r.you : '<span class="muted">0</span>'; } },
       ].concat(R.comps.map(function (c) { return { h: c.domain, n: 1, v: function (r) { return (r.by[c.domain] || []).length; }, html: function (r) { var ps = r.by[c.domain] || []; return ps.length ? '<a href="' + esc(ps[0].finalUrl) + '" target="_blank" rel="noopener" title="' + esc(ps.map(function (p) { return p.finalUrl; }).join("\n")) + '">' + ps.length + "</a>" : '<span class="muted">0</span>'; } }; }))
         .concat([
-          { h: "Ranking kws", n: 1, v: function (r) { return hasRank ? r.ranks : null; }, html: function (r) { return num(hasRank ? r.ranks : null); } },
+          { h: "Ranking kws", n: 1, opt: 1, v: function (r) { return hasRank ? r.ranks : null; }, html: function (r) { return num(hasRank ? r.ranks : null); } },
           { h: "Keywords in topic", v: function (r) { return r.keywords; } },
           { h: "Example competitor page", v: function (r) { var c = R.comps.filter(function (c) { return r.by[c.domain]; })[0]; return c ? r.by[c.domain][0].finalUrl : ""; }, html: function (r) { var c = R.comps.filter(function (c) { return r.by[c.domain]; })[0]; return link(c ? r.by[c.domain][0].finalUrl : ""); } },
           { h: "Your page", v: function (r) { return r.by[R.you.domain] ? r.by[R.you.domain][0].finalUrl : ""; }, html: function (r) { return link(r.by[R.you.domain] ? r.by[R.you.domain][0].finalUrl : ""); } },
@@ -782,17 +816,19 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
         s.hosts.forEach(function (H) {
           var ps = s.pages.filter(function (p) { return p.host === H.host; });
           var rk = (s.ranked || []).filter(function (k) { try { return new URL(k.url).host === H.host; } catch (_) { return false; } }).sort(function (a, b) { return a.position - b.position; });
-          var freq = new Map(); ps.forEach(function (p) { p.keywords.slice(0, 2).forEach(function (k) { freq.set(k, (freq.get(k) || 0) + 1); }); });
+          var freq = new Map(); ps.forEach(function (p) { (p.cluster ? [p.cluster] : p.keywords.slice(0, 1)).forEach(function (k) { freq.set(k, (freq.get(k) || 0) + 1); }); });
           rows.push({ site: s.domain, host: H.host, aliases: H.names.filter(function (n) { return n !== H.host; }).join(", "), title: H.home.title, mainKeyword: H.home.keywords ? H.home.keywords[0] : (mainKeywords(H.home, brandTokens(s.domain))[0] || ""),
             topics: Array.from(freq.entries()).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 6).map(function (e) { return e[0]; }).join(", "),
-            sitemap: H.sitemapUrls.length, source: H.source, crawled: ps.length, ranking: s.ranked ? rk.length : null, top: rk[0] ? rk[0].keyword + " (#" + rk[0].position + ")" : "" });
+            sitemap: H.sitemapUrls.length, source: H.source, crawled: ps.length, articles: ps.filter(function (p) { return p.type === "article"; }).length,
+            gaps: s === R.you ? null : ps.filter(function (p) { var t = R.topics.filter(function (t) { return t.by[s.domain] && t.by[s.domain].indexOf(p) > -1; })[0]; return t && !t.you; }).length, ranking: s.ranked ? rk.length : null, top: rk[0] ? rk[0].keyword + " (#" + rk[0].position + ")" : "" });
         });
       });
       v.appendChild(table([
         { h: "Site", v: function (r) { return r.site; } }, { h: "Subdomain", v: function (r) { return r.host; }, html: function (r) { return link("https://" + r.host + "/"); } },
         { h: "Home title", v: function (r) { return r.title; } }, { h: "Main keyword", v: function (r) { return r.mainKeyword; } }, { h: "Topics", v: function (r) { return r.topics; } },
         { h: "Sitemap URLs", n: 1, v: function (r) { return r.sitemap; } }, { h: "Discovered via", v: function (r) { return r.source; } }, { h: "Crawled", n: 1, v: function (r) { return r.crawled; } },
-        { h: "Ranking kws", n: 1, v: function (r) { return r.ranking; }, html: function (r) { return num(r.ranking); } }, { h: "Top ranking keyword", v: function (r) { return r.top; } },
+        { h: "Articles", n: 1, v: function (r) { return r.articles; } }, { h: "Topic gaps here", n: 1, v: function (r) { return r.gaps; } },
+        { h: "Ranking kws", n: 1, opt: 1, v: function (r) { return r.ranking; }, html: function (r) { return num(r.ranking); } }, { h: "Top ranking keyword", opt: 1, v: function (r) { return r.top || null; } },
         { h: "Also answers on", v: function (r) { return r.aliases; } },
       ], rows, { name: "subdomains", filter: siteFilter() }));
     }
@@ -801,16 +837,19 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
       allSites().forEach(function (s) { s.pages.forEach(function (p) { prow.push({ site: s.domain, p: p, top: p.ranks[0] }); }); });
       v.appendChild(table([
         { h: "Site", v: function (r) { return r.site; } }, { h: "URL", v: function (r) { return r.p.finalUrl; }, html: function (r) { return link(r.p.finalUrl); } },
+        { h: "Type", v: function (r) { return r.p.type; } },
         { h: "Topic (section)", v: function (r) { return r.p.topic; } }, { h: "Main keyword", v: function (r) { return r.p.mainKeyword; }, html: function (r) { return "<b>" + esc(r.p.mainKeyword) + "</b>"; } },
+        { h: "Topic cluster", v: function (r) { return r.p.cluster || ""; } },
         { h: "Keyword source", v: function (r) { return r.p.keywordSource; } },
         { h: "On-page focus", v: function (r) { return r.p.onPageKeyword; } },
         { h: "Other keywords", v: function (r) { return r.p.keywords.slice(1).join(", "); } }, { h: "Title", v: function (r) { return r.p.title; } }, { h: "H1", v: function (r) { return r.p.h1[0] || ""; } },
-        { h: "Best position", n: 1, v: function (r) { return r.top ? r.top.position : null; }, html: function (r) { return num(r.top ? r.top.position : null); } },
-        { h: "# ranking kws", n: 1, v: function (r) { return hasRank ? r.p.ranks.length : null; }, html: function (r) { return num(hasRank ? r.p.ranks.length : null); } },
+        { h: "Best position", n: 1, opt: 1, v: function (r) { return r.top ? r.top.position : null; }, html: function (r) { return num(r.top ? r.top.position : null); } },
+        { h: "Ranking for", opt: 1, v: function (r) { return r.p.ranks.slice(0, 5).map(function (k) { return k.keyword + " #" + k.position; }).join(", ") || null; } },
         { h: "Depth", n: 1, v: function (r) { return r.p.depth; } }, { h: "Inlinks", n: 1, v: function (r) { return r.p.inlinks; } },
         { h: "Indexable", v: function (r) { return r.p.indexable ? "yes" : "no"; } },
         { h: "H2s", v: function (r) { return r.p.h2.slice(0, 6).join(" | "); } },
-      ], prow, { name: "pages", filter: siteFilter() }));
+      ], prow, { name: "pages", filters: [siteFilter(), { label: "page types", values: ["article", "page", "home", "listing"], get: function (r) { return r.p.type; } },
+        { label: "topics", initial: "topics only", values: ["topics only", "listings only"], get: function (r) { return r.p.type === "listing" ? "listings only" : "topics only"; } }] }));
     }
     if (current === "kwgap") {
       if (!hasComp) { v.innerHTML = '<div class="empty">The keyword gap needs competitor positions: add a SearXNG address under “Rankings — free sources” and run again. (The Topic map tab works without it.)</div>'; return; }
@@ -831,7 +870,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
         { h: "Competitor", v: function (r) { return r.competitor; } }, { h: "Coverage", v: function (r) { return r.coverage; }, html: function (r) { return pill(r.coverage === "covered" ? "shared" : r.coverage === "partial" ? "weak" : "missing").replace(/>(shared|weak|missing)</, ">" + r.coverage + "<"); } },
         { h: "Main keyword", v: function (r) { return r.mainKeyword; }, html: function (r) { return "<b>" + esc(r.mainKeyword) + "</b>"; } }, { h: "Topic (section)", v: function (r) { return r.topic; } },
         { h: "Competitor page", v: function (r) { return r.url; }, html: function (r) { return link(r.url); } }, { h: "Title", v: function (r) { return r.title; } },
-        { h: "Ranking kws", n: 1, v: function (r) { return hasRank ? r.rankingCount : null; }, html: function (r) { return num(hasRank ? r.rankingCount : null); } },
+        { h: "Ranking kws", n: 1, opt: 1, v: function (r) { return hasRank ? r.rankingCount : null; }, html: function (r) { return num(hasRank ? r.rankingCount : null); } },
         { h: "Your closest page", v: function (r) { return r.match; }, html: function (r) { return link(r.match); } }, { h: "Match %", n: 1, v: function (r) { return r.score; } },
         { h: "Keywords", v: function (r) { return r.keywords; } },
       ], R.topicGap, { name: "topic-gap", filter: { label: "coverage", values: ["missing", "partial", "covered"], get: function (r) { return r.coverage; } } }));
@@ -906,7 +945,7 @@ create policy "anon insert" on cg_reports for insert to anon with check (true);<
     saveSettings();
     var opts = { extra: extra, full: $("#mode").value === "full", pathFilter: $("#pathFilter").value.split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean),
       gemKey: $("#gemKey").value.trim(), gemModel: $("#gemModel").value.trim() || "gemini-2.5-flash", nIdeas: Math.max(3, Math.min(40, +$("#nIdeas").value || 15)),
-      maxPages: Math.max(5, Math.min(3000, +$("#maxPages").value || 300)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
+      maxPages: Math.max(5, Math.min(50000, +$("#maxPages").value || 2000)), maxSubs: Math.max(1, Math.min(60, +$("#maxSubs").value || 15)), useSubs: $("#useSubs").checked,
       searx: $("#searx").value.trim(), engines: $("#searxEngines").value.trim(), serpLimit: Math.max(5, Math.min(500, +$("#serpLimit").value || 80)),
       lang: $("#lang").value.trim() || "en", gl: $("#gl").value.trim() || "us", useSuggest: $("#useSuggest").checked };
     var gscFile = $("#gscFile").files[0], gscRows = null;

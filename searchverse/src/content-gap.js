@@ -3,14 +3,14 @@
 // invocation stays well under Cloudflare's subrequest limits.
 //
 //   GET  /api/cg/subdomains?domain=example.com   subdomains from certificate logs
-//   GET  /api/cg/sitemap?host=www.example.com     page URLs from robots.txt/sitemaps
+//   GET  /api/cg/robots?host=www.example.com      sitemaps + Disallow rules from robots.txt
+//   GET  /api/cg/sitemapfile?url=...              one sitemap file (index or URL set)
 //   GET  /api/cg/page?url=https://...             title, H1, headings, text, links
 //   GET  /api/cg/suggest?q=...                    Google Autocomplete suggestions (free)
 //   POST /api/cg/serp                             positions from the user's SearXNG
 //   POST /api/cg/gemini                           Gemini topic recommendations (proxy)
 
 const UA = "Mozilla/5.0 (compatible; SearchVerseContentGap/1.0; +https://searchverse.app)";
-const MAX_SITEMAP_URLS = 5000;
 const MAX_TEXT = 6000;
 
 const json = (data, status = 200) =>
@@ -72,16 +72,16 @@ async function subdomains(domain) {
 
 const locs = (xml) => [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)/gi)].map((m) => m[1].replace(/&amp;/g, "&"));
 
-async function sitemap(host) {
+// robots.txt for a host: the sitemaps it lists and the "User-agent: *" Disallow rules.
+async function robots(host) {
   host = cleanHost(host);
   if (!safeUrl("https://" + host)) return json({ error: "Invalid host" }, 400);
-  const queue = [], disallow = [];
+  const sitemaps = [], disallow = [];
   try {
     const { res: r } = await get(`https://${host}/robots.txt`, 8000);
     if (r.ok) {
       const txt = await r.text();
-      for (const m of txt.matchAll(/^\s*sitemap:\s*(\S+)/gim)) queue.push(m[1]);
-      // Disallow rules from the "User-agent: *" group(s).
+      for (const m of txt.matchAll(/^\s*sitemap:\s*(\S+)/gim)) sitemaps.push(m[1]);
       let all = false, inAgents = false;
       for (const line of txt.split(/\r?\n/)) {
         const m = line.replace(/#.*/, "").trim().match(/^([\w-]+)\s*:\s*(.*)$/);
@@ -93,26 +93,27 @@ async function sitemap(host) {
       }
     }
   } catch (_) {}
-  if (!queue.length) queue.push(`https://${host}/sitemap.xml`, `https://${host}/sitemap_index.xml`);
+  if (!sitemaps.length) sitemaps.push(`https://${host}/sitemap.xml`, `https://${host}/sitemap_index.xml`);
+  return json({ host, sitemaps, disallow });
+}
 
-  const urls = new Set(), seen = new Set(), sitemaps = [];
-  let fetches = 0;
-  while (queue.length && fetches < 40 && urls.size < MAX_SITEMAP_URLS) {
-    const sm = queue.shift();
-    if (seen.has(sm) || !safeUrl(sm)) continue;
-    seen.add(sm); fetches++;
-    try {
-      const { res: r } = await get(sm, 10000);
-      if (!r.ok) continue;
-      const xml = await r.text();
-      if (/<sitemapindex/i.test(xml)) queue.push(...locs(xml));
-      else if (/<urlset/i.test(xml)) {
-        sitemaps.push(sm);
-        for (const l of locs(xml)) { if (urls.size >= MAX_SITEMAP_URLS) break; urls.add(l); }
-      }
-    } catch (_) {}
+// One sitemap file: either an index (child sitemaps) or a URL set. The browser walks
+// the tree one file per request, so there is no cap on the number of files or URLs.
+async function sitemapFile(raw) {
+  if (!safeUrl(raw)) return json({ error: "Invalid URL" }, 400);
+  try {
+    const { res: r } = await get(raw, 20000);
+    if (!r.ok) return json({ url: raw, sitemaps: [], urls: [], error: "HTTP " + r.status });
+    let body;
+    if (/\.gz($|\?)/i.test(raw) && !/xml/.test(r.headers.get("Content-Type") || "")) {
+      body = await new Response(r.body.pipeThrough(new DecompressionStream("gzip"))).text();
+    } else body = await r.text();
+    if (/<sitemapindex/i.test(body)) return json({ url: raw, sitemaps: locs(body), urls: [] });
+    if (/<urlset/i.test(body)) return json({ url: raw, sitemaps: [], urls: locs(body) });
+    return json({ url: raw, sitemaps: [], urls: [], error: "Not a sitemap" });
+  } catch (e) {
+    return json({ url: raw, sitemaps: [], urls: [], error: e.message });
   }
-  return json({ host, sitemaps, urls: [...urls], disallow });
 }
 
 async function page(raw) {
@@ -247,7 +248,8 @@ export async function handleContentGap(request, url) {
   const p = url.pathname.replace(/^\/api\/cg\/?/, "");
   try {
     if (p === "subdomains") return await subdomains(url.searchParams.get("domain"));
-    if (p === "sitemap") return await sitemap(url.searchParams.get("host"));
+    if (p === "robots") return await robots(url.searchParams.get("host"));
+    if (p === "sitemapfile") return await sitemapFile(url.searchParams.get("url"));
     if (p === "page") return await page(url.searchParams.get("url"));
     if (p === "suggest") return await suggest(url.searchParams.get("q"), url.searchParams.get("hl"), url.searchParams.get("gl"));
     if (p === "serp" && request.method === "POST") return await serp(request);
