@@ -26,7 +26,12 @@ function splitLink(raw) {
   try { const u = new URL(/^https?:\/\//i.test(t) ? t : "https://" + t); folder = u.pathname === "/" ? "" : u.pathname.toLowerCase(); } catch (_) {}
   return { domain: E.root(t), folder };
 }
-const cleanFolder = (f) => { f = String(f || "").trim().toLowerCase(); if (/^https?:/.test(f)) f = splitLink(f).folder; return f && f[0] !== "/" ? "/" + f : f; };
+// One or more sections, comma or new line separated; full links are reduced to their path.
+const cleanFolder = (f) => String(f || "").split(/[,\n]+/).map((x) => {
+  x = x.trim().toLowerCase(); if (/^https?:/.test(x) || /^www\./.test(x)) x = splitLink(x).folder;
+  return x && x[0] !== "/" ? "/" + x : x;
+}).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(", ");
+const folderList = (f) => String(f || "").split(",").map((x) => x.trim()).filter(Boolean);
 const newId = () => Math.random().toString(36).slice(2, 10);
 const when = (t) => t ? new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
 const plural = (n, w) => n.toLocaleString() + " " + w + (n === 1 ? "" : "s");
@@ -133,7 +138,7 @@ function stepBrand() {
       ${field("bName", "Brand name", "What people call you.", b.name || draft.name, { ph: "e.g. Acme" })}
       ${field("bDomain", "Your website", "Just the address — or paste your blog link and we'll split it.", draft.domain, { ph: "e.g. acme.com" })}
     </div>
-    ${field("bFolder", "Only read this section of your site (optional)", "e.g. <code>/blog/</code>. Leave empty to read your whole website.", draft.scan.yourFolder, { ph: "/blog/" })}
+    ${field("bFolder", "Only read these sections of your site (optional)", "One section, or several separated by commas — paths or full links both work, e.g. <code>/blog/broadband/, /blog/prepaid/</code>. Leave empty to read your whole website.", draft.scan.yourFolder, { area: 1, ph: "/blog/broadband/, /blog/prepaid/, /blog/postpaid/" })}
     ${field("bAbout", "What do you do?", "One or two sentences, like you'd tell a friend.", b.about, { area: 1, ph: "e.g. We make simple CRM software that helps small sales teams keep track of their customers." })}
     <div class="grid2">
       ${field("bAudience", "Who is it for?", "Your ideal customer.", b.audience, { ph: "e.g. founders of 5–50 person B2B startups" })}
@@ -146,7 +151,7 @@ function stepBrand() {
 function stepCompetitors() {
   return `<h2>🥊 Who are your competitors?</h2>
     ${explain("Add each competitor on its own line, with its <b>niche</b> — what it's known for. Want only their blog? Paste the blog link (like <code>https://www.att.com/blog/</code>) and we'll fill in the <b>section</b> for you. Leave the section empty to read the whole website. Up to 8.")}
-    <div class="comp-head"><span>#</span><span>Website or blog link</span><span>Section (optional)</span><span>Niche (what they focus on)</span><span></span></div>
+    <div class="comp-head"><span>#</span><span>Website or blog link</span><span>Section(s) (optional, comma-separated)</span><span>Niche (what they focus on)</span><span></span></div>
     <div id="comps">${draft.competitors.map(compRow).join("")}</div>
     <button class="btn sm" id="addComp" type="button">＋ Add another competitor</button>
     <details style="margin-top:22px"><summary class="muted" style="cursor:pointer">Extra competitor pages to include (optional)</summary>
@@ -346,7 +351,7 @@ async function runScan(project) {
     for (let i = 0; i < scan.sites.length && !E.state.stopped; i++) {
       scan.idx = i; const s = scan.sites[i]; s.state = "busy"; s.note = "Finding subdomains and sitemaps…"; drawScan();
       // A site's own section wins over the shared folder setting.
-      const siteOpts = s.folder ? { ...opts, pathFilter: [s.folder] } : opts;
+      const siteOpts = s.folder ? { ...opts, pathFilter: folderList(s.folder) } : opts;
       const site = await E.crawlSite(s.domain, siteOpts, (f) => { scan.progress = (i + f) / scan.sites.length; drawScan(); });
       site.niche = s.niche || ""; site.isYou = !!s.isYou;
       s.state = site.pages.length ? "done" : "fail"; s.pages = site.pages.length;
