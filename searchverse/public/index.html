@@ -188,7 +188,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 /* full-screen viewer */
 /* creator */
 .maker{position:relative;z-index:1;max-width:1180px;margin:20px auto 0;padding:0 max(16px,4vw)}
-.mcard{position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:26px;align-items:center;padding:30px 34px;border-radius:28px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(10px);overflow:hidden}
+.mcard{position:relative;display:grid;grid-template-columns:auto 1fr;gap:6px 30px;align-items:center;padding:30px 34px;border-radius:28px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(10px);overflow:hidden}
 .mcard::before{content:"";position:absolute;inset:-1px;border-radius:28px;padding:1px;background:linear-gradient(120deg,var(--a),var(--b),var(--c),var(--a));background-size:300% 100%;animation:shine 8s linear infinite;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
 .avatar{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;font-size:34px;font-weight:900;color:#fff;background:linear-gradient(135deg,var(--a),var(--b));box-shadow:0 0 0 6px rgba(124,92,255,.15),0 20px 40px -16px rgba(124,92,255,.8);overflow:hidden;animation:bob2 6s ease-in-out infinite}
@@ -198,11 +198,12 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 .mname{font-size:28px;font-weight:900;letter-spacing:-.02em;margin-top:4px}
 .mrole{color:#C8CDE6;margin-top:4px;font-size:16px}
 .mbio{color:var(--muted);margin-top:8px;font-size:15px;line-height:1.55;max-width:560px}
-.mlinks{display:flex;gap:10px;flex-wrap:wrap}
+.mlinks{display:flex;gap:10px;flex-wrap:wrap;grid-column:2;margin-top:16px}
+.mbio{max-width:640px}
 .mlinks .btn{padding:12px 18px;font-size:14px}
 .mlinks .li{background:#0A66C2;border:0;color:#fff}
 .mlinks .wa{background:#25D366;border:0;color:#062b15}
-@media(max-width:820px){.mcard{grid-template-columns:1fr;text-align:center;justify-items:center}.mlinks{justify-content:center}}
+@media(max-width:820px){.mcard{grid-template-columns:1fr;text-align:center;justify-items:center}.mlinks{justify-content:center;grid-column:1}}
 
 #viewer{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column}
 #viewer.on{display:flex;animation:pop .35s ease-out}
@@ -314,7 +315,7 @@ footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;
 <aside class="maker rv" id="maker" aria-label="About the creator">
   <div class="mcard">
     <div class="avatar" id="mAvatar"></div>
-    <div><div class="mk">Created by</div><div class="mname" id="mName"></div><div class="mrole" id="mRole"></div><p class="mbio" id="mBio"></p></div>
+    <div><div class="mk" id="mKick">Created by</div><div class="mname" id="mName"></div><div class="mrole" id="mRole"></div><p class="mbio" id="mBio"></p></div>
     <div class="mlinks" id="mLinks"></div>
   </div>
 </aside>
@@ -405,7 +406,9 @@ window.SV_CREATOR = {
   name: "Somil Davda",
   role: "",          // e.g. "SEO Manager" — empty shows "Works at <company>"
   company: "Infidigit",
-  bio: "I build simple tools that turn search data into clear next steps.",
+  kicker: "The human behind these tools 👋",
+  tagline: "Turning search data into “aha!” moments · writes at Infidigit",
+  bio: "Got a search problem, a question, or an idea for the next tool? Say hi — I'd love to hear what you'd build.",
   linkedin: "https://www.linkedin.com/in/somil-m-p-davda-a4a8b8156/",
   authorPage: "https://www.infidigit.com/blog/author/somil-davda/",
   whatsapp: "919769754169",   // country code + number, digits only
@@ -427,13 +430,14 @@ window.SV_CREATOR = {
     var av = $("#mAvatar");
     if (c.photo) { var im = document.createElement("img"); im.src = c.photo; im.alt = c.name; av.appendChild(im); } else av.textContent = initials;
     $("#mName").textContent = c.name;
-    $("#mRole").textContent = c.role ? [c.role, c.company].filter(Boolean).join(" at ") : (c.company ? "Works at " + c.company : "");
-    $("#mRole").hidden = !c.role && !c.company;
+    if (c.kicker) $("#mKick").textContent = c.kicker;
+    $("#mRole").textContent = c.tagline || (c.role ? [c.role, c.company].filter(Boolean).join(" at ") : (c.company ? "Works at " + c.company : ""));
+    $("#mRole").hidden = !$("#mRole").textContent;
     $("#mBio").textContent = c.bio || ""; $("#mBio").hidden = !c.bio;
     var links = $("#mLinks");
-    if (c.linkedin) { var a = h("a", "btn li", "in  Connect on LinkedIn"); a.href = c.linkedin; a.target = "_blank"; a.rel = "noopener"; links.appendChild(a); }
-    if (c.whatsapp) { var wa = h("a", "btn wa", "💬 Chat on WhatsApp"); wa.href = "https://wa.me/" + c.whatsapp + (c.whatsappText ? "?text=" + encodeURIComponent(c.whatsappText) : ""); wa.target = "_blank"; wa.rel = "noopener"; links.appendChild(wa); }
-    if (c.authorPage) { var b2 = h("a", "btn", "✍️ Read my articles"); b2.href = c.authorPage; b2.target = "_blank"; b2.rel = "noopener"; links.appendChild(b2); }
+    if (c.whatsapp) { var wa = h("a", "btn wa", "💬 Say hi on WhatsApp"); wa.href = "https://wa.me/" + c.whatsapp + (c.whatsappText ? "?text=" + encodeURIComponent(c.whatsappText) : ""); wa.target = "_blank"; wa.rel = "noopener"; links.appendChild(wa); }
+    if (c.linkedin) { var a = h("a", "btn li", "🤝 Let's connect on LinkedIn"); a.href = c.linkedin; a.target = "_blank"; a.rel = "noopener"; links.appendChild(a); }
+    if (c.authorPage) { var b2 = h("a", "btn", "✍️ Read my latest articles"); b2.href = c.authorPage; b2.target = "_blank"; b2.rel = "noopener"; links.appendChild(b2); }
     var f = $("#fName"); f.textContent = c.name; if (c.linkedin) { f.href = c.linkedin; f.target = "_blank"; f.rel = "noopener"; }
   })();
 
