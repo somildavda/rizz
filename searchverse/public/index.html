@@ -4,150 +4,266 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SearchVerse — Search Intelligence Suite</title>
-<meta name="description" content="SearchVerse: search intelligence tools for performance, speed and video visibility.">
+<meta name="description" content="SearchVerse: simple tools for search teams — performance, page speed, content planning and video visibility in one place.">
 <meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" type="image/svg+xml">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#07080F;--panel:#0F1220;--line:#1E2236;--text:#E8EAF5;--muted:#8A90AB;--a:#7C5CFF;--b:#22D3EE}
+:root{--bg:#06070D;--panel:rgba(18,21,38,.72);--panel2:#141831;--line:rgba(140,150,220,.16);--text:#EDEFFA;--muted:#9097B5;--a:#7C5CFF;--b:#22D3EE;--c:#F472B6;--good:#34D399}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
-.glow{position:fixed;inset:-20% -10% auto;height:70vh;background:radial-gradient(closest-side,rgba(124,92,255,.25),transparent),radial-gradient(closest-side at 80% 30%,rgba(34,211,238,.15),transparent);pointer-events:none;z-index:0}
-nav{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:18px max(16px,5vw);background:rgba(7,8,15,.7);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
-.brand img{width:34px;height:34px}
-.grad{background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent}
-nav .links{display:flex;gap:24px;color:var(--muted);font-size:14px}
-nav .links a:hover{color:var(--text)}
-main,footer{position:relative;z-index:1}
-.wrap{max-width:1100px;margin:auto;padding:0 max(16px,5vw)}
-.hero{padding:96px 0 56px;text-align:center}
-.pill{display:inline-block;padding:6px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--muted);margin-bottom:24px}
-h1{font-size:clamp(36px,6vw,68px);line-height:1.05;letter-spacing:-.035em;font-weight:800}
-.lead{max-width:640px;margin:22px auto 0;color:var(--muted);font-size:18px;line-height:1.6}
-.cta{margin-top:36px;display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
-.btn{display:inline-block;padding:13px 22px;border-radius:12px;font-weight:600;font-size:15px;border:1px solid var(--line);cursor:pointer;background:var(--panel);color:var(--text)}
-.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:8px 0 72px}
-.stat{text-align:center;padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
-.stat b{display:block;font-size:30px;letter-spacing:-.02em}
-.stat span{color:var(--muted);font-size:13px}
-section{padding-bottom:88px}
-.sec-h{display:flex;justify-content:space-between;align-items:end;margin-bottom:28px;gap:16px;flex-wrap:wrap}
-.sec-h h2{font-size:28px;letter-spacing:-.02em}
-.sec-h p{color:var(--muted);font-size:14px;margin-top:4px}
-.search{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:var(--text);font:inherit;width:260px;max-width:100%}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
-.card{position:relative;display:block;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;transition:.25s;overflow:hidden}
-a.card:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.6);box-shadow:0 20px 50px -20px rgba(124,92,255,.5)}
-.ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:18px;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.2))}
-.ic.big{width:72px;height:72px;font-size:34px;border-radius:18px;margin:0 auto 22px}
-.card h3{font-size:18px;margin-bottom:8px}
-.card p{color:var(--muted);font-size:14px;line-height:1.55}
-.go{margin-top:18px;font-size:13px;font-weight:600;color:var(--b)}
-.tag{position:absolute;top:18px;right:18px;font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
-.steps{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px}
-.steps li{display:flex;gap:14px;align-items:center;padding:20px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
-.steps b{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,var(--a),var(--b));color:#fff}
-.note{color:var(--muted);font-size:13px;margin-top:16px}
-.crumb{color:var(--muted);font-size:13px;margin-bottom:20px}
-.crumb a:hover{color:var(--text)}
-.band{text-align:center;padding:48px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,rgba(124,92,255,.15),rgba(34,211,238,.08))}
-.band h2{font-size:28px;margin-bottom:10px}
-.band p{color:var(--muted);margin-bottom:22px}
-footer{border-top:1px solid var(--line);padding:28px max(16px,5vw);display:flex;justify-content:space-between;color:var(--muted);font-size:13px;flex-wrap:wrap;gap:8px}
-#viewer{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
-#viewer.on{display:flex}
-.vbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-.vbar .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.vbar .btn{padding:8px 14px;font-size:13px}
-#frame{flex:1;border:0;width:100%;background:#fff}
-@media(max-width:640px){nav .links{display:none}.hero{padding-top:64px}.stats{grid-template-columns:1fr}.band{padding:32px 20px}}
 [hidden]{display:none!important}
+.grad{background:linear-gradient(90deg,var(--a),var(--b) 60%,var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% auto;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:200% center}}
+
+/* ---------- living background ---------- */
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+.blob{position:fixed;border-radius:50%;filter:blur(80px);opacity:.45;z-index:0;pointer-events:none;animation:drift 22s ease-in-out infinite alternate}
+.blob.b1{width:520px;height:520px;background:#5B3DF5;top:-160px;left:-120px}
+.blob.b2{width:460px;height:460px;background:#0EA5C6;top:10%;right:-140px;animation-duration:28s}
+.blob.b3{width:380px;height:380px;background:#C2417F;bottom:-160px;left:30%;opacity:.25;animation-duration:32s}
+@keyframes drift{to{transform:translate(80px,60px) scale(1.15)}}
+.floor{position:fixed;left:-50%;right:-50%;bottom:-40vh;height:80vh;z-index:0;pointer-events:none;transform:perspective(600px) rotateX(70deg);
+  background-image:linear-gradient(rgba(124,92,255,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(124,92,255,.22) 1px,transparent 1px);background-size:60px 60px;
+  mask-image:linear-gradient(to top,#000 10%,transparent 70%);-webkit-mask-image:linear-gradient(to top,#000 10%,transparent 70%);animation:floor 8s linear infinite}
+@keyframes floor{to{background-position:0 60px}}
+main,nav,footer,.toolpage{position:relative;z-index:1}
+main,.toolpage{overflow-x:clip}
+
+/* ---------- nav ---------- */
+nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:14px max(16px,5vw);background:rgba(6,7,13,.55);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.02em}
+.brand img{width:34px;height:34px;animation:spin 18s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+nav .links{display:flex;gap:6px}
+nav .links a{color:var(--muted);font-size:14px;padding:8px 12px;border-radius:10px;transition:.2s}
+nav .links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.wrap{max-width:1180px;margin:auto;padding:0 max(16px,4vw)}
+
+/* ---------- buttons ---------- */
+.btn{position:relative;display:inline-flex;align-items:center;gap:10px;padding:15px 26px;border-radius:14px;font-weight:700;font-size:16px;border:1px solid var(--line);cursor:pointer;background:var(--panel);color:var(--text);backdrop-filter:blur(8px);transition:transform .2s,box-shadow .2s;overflow:hidden}
+.btn:hover{transform:translateY(-2px)}
+.btn.primary{background:linear-gradient(90deg,var(--a),var(--b));border:0;color:#fff;box-shadow:0 14px 40px -12px rgba(124,92,255,.9)}
+.btn.primary::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-20deg);animation:sweep 3.2s ease-in-out infinite}
+@keyframes sweep{0%,60%{left:-60%}100%{left:130%}}
+.btn .arr{transition:transform .2s}.btn:hover .arr{transform:translateX(4px)}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:center;min-height:calc(100vh - 70px);padding:40px 0 60px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--muted);background:var(--panel);margin-bottom:22px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(52,211,153,.7);animation:ping 2s infinite}
+@keyframes ping{70%{box-shadow:0 0 0 10px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+h1{font-size:clamp(40px,6.2vw,76px);line-height:1.02;letter-spacing:-.045em;font-weight:900}
+.lead{margin-top:22px;color:var(--muted);font-size:19px;line-height:1.6;max-width:540px}
+.cta{margin-top:34px;display:flex;gap:12px;flex-wrap:wrap}
+.trust{margin-top:34px;display:flex;gap:22px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+.trust b{display:block;color:var(--text);font-size:26px;letter-spacing:-.02em}
+
+/* 3D orbit: the modules circle the SearchVerse planet */
+.scene{position:relative;height:520px;perspective:1100px}
+.orbit{position:absolute;inset:0;transform-style:preserve-3d;transform:rotateX(64deg) rotateZ(0deg);transition:transform .2s ease-out}
+.ring{position:absolute;left:50%;top:50%;border:1px dashed rgba(124,92,255,.35);border-radius:50%;transform:translate(-50%,-50%)}
+.ring.r1{width:330px;height:330px}.ring.r2{width:470px;height:470px;border-color:rgba(34,211,238,.25)}
+.spin{position:absolute;inset:0;transform-style:preserve-3d;animation:orbit 30s linear infinite}
+@keyframes orbit{to{transform:rotateZ(360deg)}}
+.moon{position:absolute;left:50%;top:50%;transform-style:preserve-3d}
+.moon .face{transform-style:preserve-3d;animation:counter 30s linear infinite}
+@keyframes counter{to{transform:rotateZ(-360deg)}}
+.moon .card3d{transform:rotateX(-64deg);display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:16px;background:rgba(20,24,49,.9);border:1px solid var(--line);
+  box-shadow:0 20px 40px -18px rgba(0,0,0,.8),0 0 30px -10px rgba(124,92,255,.6);white-space:nowrap;font-weight:600;font-size:14px;cursor:pointer;transition:transform .2s,border-color .2s}
+.moon .card3d:hover{border-color:var(--b);transform:rotateX(-64deg) scale(1.08)}
+.moon .card3d span{font-size:22px}
+.planet{position:absolute;left:50%;top:50%;width:150px;height:150px;transform:translate(-50%,-62%);border-radius:50%;
+  background:radial-gradient(circle at 32% 30%,#B7A6FF,#7C5CFF 35%,#2A1C7A 70%,#120B36);box-shadow:0 0 80px rgba(124,92,255,.7),inset -20px -24px 50px rgba(0,0,0,.55);animation:bob 6s ease-in-out infinite;display:grid;place-items:center}
+.planet img{width:70px;height:70px;filter:drop-shadow(0 0 12px rgba(255,255,255,.5))}
+.planet::after{content:"";position:absolute;inset:-26px;border-radius:50%;border:2px solid rgba(34,211,238,.35);transform:rotateX(70deg)}
+@keyframes bob{50%{transform:translate(-50%,-68%)}}
+
+/* ---------- sections ---------- */
+section{padding:90px 0}
+.sec-h{text-align:center;max-width:720px;margin:0 auto 46px}
+.kicker{display:inline-block;font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--b);margin-bottom:12px}
+.sec-h h2{font-size:clamp(30px,4vw,46px);letter-spacing:-.03em;line-height:1.1}
+.sec-h p{color:var(--muted);font-size:17px;margin-top:14px;line-height:1.6}
+
+/* "what do you want to do?" cards with 3D tilt */
+.asks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;perspective:1000px}
+.ask{position:relative;display:block;padding:28px;border-radius:24px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(10px);transform-style:preserve-3d;
+  transition:transform .15s ease-out,border-color .3s,box-shadow .3s;overflow:hidden;animation:float 7s ease-in-out infinite}
+.ask:nth-child(2n){animation-delay:-2s}.ask:nth-child(3n){animation-delay:-4s}
+@keyframes float{50%{translate:0 -8px}}
+.ask:hover{border-color:rgba(124,92,255,.6);box-shadow:0 30px 60px -25px rgba(124,92,255,.6);animation-play-state:paused}
+.ask .glare{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at var(--gx,50%) var(--gy,0%),rgba(255,255,255,.12),transparent 45%);opacity:0;transition:opacity .3s}
+.ask:hover .glare{opacity:1}
+.ask .emo{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;font-size:32px;background:linear-gradient(135deg,rgba(124,92,255,.3),rgba(34,211,238,.22));transform:translateZ(40px);margin-bottom:18px}
+.ask .q{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.25;transform:translateZ(30px)}
+.ask .tname{margin-top:10px;color:var(--b);font-weight:700;font-size:14px;transform:translateZ(20px)}
+.ask .d{color:var(--muted);font-size:15px;line-height:1.55;margin-top:8px;transform:translateZ(15px)}
+.ask .go{margin-top:20px;display:inline-flex;gap:8px;align-items:center;font-weight:700;font-size:14px;transform:translateZ(25px)}
+.ask .tag{position:absolute;top:20px;right:20px;font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.ask .tag.new{color:#fff;border:0;background:linear-gradient(90deg,var(--c),var(--a))}
+
+/* how it works: animated path */
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;position:relative}
+.flow::before{content:"";position:absolute;top:44px;left:12%;right:12%;height:3px;border-radius:3px;background:linear-gradient(90deg,var(--a),var(--b),var(--c));background-size:200% 100%;animation:shine 4s linear infinite;opacity:.6}
+.stepc{position:relative;text-align:center;padding:0 10px}
+.stepc .n{width:88px;height:88px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:36px;background:var(--panel2);border:1px solid var(--line);box-shadow:0 0 0 8px rgba(124,92,255,.08);position:relative}
+.stepc .n b{position:absolute;top:-6px;right:-6px;width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--a),var(--b));display:grid;place-items:center;font-size:14px;color:#fff}
+.stepc h3{font-size:20px}.stepc p{color:var(--muted);margin-top:8px;line-height:1.55}
+
+/* live stats */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px}
+.stat{padding:28px;border-radius:22px;background:var(--panel);border:1px solid var(--line);text-align:center}
+.stat b{display:block;font-size:46px;font-weight:900;letter-spacing:-.03em}
+.stat span{color:var(--muted)}
+
+.band{position:relative;text-align:center;padding:64px 24px;border-radius:32px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.12) 60%,rgba(244,114,182,.15))}
+.band h2{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em}
+.band p{color:#C8CDE6;margin:14px auto 28px;max-width:560px;font-size:17px}
+footer{border-top:1px solid var(--line);padding:26px max(16px,5vw);display:flex;justify-content:space-between;color:var(--muted);font-size:13px;flex-wrap:wrap;gap:8px;margin-top:40px}
+
+/* reveal on scroll */
+.rv{opacity:0;transform:translateY(30px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
+.rv.in{opacity:1;transform:none}
+
+/* ---------- tool page ---------- */
+.thero{display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:center;padding:50px 0 30px}
+.crumb{color:var(--muted);font-size:14px;margin-bottom:18px}
+.crumb a:hover{color:var(--text)}
+.thero h1{font-size:clamp(36px,5vw,62px)}
+.cube{width:260px;height:260px;margin:auto;position:relative;transform-style:preserve-3d;animation:cube 14s ease-in-out infinite}
+@keyframes cube{0%,100%{transform:rotateX(-18deg) rotateY(-28deg)}50%{transform:rotateX(-8deg) rotateY(28deg)}}
+.cube div{position:absolute;inset:0;border-radius:36px;border:1px solid rgba(124,92,255,.5);background:linear-gradient(135deg,rgba(124,92,255,.35),rgba(34,211,238,.18));display:grid;place-items:center;font-size:110px;backdrop-filter:blur(6px)}
+.cube .f{transform:translateZ(60px);box-shadow:0 40px 80px -30px rgba(124,92,255,.8)}
+.cube .k{transform:translateZ(-60px);opacity:.35}
+.cube .glow{position:absolute;inset:-40px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.45),transparent 65%);transform:translateZ(-100px);border:0;font-size:0}
+.feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.feat{padding:26px;border-radius:22px;background:var(--panel);border:1px solid var(--line);transition:transform .2s,border-color .2s}
+.feat:hover{transform:translateY(-6px);border-color:rgba(34,211,238,.5)}
+.feat .i{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:22px;background:linear-gradient(135deg,rgba(124,92,255,.3),rgba(34,211,238,.2));margin-bottom:14px}
+.feat h3{font-size:18px}.feat p{color:var(--muted);margin-top:8px;line-height:1.55;font-size:15px}
+.timeline{display:grid;gap:14px;max-width:760px;margin:auto}
+.tl{display:flex;gap:18px;align-items:center;padding:18px 22px;border-radius:18px;background:var(--panel);border:1px solid var(--line)}
+.tl b{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,var(--a),var(--b));color:#fff;font-size:18px}
+.tl span{font-size:17px;font-weight:600}
+.note{color:var(--muted);font-size:14px;margin-top:16px}
+
+/* full-screen viewer */
+#viewer{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;flex-direction:column}
+#viewer.on{display:flex;animation:pop .35s ease-out}
+@keyframes pop{from{opacity:0;transform:scale(.98)}}
+.vbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:#0E1124}
+.vbar .t{font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vbar .btn{padding:8px 14px;font-size:13px;border-radius:10px}
+#frame{flex:1;border:0;width:100%;background:#fff}
+
+@media(max-width:900px){
+  .hero,.thero{grid-template-columns:1fr;min-height:auto;padding-top:24px}
+  .scene{height:380px;transform:scale(.72);margin:-40px 0}
+  .flow{grid-template-columns:1fr}.flow::before{display:none}
+  .cube{width:200px;height:200px}.cube div{font-size:84px}
+}
+@media(max-width:640px){nav .links{display:none}section{padding:60px 0}.scene{transform:scale(.6);margin:-70px -40px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}}
 </style>
 </head>
 <body>
-<div class="glow"></div>
+<canvas id="stars"></canvas>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="floor"></div>
+
 <nav>
   <a class="brand" href="#"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""><span class="grad">SearchVerse</span></a>
-  <div class="links"><a href="#suite">Suite</a><a href="#how">How it works</a><a href="#about">About</a></div>
+  <div class="links"><a href="#tools">Tools</a><a href="#how">How it works</a><a href="#about">Why SearchVerse</a></div>
 </nav>
-<main class="wrap" id="view-home">
-  <header class="hero">
-    <div class="pill">Search Intelligence Suite</div>
-    <h1>One universe for every<br><span class="grad">search signal</span> that matters.</h1>
-    <p class="lead">Performance analytics, page-speed insights and video visibility — unified in one workspace built for modern search teams.</p>
-    <div class="cta"><a class="btn primary" href="#suite">Explore the suite</a><a class="btn" href="#how">How it works</a></div>
-  </header>
 
-  <div class="stats">
-    <div class="stat"><b class="grad">5</b><span>Specialist modules</span></div>
-    <div class="stat"><b class="grad">1</b><span>Unified workspace</span></div>
-    <div class="stat"><b class="grad">0</b><span>Installs needed</span></div>
+<main id="view-home">
+  <div class="wrap">
+    <header class="hero">
+      <div class="rv">
+        <div class="pill"><i></i> All tools online · free to use</div>
+        <h1>Every search answer,<br><span class="grad">one click away.</span></h1>
+        <p class="lead">SearchVerse is your team's toolbox for Google search. Pick a question, open the tool, get the answer — no installs, no setup, no SEO jargon.</p>
+        <div class="cta"><a class="btn primary" href="#tools">Find my tool <span class="arr">→</span></a><a class="btn" href="#how">See how it works</a></div>
+        <div class="trust"><div><b data-count="0">0</b>tools</div><div><b>0</b>installs</div><div><b>1</b>place for everything</div></div>
+      </div>
+      <div class="scene rv" id="scene" aria-hidden="true">
+        <div class="orbit" id="orbit">
+          <div class="ring r1"></div><div class="ring r2"></div>
+          <div class="spin" id="moons"></div>
+        </div>
+        <div class="planet"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSI4IiB5MT0iOCIgeDI9IjU2IiB5Mj0iNTYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzdDNUNGRiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzIyRDNFRSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTYiIGZpbGw9IiMwQjBEMTciLz4KICA8Y2lyY2xlIGN4PSIyOCIgY3k9IjI4IiByPSIxNCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUiLz4KICA8cGF0aCBkPSJNMzguNSAzOC41IEw1MCA1MCIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxlbGxpcHNlIGN4PSIyOCIgY3k9IjI4IiByeD0iMjIiIHJ5PSI3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMjUgMjggMjgpIiBzdHJva2U9IiNmZmYiIHN0cm9rZS1vcGFjaXR5PSIuNTUiIHN0cm9rZS13aWR0aD0iMiIvPgogIDxjaXJjbGUgY3g9IjQ3IiBjeT0iMTciIHI9IjMiIGZpbGw9IiMyMkQzRUUiLz4KPC9zdmc+" alt=""></div>
+      </div>
+    </header>
   </div>
 
-  <section id="suite">
-    <div class="sec-h">
-      <div><h2>The Suite</h2><p>Each module has its own page. Pick one to get started.</p></div>
-      <input id="q" class="search" type="search" placeholder="Search modules…" aria-label="Search modules">
-    </div>
-    <div class="grid" id="grid"></div>
-  </section>
+  <section id="tools"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">Start here</span><h2>What do you want to do <span class="grad">today?</span></h2><p>Every tool answers one simple question. Pick yours.</p></div>
+    <div class="asks" id="grid"></div>
+  </div></section>
 
-  <section id="how">
-    <div class="sec-h"><div><h2>How it works</h2></div></div>
-    <ol class="steps">
-      <li><b>1</b><span>Choose the module for the question you're answering</span></li>
-      <li><b>2</b><span>Launch it in the workspace or full screen</span></li>
-      <li><b>3</b><span>Turn the findings into client-ready actions</span></li>
-    </ol>
-  </section>
-
-  <section id="about">
-    <div class="sec-h"><div><h2>Built for search teams</h2></div></div>
-    <div class="grid">
-      <div class="card"><div class="ic">⚡</div><h3>Fast insights</h3><p>Answers in seconds, not spreadsheets.</p></div>
-      <div class="card"><div class="ic">🧭</div><h3>One workspace</h3><p>Every tool from a single launchpad.</p></div>
-      <div class="card"><div class="ic">📈</div><h3>Decision-ready</h3><p>Metrics framed for action and client reporting.</p></div>
+  <section id="how"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">How it works</span><h2>Three steps. That's it.</h2></div>
+    <div class="flow">
+      <div class="stepc rv"><div class="n">🎯<b>1</b></div><h3>Pick a question</h3><p>Choose the card that matches what you want to know.</p></div>
+      <div class="stepc rv"><div class="n">🚀<b>2</b></div><h3>Open the tool</h3><p>It opens right here — nothing to install or learn.</p></div>
+      <div class="stepc rv"><div class="n">🏆<b>3</b></div><h3>Act on the answer</h3><p>Clear results you can share with your team or client.</p></div>
     </div>
-  </section>
+  </div></section>
+
+  <section id="about"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">Why SearchVerse</span><h2>Built so <span class="grad">anyone</span> can use it</h2><p>Plain words, big buttons and answers you can act on — whether you're an SEO expert or opening a search tool for the first time.</p></div>
+    <div class="stats">
+      <div class="stat rv"><b class="grad" data-count="0">0</b><span>specialist tools</span></div>
+      <div class="stat rv"><b class="grad">⚡</b><span>answers in seconds</span></div>
+      <div class="stat rv"><b class="grad">🧭</b><span>one launchpad for everything</span></div>
+      <div class="stat rv"><b class="grad">🔒</b><span>private to your team</span></div>
+    </div>
+  </div></section>
+
+  <section><div class="wrap"><div class="band rv"><h2>Ready to find your answer?</h2><p>Pick a tool and you'll have results in minutes.</p><a class="btn primary" href="#tools">Explore the tools <span class="arr">→</span></a></div></div></section>
 </main>
-<main class="wrap" id="view-tool" hidden>
-  <header class="hero">
-    <div class="crumb"><a href="#">Home</a> / <a href="#suite">Suite</a> / <span data-f="name"></span></div>
-    <div class="ic big" data-f="icon"></div>
-    <div class="pill" data-f="tag"></div>
-    <h1 data-f="name"></h1>
-    <p class="lead" data-f="tagline"></p>
-    <div class="cta"><a class="btn primary" data-launch>Launch</a><a class="btn" href="#suite">All modules</a></div>
-    <p class="note" data-f="note"></p>
-  </header>
-  <section>
-    <div class="sec-h"><div><h2>Overview</h2><p data-f="desc"></p></div></div>
-    <div class="grid" data-f="features"></div>
-  </section>
-  <section>
-    <div class="sec-h"><div><h2>How to use it</h2></div></div>
-    <ol class="steps" data-f="steps"></ol>
-  </section>
-  <section>
-    <div class="band"><h2>Ready to dive in?</h2><p>Open the module and start working.</p><a class="btn primary" data-launch>Launch</a></div>
-  </section>
-  <section>
-    <div class="sec-h"><div><h2>More from the suite</h2></div></div>
-    <div class="grid" id="more"></div>
-  </section>
+
+<main class="toolpage" id="view-tool" hidden>
+  <div class="wrap">
+    <header class="thero">
+      <div class="rv">
+        <div class="crumb"><a href="#">Home</a> / <a href="#tools">Tools</a> / <span data-f="name"></span></div>
+        <div class="pill" data-f="tag"></div>
+        <h1><span data-f="name"></span></h1>
+        <p class="lead" data-f="tagline"></p>
+        <div class="cta"><a class="btn primary" data-launch>Open the tool <span class="arr">→</span></a><a class="btn" href="#tools">All tools</a></div>
+        <p class="note" data-f="note"></p>
+      </div>
+      <div class="rv" aria-hidden="true"><div class="cube"><div class="glow"></div><div class="k" data-f="icon"></div><div class="f" data-f="icon"></div></div></div>
+    </header>
+  </div>
+  <section style="padding-top:40px"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">What it does</span><h2 data-f="ask"></h2><p data-f="desc"></p></div>
+    <div class="feats" data-f="features"></div>
+  </div></section>
+  <section style="padding-top:30px"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">How to use it</span><h2>Done in three steps</h2></div>
+    <div class="timeline" data-f="steps"></div>
+  </div></section>
+  <section><div class="wrap"><div class="band rv"><h2>Ready?</h2><p data-f="tagline"></p><a class="btn primary" data-launch>Open the tool <span class="arr">→</span></a></div></div></section>
+  <section style="padding-top:0"><div class="wrap">
+    <div class="sec-h rv"><span class="kicker">Keep exploring</span><h2>More tools</h2></div>
+    <div class="asks" id="more"></div>
+  </div></section>
 </main>
-<footer><span>© <span data-year></span> SearchVerse. All rights reserved.</span><span>Search intelligence, unified.</span></footer>
+
+<footer><span>© <span data-year></span> SearchVerse</span><span>Every search answer, one click away.</span></footer>
+
 <div id="viewer">
   <div class="vbar"><a class="btn" id="back" href="#">← Back</a><div class="t" id="vtitle"></div><a class="btn" id="ext" target="_blank" rel="noopener">Open full screen ↗</a></div>
-  <iframe id="frame" title="Module" allow="clipboard-write; fullscreen"></iframe>
+  <iframe id="frame" title="Tool" allow="clipboard-write; fullscreen"></iframe>
 </div>
+
 <script>
-/* ===== SearchVerse modules — add a new tool by adding one object here
-   and a folder public/tools/<id>/index.html (copy an existing one). ===== */
+/* ===== SearchVerse modules — add a new tool by adding one object here. ===== */
 window.SV_TOOLS = [
   {
     id: "performance", icon: "📊", name: "Performance Explorer", tag: "Analytics",
@@ -212,44 +328,108 @@ window.SV_TOOLS = [
     steps: ["Enter a channel or keyword", "Review visibility and rankings", "Act on the top opportunities"]
   }
 ];
+/* Plain-language question for each tool's card. */
+window.SV_ASK = {
+  performance: "How am I doing on Google?",
+  workspace: "I need my team's reports",
+  speed: "Is my website fast enough?",
+  "content-gap": "What should I write next?",
+  youtube: "Do my videos show up in search?"
+};
+window.SV_NEW = { "content-gap": true };
 (function () {
-  var T = window.SV_TOOLS;
+  var T = window.SV_TOOLS, ASK = window.SV_ASK;
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   function $(s) { return document.querySelector(s); }
   function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function set(sel, v) { document.querySelectorAll(sel).forEach(function (e) { e.textContent = v; }); }
-  function card(t) {
-    var a = h("a", "card"); a.href = "#/tools/" + t.id;
-    a.appendChild(h("span", "tag", t.tag)); a.appendChild(h("div", "ic", t.icon));
-    a.appendChild(h("h3", null, t.name)); a.appendChild(h("p", null, t.tagline));
-    a.appendChild(h("div", "go", "View module →")); return a;
-  }
-  function fillGrid(g, skip) { g.innerHTML = ""; T.forEach(function (t) { if (t.id !== skip) g.appendChild(card(t)); }); }
   set("[data-year]", new Date().getFullYear());
-  fillGrid($("#grid"));
 
-  var q = $("#q");
-  q.addEventListener("input", function () {
-    var v = q.value.toLowerCase();
-    document.querySelectorAll("#grid .card").forEach(function (c) {
-      c.style.display = c.textContent.toLowerCase().indexOf(v) > -1 ? "" : "none";
-    });
+  // ---- cards with 3D tilt ----
+  function card(t) {
+    var a = h("a", "ask rv"); a.href = "#/tools/" + t.id;
+    a.appendChild(h("div", "glare"));
+    var tag = h("span", "tag" + (window.SV_NEW[t.id] ? " new" : ""), window.SV_NEW[t.id] ? "New" : t.tag); a.appendChild(tag);
+    a.appendChild(h("div", "emo", t.icon));
+    a.appendChild(h("div", "q", ASK[t.id] || t.tagline));
+    a.appendChild(h("div", "tname", t.name));
+    a.appendChild(h("div", "d", t.tagline));
+    var go = h("div", "go", "Let's go "); go.appendChild(h("span", "arr", "→")); a.appendChild(go);
+    if (!reduce) {
+      a.addEventListener("mousemove", function (e) {
+        var r = a.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        a.style.transform = "rotateY(" + ((x - .5) * 14) + "deg) rotateX(" + ((.5 - y) * 12) + "deg) translateZ(10px)";
+        a.style.setProperty("--gx", x * 100 + "%"); a.style.setProperty("--gy", y * 100 + "%");
+      });
+      a.addEventListener("mouseleave", function () { a.style.transform = ""; });
+    }
+    return a;
+  }
+  function fill(g, skip) { g.innerHTML = ""; T.forEach(function (t) { if (t.id !== skip) g.appendChild(card(t)); }); observe(g); }
+  fill($("#grid"));
+
+  // ---- orbiting modules around the planet ----
+  var moons = $("#moons"), R = [165, 235];
+  T.forEach(function (t, i) {
+    var ang = (i / T.length) * Math.PI * 2, rad = R[i % 2];
+    var m = h("div", "moon"); m.style.transform = "translate(" + (Math.cos(ang) * rad) + "px," + (Math.sin(ang) * rad) + "px)";
+    var f = h("div", "face"), c = h("a", "card3d"); c.href = "#/tools/" + t.id;
+    c.style.transform = "translate(-50%,-50%) rotateX(-64deg)";
+    c.appendChild(h("span", null, t.icon)); c.appendChild(document.createTextNode(t.name));
+    f.appendChild(c); m.appendChild(f); moons.appendChild(m);
+  });
+  var scene = $("#scene"), orbit = $("#orbit");
+  if (!reduce) window.addEventListener("mousemove", function (e) {
+    var x = e.clientX / innerWidth - .5, y = e.clientY / innerHeight - .5;
+    orbit.style.transform = "rotateX(" + (64 - y * 14) + "deg) rotateY(" + (x * 14) + "deg)";
   });
 
+  // ---- counters ----
+  document.querySelectorAll("[data-count]").forEach(function (b) { b.setAttribute("data-count", T.length); });
+  function count(b) {
+    var to = +b.getAttribute("data-count"), n = 0;
+    if (reduce) { b.textContent = to; return; }
+    var t = setInterval(function () { n++; b.textContent = n; if (n >= to) clearInterval(t); }, 120);
+  }
+
+  // ---- reveal on scroll ----
+  var io = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      e.target.classList.add("in"); io.unobserve(e.target);
+      e.target.querySelectorAll("[data-count]").forEach(count);
+    });
+  }, { threshold: .12 }) : null;
+  function observe(root) { (root || document).querySelectorAll(".rv:not(.in)").forEach(function (el, i) { el.style.transitionDelay = (i % 6) * 70 + "ms"; if (io) io.observe(el); else el.classList.add("in"); }); }
+  observe();
+
+  // ---- starfield ----
+  var cv = $("#stars"), cx = cv.getContext("2d"), stars = [];
+  function size() { cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio; stars = []; for (var i = 0; i < 140; i++) stars.push({ x: Math.random() * cv.width, y: Math.random() * cv.height, r: Math.random() * 1.4 * devicePixelRatio + .3, s: Math.random() * .3 + .05, p: Math.random() * 6 }); }
+  size(); addEventListener("resize", size);
+  (function tick(t) {
+    cx.clearRect(0, 0, cv.width, cv.height);
+    stars.forEach(function (s) { if (!reduce) { s.y -= s.s; if (s.y < 0) s.y = cv.height; } cx.globalAlpha = .35 + .35 * Math.sin((t || 0) / 900 + s.p); cx.fillStyle = "#cfd6ff"; cx.beginPath(); cx.arc(s.x, s.y, s.r, 0, 7); cx.fill(); });
+    if (!reduce) requestAnimationFrame(tick);
+  })();
+
+  // ---- tool pages ----
   var home = $("#view-home"), page = $("#view-tool"), viewer = $("#viewer"), frame = $("#frame");
+  var FEAT_ICONS = ["✨", "⚡", "🎯"];
   function showTool(t) {
-    set("[data-f=icon]", t.icon); set("[data-f=tag]", t.tag); set("[data-f=name]", t.name);
+    set("[data-f=icon]", t.icon); set("[data-f=tag]", t.tag); set("[data-f=name]", t.name); set("[data-f=ask]", ASK[t.id] || t.name);
     set("[data-f=tagline]", t.tagline); set("[data-f=desc]", t.desc); set("[data-f=note]", t.note || "");
     var fl = $("[data-f=features]"); fl.innerHTML = "";
-    t.features.forEach(function (f) { var c = h("div", "card"); c.appendChild(h("h3", null, f[0])); c.appendChild(h("p", null, f[1])); fl.appendChild(c); });
+    t.features.forEach(function (f, i) { var c = h("div", "feat rv"); c.appendChild(h("div", "i", FEAT_ICONS[i % 3])); c.appendChild(h("h3", null, f[0])); c.appendChild(h("p", null, f[1])); fl.appendChild(c); });
     var sl = $("[data-f=steps]"); sl.innerHTML = "";
-    t.steps.forEach(function (s, i) { var li = h("li"); li.appendChild(h("b", null, String(i + 1))); li.appendChild(h("span", null, s)); sl.appendChild(li); });
-    fillGrid($("#more"), t.id);
+    t.steps.forEach(function (s, i) { var d = h("div", "tl rv"); d.appendChild(h("b", null, String(i + 1))); d.appendChild(h("span", null, s)); sl.appendChild(d); });
+    fill($("#more"), t.id);
     document.querySelectorAll("[data-launch]").forEach(function (b) {
-      if (t.newTab) { b.href = t.url; b.target = "_blank"; b.rel = "noopener"; b.textContent = "Launch ↗"; }
-      else { b.href = "#/tools/" + t.id + "/launch"; b.removeAttribute("target"); b.textContent = "Launch"; }
+      if (t.newTab) { b.href = t.url; b.target = "_blank"; b.rel = "noopener"; b.firstChild.textContent = "Open the tool ↗ "; }
+      else { b.href = "#/tools/" + t.id + "/launch"; b.removeAttribute("target"); b.firstChild.textContent = "Open the tool "; }
     });
-    $("#back").href = "#/tools/" + t.id;
-    $("#ext").href = t.url; set("#vtitle", t.name);
+    $("#back").href = "#/tools/" + t.id; $("#ext").href = t.url; set("#vtitle", t.icon + "  " + t.name);
+    observe(page);
   }
   function route() {
     var m = location.hash.match(/^#\/tools\/([\w-]+)(\/launch)?/);
