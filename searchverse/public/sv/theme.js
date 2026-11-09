@@ -1,8 +1,8 @@
-// SearchVerse light/dark switch, shared by every page. Light is the default; the choice is
+// SearchVerse light/dark switch, shared by every page. Navy (dark) is the default; the choice is
 // remembered in this browser. Load it in <head> (not deferred) so the page never flashes.
 (function () {
   var KEY = "sv-theme";
-  function get() { try { return localStorage.getItem(KEY) === "dark" ? "dark" : "light"; } catch (_) { return "light"; } }
+  function get() { try { return localStorage.getItem(KEY) === "light" ? "light" : "dark"; } catch (_) { return "dark"; } }
   function set(t) {
     document.documentElement.setAttribute("data-theme", t);
     try { localStorage.setItem(KEY, t); } catch (_) {}
